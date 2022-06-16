@@ -95,6 +95,10 @@ bool psbt_finalize(struct wally_psbt *psbt UNNEEDED)
 struct amount_sat psbt_input_get_amount(const struct wally_psbt *psbt UNNEEDED,
 					size_t in UNNEEDED)
 { fprintf(stderr, "psbt_input_get_amount called!\n"); abort(); }
+/* Generated stub for psbt_input_get_scriptpubkey */
+const unsigned char *psbt_input_get_scriptpubkey(const struct wally_psbt *psbt UNNEEDED,
+                    size_t in UNNEEDED)
+{ fprintf(stderr, "psbt_input_get_scriptpubkey called!\n"); abort(); }
 /* Generated stub for psbt_input_set_wit_utxo */
 void psbt_input_set_wit_utxo(struct wally_psbt *psbt UNNEEDED, size_t in UNNEEDED,
 			     const u8 *scriptPubkey UNNEEDED, struct amount_sat amt UNNEEDED)
