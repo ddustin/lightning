@@ -81,6 +81,7 @@ $(TARGET_DIR)/libwally-core-build/src/libwallycore.% $(TARGET_DIR)/libwally-core
 		--enable-module-recovery \
 		--enable-module-extrakeys \
 		--enable-module-schnorrsig \
+        --enable-module-musig \
 		--enable-elements \
 		--enable-shared=no \
 		--prefix=/ \
