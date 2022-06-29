@@ -53,6 +53,9 @@ u8 *p2wpkh_scriptcode(const tal_t *ctx, const struct pubkey *key);
 /* Create an output script for a 32-byte witness program. */
 u8 *scriptpubkey_p2wsh(const tal_t *ctx, const u8 *witnessscript);
 
+/* Create an output script for a taproot output */
+u8 *scriptpubkey_p2tr(const tal_t *ctx, const struct pubkey *pubkey);
+
 /* Create an output script for a 20-byte witness program. */
 u8 *scriptpubkey_p2wpkh(const tal_t *ctx, const struct pubkey *key);
 
@@ -176,5 +179,8 @@ void script_push_bytes(u8 **scriptp, const void *mem, size_t len);
 
 /* OP_0 + PUSH(32-byte-hash) */
 #define BITCOIN_SCRIPTPUBKEY_P2WSH_LEN (1 + 1 + 32)
+
+/* OP_1 + PUSH(32-byte-key) */
+#define BITCOIN_SCRIPTPUBKEY_P2TR_LEN (1 + 1 + 32)
 
 #endif /* LIGHTNING_BITCOIN_SCRIPT_H */

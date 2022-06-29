@@ -1,4 +1,4 @@
-DEVTOOLS := devtools/bolt11-cli devtools/decodemsg devtools/onion devtools/dump-gossipstore devtools/gossipwith devtools/create-gossipstore devtools/mkcommit devtools/mkfunding devtools/mkclose devtools/mkgossip devtools/mkencoded devtools/mkquery devtools/lightning-checkmessage devtools/topology devtools/route devtools/bolt12-cli devtools/encodeaddr devtools/features devtools/fp16
+DEVTOOLS := devtools/bolt11-cli devtools/decodemsg devtools/onion devtools/dump-gossipstore devtools/gossipwith devtools/create-gossipstore devtools/mkcommit devtools/mkfunding devtools/eltoo_mkfunding devtools/mkclose devtools/mkgossip devtools/mkencoded devtools/mkquery devtools/lightning-checkmessage devtools/topology devtools/route devtools/bolt12-cli devtools/encodeaddr devtools/features devtools/fp16
 ifeq ($(HAVE_SQLITE3),1)
 DEVTOOLS += devtools/checkchannels
 endif
@@ -77,6 +77,8 @@ $(DEVTOOLS_OBJS) $(DEVTOOLS_TOOL_OBJS): wire/wire.h
 devtools/mkcommit: $(DEVTOOLS_COMMON_OBJS) $(CCAN_OBJS) $(BITCOIN_OBJS) common/derive_basepoints.o common/channel_type.o common/keyset.o common/key_derive.o common/initial_commit_tx.o common/permute_tx.o wire/fromwire.o wire/towire.o devtools/mkcommit.o channeld/full_channel.o common/initial_channel.o common/htlc_state.o common/pseudorand.o common/htlc_tx.o channeld/commit_tx.o common/htlc_trim.o
 
 devtools/mkfunding: $(DEVTOOLS_COMMON_OBJS) $(CCAN_OBJS) $(BITCOIN_OBJS) wire/fromwire.o wire/towire.o common/key_derive.o devtools/mkfunding.o
+
+devtools/eltoo_mkfunding: $(DEVTOOLS_COMMON_OBJS) $(CCAN_OBJS) $(BITCOIN_OBJS) wire/fromwire.o wire/towire.o common/key_derive.o devtools/eltoo_mkfunding.o
 
 devtools/mkclose: $(DEVTOOLS_COMMON_OBJS) $(CCAN_OBJS) $(BITCOIN_OBJS) wire/fromwire.o wire/towire.o devtools/mkclose.o
 
