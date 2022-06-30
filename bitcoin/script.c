@@ -914,3 +914,14 @@ bool scripteq(const u8 *s1, const u8 *s2)
 		return false;
 	return memcmp(s1, s2, tal_count(s1)) == 0;
 }
+
+u8 *bitcoin_spk_ephemeral_anchor(const tal_t *ctx)
+{
+	u8 *script = tal_arr(ctx, u8, 0);
+
+	/* BOLT #3:
+     * FIXME cite the extension bolts
+	 */
+	add_op(&script, OP_TRUE);
+	return script;
+}
