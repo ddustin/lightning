@@ -618,7 +618,7 @@ static struct bitcoin_tx *tx_to_us(const tal_t *ctx,
 
 	tx = bitcoin_tx(ctx, chainparams, 1, 1, locktime);
 	bitcoin_tx_add_input(tx, &out->outpoint, to_self_delay,
-			     NULL, out->sat, NULL, wscript);
+			     NULL, out->sat, NULL, wscript, NULL, NULL);
 
 	bitcoin_tx_add_output(
 	    tx, scriptpubkey_p2wpkh(tmpctx, &our_wallet_pubkey), NULL, out->sat);
@@ -741,7 +741,7 @@ replace_penalty_tx_to_us(const tal_t *ctx,
 	/* Reconstruct the input.  */
 	bitcoin_tx_add_input(tx, &input_outpoint,
 			     BITCOIN_TX_RBF_SEQUENCE,
-			     NULL, input_amount, NULL, input_wscript);
+			     NULL, input_amount, NULL, input_wscript, NULL, NULL);
 	/* Reconstruct the output with a smaller amount.  */
 	if (amount_sat_greater(*output_amount, dust_limit)) {
 		bitcoin_tx_add_output(tx,

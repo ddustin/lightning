@@ -48,7 +48,7 @@ static struct bitcoin_tx *htlc_tx(const tal_t *ctx,
 	amount = amount_msat_to_sat_round_down(msat);
 	bitcoin_tx_add_input(tx, commit,
 			     option_anchor_outputs ? 1 : 0,
-			     NULL, amount, NULL, commit_wscript);
+			     NULL, amount, NULL, commit_wscript, NULL, NULL);
 
 	/* BOLT #3:
 	 * * txout count: 1
