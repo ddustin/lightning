@@ -20,7 +20,8 @@ enum sighash_type {
     SIGHASH_ALL = 1,
     SIGHASH_NONE = 2,
     SIGHASH_SINGLE = 3,
-    SIGHASH_ANYONECANPAY = 0x80
+    SIGHASH_ANYONECANPAY = 0x80,
+    SIGHASH_ANYPREVOUTANYSCRIPT = 0xC0,
 };
 
 /* Schnorr */
@@ -311,5 +312,8 @@ void bip340_sighash_init(struct sha256_ctx *sctx,
 			 const char *tag1,
 			 const char *tag2,
 			 const char *tag3);
+
+/* Used for APO style covenant signatures */
+void create_keypair_of_one(secp256k1_keypair *G_pair);
 
 #endif /* LIGHTNING_BITCOIN_SIGNATURE_H */

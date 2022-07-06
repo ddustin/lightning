@@ -703,3 +703,18 @@ void bip340_sighash_init(struct sha256_ctx *sctx,
 	sha256_update(sctx, &taghash, sizeof(taghash));
 }
 
+void create_keypair_of_one(secp256k1_keypair *G_pair)
+{
+    int ok;
+    unsigned char g[32];
+
+    /* Privkey of exactly 1, so the pubkey is the generator G */
+    memset(g, 0x00, sizeof(g));
+    g[sizeof(g)-1] = 0x01;
+
+    ok = secp256k1_keypair_create(
+        secp256k1_ctx,
+        G_pair,
+        g);
+    assert(ok);
+}
