@@ -60,6 +60,7 @@ CHANNELD_COMMON_OBJS :=				\
 	common/htlc_wire.o			\
 	common/initial_channel.o		\
 	common/initial_commit_tx.o		\
+	common/initial_settlement_tx.o		\
 	common/keyset.o				\
 	common/key_derive.o			\
 	common/memleak.o			\
