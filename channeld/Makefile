@@ -8,12 +8,14 @@ CHANNELD_HEADERS :=			\
 	channeld/commit_tx.h			\
 	channeld/full_channel.h			\
 	channeld/full_channel_error.h		\
+    channeld/settle_tx.h            \
 	channeld/watchtower.h
 
 CHANNELD_SRC := channeld/channeld.c	\
 	channeld/commit_tx.c			\
 	channeld/full_channel.c			\
 	channeld/channeld_wiregen.c		\
+    channeld/settle_tx.c            \
 	channeld/watchtower.c
 
 CHANNELD_OBJS := $(CHANNELD_SRC:.c=.o)
