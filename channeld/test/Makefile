@@ -18,6 +18,7 @@ CHANNELD_TEST_COMMON_OBJS :=			\
 	common/htlc_tx.o			\
 	common/initial_commit_tx.o		\
 	common/initial_settlement_tx.o		\
+	common/initial_update_tx.o		\
 	common/key_derive.o			\
 	common/msg_queue.o			\
 	common/permute_tx.o			\
