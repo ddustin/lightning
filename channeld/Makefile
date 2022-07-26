@@ -63,7 +63,6 @@ CHANNELD_COMMON_OBJS :=				\
 	common/initial_channel.o		\
 	common/initial_commit_tx.o		\
 	common/initial_settlement_tx.o		\
-	common/initial_update_tx.o		\
 	common/keyset.o				\
 	common/key_derive.o			\
 	common/memleak.o			\
@@ -89,6 +88,7 @@ CHANNELD_COMMON_OBJS :=				\
 	common/subdaemon.o			\
 	common/timeout.o			\
 	common/type_to_string.o			\
+	common/update_tx.o		\
 	common/utils.o				\
 	common/utxo.o				\
 	common/version.o			\

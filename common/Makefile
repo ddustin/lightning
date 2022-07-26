@@ -47,7 +47,6 @@ COMMON_SRC_NOGEN :=				\
 	common/initial_channel.c		\
 	common/initial_commit_tx.c		\
 	common/initial_settlement_tx.c		\
-	common/initial_update_tx.c		\
 	common/iso4217.c			\
 	common/json.c				\
 	common/json_helpers.c			\
@@ -86,6 +85,7 @@ COMMON_SRC_NOGEN :=				\
 	common/subdaemon.c			\
 	common/timeout.c			\
 	common/type_to_string.c			\
+	common/update_tx.c		\
 	common/utils.c				\
 	common/utxo.c				\
 	common/version.c			\
