@@ -4,6 +4,10 @@ OPENINGD_HEADERS := 				\
 	openingd/common.h			\
 	openingd/openingd_wiregen.h
 
+OPENINGD_ELTOO_HEADERS := 				\
+	openingd/common.h			\
+	openingd/eltoo_openingd_wiregen.h
+
 DUALOPEND_HEADERS := 				\
 	openingd/common.h			\
 	openingd/dualopend_wiregen.h
@@ -11,23 +15,29 @@ DUALOPEND_HEADERS := 				\
 OPENINGD_SRC := openingd/openingd.c		\
 	$(OPENINGD_HEADERS:.h=.c)
 
+OPENINGD_ELTOO_SRC := openingd/eltoo_openingd.c		\
+	$(OPENINGD_ELTOO_HEADERS:.h=.c)
+
 DUALOPEND_SRC := openingd/dualopend.c		\
 	$(DUALOPEND_HEADERS:.h=.c)
 
 OPENINGD_OBJS := $(OPENINGD_SRC:.c=.o)
 $(OPENINGD_OBJS): $(OPENINGD_HEADERS)
 
+OPENINGD_ELTOO_OBJS := $(OPENINGD_ELTOO_SRC:.c=.o)
+$(OPENINGD_ELTOO_OBJS): $(OPENINGD_ELTOO_HEADERS)
+
 DUALOPEND_OBJS := $(DUALOPEND_SRC:.c=.o)
 $(DUALOPEND_OBJS): $(DUALOPEND_HEADERS)
 
 # Make sure these depend on everything.
-ALL_C_SOURCES += $(OPENINGD_SRC) $(DUALOPEND_SRC)
-ALL_C_HEADERS += $(OPENINGD_HEADERS) $(DUALOPEND_HEADERS)
-ALL_PROGRAMS += lightningd/lightning_openingd lightningd/lightning_dualopend
+ALL_C_SOURCES += $(OPENINGD_SRC) $(OPENINGD_ELTOO_SRC) $(DUALOPEND_SRC)
+ALL_C_HEADERS += $(OPENINGD_HEADERS) $(OPENINGD_ELTOO_HEADERS) $(DUALOPEND_HEADERS)
+ALL_PROGRAMS += lightningd/lightning_openingd lightningd/lightning_eltoo_openingd lightningd/lightning_dualopend
 
 # Here's what lightningd depends on
-LIGHTNINGD_CONTROL_HEADERS += openingd/openingd_wiregen.h openingd/dualopend_wiregen.h
-LIGHTNINGD_CONTROL_OBJS += openingd/openingd_wiregen.o openingd/dualopend_wiregen.o
+LIGHTNINGD_CONTROL_HEADERS += openingd/openingd_wiregen.h openingd/eltoo_openingd_wiregen.h openingd/dualopend_wiregen.h
+LIGHTNINGD_CONTROL_OBJS += openingd/openingd_wiregen.o openingd/eltoo_openingd_wiregen.o openingd/dualopend_wiregen.o
 
 # Common source we use.
 OPENINGD_COMMON_OBJS :=				\
@@ -53,6 +63,8 @@ OPENINGD_COMMON_OBJS :=				\
 	common/htlc_wire.o			\
 	common/initial_channel.o		\
 	common/initial_commit_tx.o		\
+	common/initial_eltoo_channel.o		\
+    common/initial_settlement_tx.o  \
 	common/key_derive.o			\
 	common/keyset.o				\
 	common/lease_rates.o			\
@@ -79,6 +91,7 @@ OPENINGD_COMMON_OBJS :=				\
 	common/status_wiregen.o			\
 	common/subdaemon.o			\
 	common/type_to_string.o			\
+    common/update_tx.o          \
 	common/utils.o				\
 	common/utxo.o				\
 	common/version.o			\
@@ -88,6 +101,8 @@ OPENINGD_COMMON_OBJS :=				\
 	gossipd/gossipd_peerd_wiregen.o
 
 lightningd/lightning_openingd: $(OPENINGD_OBJS) $(OPENINGD_COMMON_OBJS) $(WIRE_OBJS) $(BITCOIN_OBJS) $(HSMD_CLIENT_OBJS)
+
+lightningd/lightning_eltoo_openingd: $(OPENINGD_ELTOO_OBJS) $(OPENINGD_COMMON_OBJS) $(WIRE_OBJS) $(BITCOIN_OBJS) $(HSMD_CLIENT_OBJS)
 
 lightningd/lightning_dualopend: $(DUALOPEND_OBJS) $(OPENINGD_COMMON_OBJS) $(WIRE_OBJS) $(BITCOIN_OBJS) $(HSMD_CLIENT_OBJS)
 
