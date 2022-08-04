@@ -150,6 +150,32 @@ void towire_point32(u8 **pptr, const struct point32 *point32)
 	towire(pptr, output, sizeof(output));
 }
 
+void fromwire_nonce(const u8 **cursor, size_t *max, struct nonce *nonce)
+{
+    u8 raw[66];
+
+    if (!fromwire(cursor, max, raw, sizeof(raw)))
+        return;
+
+    if (!secp256k1_musig_pubnonce_parse(secp256k1_ctx,
+            &nonce->nonce,
+            raw)) {
+        SUPERVERBOSE("not a valid musig nonce");
+        fromwire_fail(cursor, max);
+    }
+}
+
+void towire_nonce(u8 **pptr, const struct nonce *nonce)
+{
+    u8 nonce_output[66];
+
+    secp256k1_musig_pubnonce_serialize(secp256k1_ctx,
+        nonce_output,
+        &nonce->nonce);
+
+	towire(pptr, nonce_output, sizeof(nonce_output));
+}
+
 static char *point32_to_hexstr(const tal_t *ctx, const struct point32 *point32)
 {
 	u8 output[32];

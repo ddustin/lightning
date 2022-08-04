@@ -6,6 +6,7 @@
 #include <ccan/structeq/structeq.h>
 #include <ccan/tal/tal.h>
 #include <secp256k1_extrakeys.h>
+#include <secp256k1_musig.h>
 
 struct privkey;
 struct secret;
@@ -25,6 +26,11 @@ struct point32 {
 };
 /* Define pubkey_eq (no padding) */
 STRUCTEQ_DEF(point32, 0, pubkey.data);
+
+struct nonce {
+    /* Un-aggregated public nonce for MuSig2 */
+    secp256k1_musig_pubnonce nonce;
+};
 
 /* Convert from hex string of DER (scriptPubKey from validateaddress) */
 bool pubkey_from_hexstr(const char *derstr, size_t derlen, struct pubkey *key);
@@ -71,5 +77,8 @@ void fromwire_pubkey(const u8 **cursor, size_t *max, struct pubkey *pubkey);
 /* marshal/unmarshal functions */
 void towire_point32(u8 **pptr, const struct point32 *pubkey);
 void fromwire_point32(const u8 **cursor, size_t *max, struct point32 *pubkey);
+
+void towire_nonce(u8 **pptr, const struct nonce *nonce);
+void fromwire_nonce(const u8 **cursor, size_t *max, struct nonce *nonce);
 
 #endif /* LIGHTNING_BITCOIN_PUBKEY_H */
