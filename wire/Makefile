@@ -108,7 +108,7 @@ wire/bolt12_wire.csv.raw: bolt-precheck
 	@$(BOLT_EXTRACT) $(LOCAL_BOLTDIR)/12*.md > $@
 
 wire/eltoo_wire.csv.raw: bolt-precheck
-	@$(BOLT_EXTRACT) $(LOCAL_BOLTDIR)/XX*.md > $@
+	@$(BOLT_EXTRACT) $(LOCAL_BOLTDIR)/XX-eltoo*.md > $@
 
 # How to make the exp versions from non-exp versions:
 wire/peer_exp_wire.csv: wire/peer_wire.csv $(PEER_EXP_PATCHES)
