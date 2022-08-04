@@ -47,6 +47,8 @@ static bool unknown_type(enum peer_wire t)
 	case WIRE_ACCEPT_CHANNEL2:
 	case WIRE_INIT_RBF:
 	case WIRE_ACK_RBF:
+    case WIRE_UPDATE_NOOP:
+    case WIRE_YIELD:
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
 #endif
@@ -101,6 +103,8 @@ bool is_msg_for_gossipd(const u8 *cursor)
 	case WIRE_ACK_RBF:
 	case WIRE_OBS2_ONION_MESSAGE:
 	case WIRE_ONION_MESSAGE:
+    case WIRE_UPDATE_NOOP:
+    case WIRE_YIELD:
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
 #endif
@@ -155,6 +159,8 @@ bool is_msg_gossip_broadcast(const u8 *cursor)
 	case WIRE_ACCEPT_CHANNEL2:
 	case WIRE_INIT_RBF:
 	case WIRE_ACK_RBF:
+    case WIRE_UPDATE_NOOP:
+    case WIRE_YIELD:
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
 #endif
@@ -392,6 +398,10 @@ bool extract_channel_id(const u8 *in_pkt, struct channel_id *channel_id)
 		 * 2. data:
 		 *     * [`channel_id`:`channel_id`]
 		 */
+    case WIRE_UPDATE_NOOP:
+        /* FIXME add BOLT text here */
+    case WIRE_YIELD:
+        /* FIXME add BOLT text here */
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
 		/* BOLT-quiescent #2:

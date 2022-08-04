@@ -555,6 +555,8 @@ static void handle_recv_gossip(struct daemon *daemon, const u8 *outermsg)
 	case WIRE_ACK_RBF:
 	case WIRE_OBS2_ONION_MESSAGE:
 	case WIRE_ONION_MESSAGE:
+    case WIRE_UPDATE_NOOP:
+    case WIRE_YIELD:
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
 #endif

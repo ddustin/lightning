@@ -2240,6 +2240,10 @@ static void peer_in(struct peer *peer, const u8 *msg)
 	case WIRE_SHUTDOWN:
 		handle_peer_shutdown(peer, msg);
 		return;
+    case WIRE_UPDATE_NOOP:
+    case WIRE_YIELD:
+        /* FIXME handle these messages */
+        return;
 
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
