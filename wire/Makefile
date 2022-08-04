@@ -13,7 +13,8 @@ WIRE_HEADERS :=	wire/onion_defs.h		\
 		wire/channel_type_wiregen.h	\
 		wire/bolt12$(EXP)_printgen.h	\
 		wire/peer$(EXP)_printgen.h	\
-		wire/onion$(EXP)_printgen.h
+		wire/onion$(EXP)_printgen.h \
+        wire/eltoo_wiregen.h
 
 # We don't include peer_printgen/onion_printgen here since most don't need it.
 WIRE_SRC := wire/wire_sync.c			\
@@ -25,7 +26,8 @@ WIRE_SRC := wire/wire_sync.c			\
 		wire/bolt12$(EXP)_wiregen.c	\
 		wire/peer$(EXP)_wiregen.c	\
 		wire/channel_type_wiregen.c	\
-		wire/onion$(EXP)_wiregen.c	
+		wire/onion$(EXP)_wiregen.c	\
+        wire/eltoo_wiregen.c
 
 WIRE_PRINT_SRC :=				\
 		wire/onion$(EXP)_printgen.c	\
@@ -40,11 +42,13 @@ $(WIRE_OBJS) $(WIRE_PRINT_OBJS): $(WIRE_HEADERS)
 # Make sure these depend on everything: in case we're experimental,
 # include non-experimental ones here so they get rebuilt.
 WIRE_NONEXP_SRC := wire/bolt12_wiregen.c	\
+        wire/eltoo_wiregen.c    \
 		wire/peer_wiregen.c		\
 		wire/onion_wiregen.c		\
 		wire/onion_printgen.c		\
 		wire/peer_printgen.c
 WIRE_NONEXP_HEADERS := wire/peer_wiregen.h	\
+        wire/eltoo_wiregen.h    \
 		wire/onion_wiregen.h		\
 		wire/bolt12_wiregen.h		\
 		wire/peer_printgen.h		\
