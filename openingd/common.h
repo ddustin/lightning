@@ -4,6 +4,7 @@
 #include "config.h"
 
 struct amount_sat;
+struct bip340sig;
 struct bitcoin_tx;
 struct bitcoin_signature;
 struct channel_config;
@@ -34,4 +35,8 @@ u8 *no_upfront_shutdown_script(const tal_t *ctx,
 void validate_initial_commitment_signature(int hsm_fd,
 					   struct bitcoin_tx *tx,
 					   struct bitcoin_signature *sig);
+
+void validate_initial_update_signature(int hsm_fd,
+                       struct bitcoin_tx *update_tx,
+                       struct bip340sig *sig);
 #endif /* LIGHTNING_OPENINGD_COMMON_H */

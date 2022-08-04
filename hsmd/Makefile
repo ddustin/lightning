@@ -2,9 +2,10 @@
 
 HSMD_SRC := hsmd/hsmd.c	\
 	hsmd/hsmd_wiregen.c \
+    hsmd/hsmd_eltoo_wiregen.c \
 	hsmd/libhsmd.c
 
-HSMD_HEADERS := hsmd/hsmd_wiregen.h
+HSMD_HEADERS := hsmd/hsmd_wiregen.h hsmd/hsmd_eltoo_wiregen.h
 HSMD_OBJS := $(HSMD_SRC:.c=.o)
 
 $(HSMD_OBJS): $(HSMD_HEADERS)
@@ -12,6 +13,7 @@ $(HSMD_OBJS): $(HSMD_HEADERS)
 # Other programs which use the hsm need this.
 HSMD_CLIENT_OBJS := \
 	hsmd/hsmd_wiregen.o			\
+	hsmd/hsmd_eltoo_wiregen.o			\
 	common/htlc_wire.o
 
 # Make sure these depend on everything.
