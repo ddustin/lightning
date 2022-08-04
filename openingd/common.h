@@ -38,5 +38,5 @@ void validate_initial_commitment_signature(int hsm_fd,
 
 void validate_initial_update_signature(int hsm_fd,
                        struct bitcoin_tx *update_tx,
-                       struct bip340sig *sig);
+                       struct partial_sig *p_sig);
 #endif /* LIGHTNING_OPENINGD_COMMON_H */
