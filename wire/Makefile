@@ -14,7 +14,6 @@ WIRE_HEADERS :=	wire/onion_defs.h		\
 		wire/bolt12$(EXP)_printgen.h	\
 		wire/peer$(EXP)_printgen.h	\
 		wire/onion$(EXP)_printgen.h \
-        wire/eltoo_wiregen.h
 
 # We don't include peer_printgen/onion_printgen here since most don't need it.
 WIRE_SRC := wire/wire_sync.c			\
@@ -27,7 +26,6 @@ WIRE_SRC := wire/wire_sync.c			\
 		wire/peer$(EXP)_wiregen.c	\
 		wire/channel_type_wiregen.c	\
 		wire/onion$(EXP)_wiregen.c	\
-        wire/eltoo_wiregen.c
 
 WIRE_PRINT_SRC :=				\
 		wire/onion$(EXP)_printgen.c	\
@@ -42,13 +40,11 @@ $(WIRE_OBJS) $(WIRE_PRINT_OBJS): $(WIRE_HEADERS)
 # Make sure these depend on everything: in case we're experimental,
 # include non-experimental ones here so they get rebuilt.
 WIRE_NONEXP_SRC := wire/bolt12_wiregen.c	\
-        wire/eltoo_wiregen.c    \
 		wire/peer_wiregen.c		\
 		wire/onion_wiregen.c		\
 		wire/onion_printgen.c		\
 		wire/peer_printgen.c
 WIRE_NONEXP_HEADERS := wire/peer_wiregen.h	\
-        wire/eltoo_wiregen.h    \
 		wire/onion_wiregen.h		\
 		wire/bolt12_wiregen.h		\
 		wire/peer_printgen.h		\
@@ -67,7 +63,6 @@ WIRE_BOLT_DEPS := $(BOLT_DEPS) tools/gen/impl_template tools/gen/header_template
 ALL_PEER_PATCHES := $(sort $(wildcard wire/extracted_peer*.patch))
 ALL_ONION_PATCHES := $(sort $(wildcard wire/extracted_onion*.patch))
 ALL_BOLT12_PATCHES := $(sort $(wildcard wire/extracted_bolt12*.patch))
-ALL_ELTOO_PATCHES := $(sort $(wildcard wire/extracted_eltoo*.patch))
 
 # These are applied to the non-exp csvs to make the exp csvs.
 PEER_EXP_PATCHES := $(sort $(wildcard wire/extracted_peer_exp*.patch))
@@ -78,7 +73,6 @@ BOLT12_EXP_PATCHES := $(sort $(wildcard wire/extracted_bolt12_exp*.patch))
 PEER_PATCHES := $(filter-out $(PEER_EXP_PATCHES),$(ALL_PEER_PATCHES))
 ONION_PATCHES := $(filter-out $(ONION_EXP_PATCHES),$(ALL_ONION_PATCHES))
 BOLT12_PATCHES := $(filter-out $(BOLT12_EXP_PATCHES),$(ALL_BOLT12_PATCHES))
-ELTOO_PATCHES := $(filter-out $(BOLT12_EXP_PATCHES),$(ALL_ELTOO_PATCHES))
 
 # Explicit command to re-extract CSV from BOLTs and patch.
 # This is not a normal make depencency, since we don't want this
@@ -96,7 +90,7 @@ extract-bolt12-csv: wire/bolt12_wire.csv.raw
 	@set -e; T=wire/bolt12_wire.csv; trap "rm -f $$T.$$$$" 0; cp $< $$T.$$$$; for p in $(BOLT12_PATCHES); do echo APPLY $$p; patch $$T.$$$$ $$p; done; mv $$T.$$$$ $$T
 
 extract-eltoo-csv: wire/eltoo_wire.csv.raw
-	@set -e; T=wire/eltoo_wire.csv; trap "rm -f $$T.$$$$" 0; cp $< $$T.$$$$; for p in $(ELTOO_PATCHES); do echo APPLY $$p; patch $$T.$$$$ $$p; done; mv $$T.$$$$ $$T
+	@set -e; T=wire/eltoo_wire.csv; trap "rm -f $$T.$$$$" 0; cp $< $$T.$$$$; for p in $(ELTOO_PATCHES); do echo APPLY $$p; patch $$T.$$$$ $$p; done; mv $$T.$$$$ $$T; cat wire/eltoo_wire.csv >> wire/peer_wire.csv
 
 wire/peer_wire.csv.raw: bolt-precheck
 	@$(BOLT_EXTRACT) $(LOCAL_BOLTDIR)/0[127]*.md > $@

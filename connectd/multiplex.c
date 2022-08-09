@@ -281,6 +281,17 @@ static bool is_urgent(enum peer_wire type)
 	case WIRE_GOSSIP_TIMESTAMP_FILTER:
 	case WIRE_OBS2_ONION_MESSAGE:
 	case WIRE_ONION_MESSAGE:
+    /* Eltoo stuff */
+    case WIRE_OPEN_CHANNEL_ELTOO:
+    case WIRE_ACCEPT_CHANNEL_ELTOO:
+    case WIRE_FUNDING_CREATED_ELTOO:
+    case WIRE_FUNDING_LOCKED_ELTOO:
+    case WIRE_FUNDING_SIGNED_ELTOO:
+    case WIRE_CHANNEL_REESTABLISH_ELTOO:
+    case WIRE_SHUTDOWN_ELTOO:
+    case WIRE_CLOSING_SIGNED_ELTOO:
+    /* Eltoo stuff ends */
+
 #if EXPERIMENTAL_FEATURES
 	case WIRE_STFU:
 #endif
@@ -293,6 +304,8 @@ static bool is_urgent(enum peer_wire type)
 	case WIRE_REVOKE_AND_ACK:
     case WIRE_UPDATE_NOOP:
     case WIRE_YIELD:
+    case WIRE_UPDATE_SIGNED:
+    case WIRE_UPDATE_SIGNED_ACK:
 		return true;
 	};
 
