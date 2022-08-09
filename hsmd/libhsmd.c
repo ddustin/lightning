@@ -127,22 +127,12 @@ bool hsmd_check_client_capabilities(struct hsmd_client *client,
 	case WIRE_HSMD_SIGN_MESSAGE:
 	case WIRE_HSMD_GET_OUTPUT_SCRIPTPUBKEY:
 	case WIRE_HSMD_SIGN_BOLT12:
-		return (client->capabilities & HSM_CAP_MASTER) != 0;
-
-    /* Eltoo stuff here FIXME enable reacting to the messages*/
     case WIRE_HSMD_READY_ELTOO_CHANNEL:
     case WIRE_HSMD_PSIGN_UPDATE_TX:
     case WIRE_HSMD_COMBINE_PSIG:
     case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG:
     case WIRE_HSMD_GET_NONCE:
-
-    case WIRE_HSMD_READY_ELTOO_CHANNEL_REPLY:
-    case WIRE_HSMD_PSIGN_UPDATE_TX_REPLY:
-    case WIRE_HSMD_COMBINE_PSIG_REPLY:
-    case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG_REPLY:
-    case WIRE_HSMD_GET_NONCE_REPLY:
-        break;
-    /* Eltoo stuff ends */
+		return (client->capabilities & HSM_CAP_MASTER) != 0;
 
 	/*~ These are messages sent by the HSM so we should never receive them. */
 	/* FIXME: Since we autogenerate these, we should really generate separate
@@ -170,6 +160,11 @@ bool hsmd_check_client_capabilities(struct hsmd_client *client,
 	case WIRE_HSMD_SIGN_MESSAGE_REPLY:
 	case WIRE_HSMD_GET_OUTPUT_SCRIPTPUBKEY_REPLY:
 	case WIRE_HSMD_SIGN_BOLT12_REPLY:
+    case WIRE_HSMD_READY_ELTOO_CHANNEL_REPLY:
+    case WIRE_HSMD_PSIGN_UPDATE_TX_REPLY:
+    case WIRE_HSMD_COMBINE_PSIG_REPLY:
+    case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG_REPLY:
+    case WIRE_HSMD_GET_NONCE_REPLY:
 		break;
 	}
 	return false;
