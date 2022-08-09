@@ -49,6 +49,7 @@ HSMD_COMMON_OBJS :=				\
 	common/status_wiregen.o			\
 	common/subdaemon.o			\
 	common/type_to_string.o			\
+    common/update_tx.o          \
 	common/utils.o				\
 	common/utxo.o				\
 	common/version.o			\

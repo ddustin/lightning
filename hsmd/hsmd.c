@@ -666,7 +666,7 @@ static struct io_plan *handle_client(struct io_conn *conn, struct client *c)
 	case WIRE_HSMD_SIGN_LOCAL_HTLC_TX:
 	case WIRE_HSMD_SIGN_REMOTE_HTLC_TO_US:
 	case WIRE_HSMD_SIGN_DELAYED_PAYMENT_TO_US:
-    /* Eltoo stuff here FIXME enable reacting to the messages*/
+    /* Eltoo stuff here */
     case WIRE_HSMD_READY_ELTOO_CHANNEL:
     case WIRE_HSMD_PSIGN_UPDATE_TX:
     case WIRE_HSMD_COMBINE_PSIG:
