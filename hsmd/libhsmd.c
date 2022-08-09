@@ -129,6 +129,19 @@ bool hsmd_check_client_capabilities(struct hsmd_client *client,
 	case WIRE_HSMD_SIGN_BOLT12:
 		return (client->capabilities & HSM_CAP_MASTER) != 0;
 
+    /* Eltoo stuff here FIXME enable reacting to the messages*/
+    case WIRE_HSMD_READY_ELTOO_CHANNEL:
+    case WIRE_HSMD_PSIGN_UPDATE_TX:
+    case WIRE_HSMD_COMBINE_PSIG:
+    case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG:
+
+    case WIRE_HSMD_READY_ELTOO_CHANNEL_REPLY:
+    case WIRE_HSMD_PSIGN_UPDATE_TX_REPLY:
+    case WIRE_HSMD_COMBINE_PSIG_REPLY:
+    case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG_REPLY:
+        break;
+    /* Eltoo stuff ends */
+
 	/*~ These are messages sent by the HSM so we should never receive them. */
 	/* FIXME: Since we autogenerate these, we should really generate separate
 	 * enums for replies to avoid this kind of clutter! */
@@ -1603,6 +1616,18 @@ u8 *hsmd_handle_client_message(const tal_t *ctx, struct hsmd_client *client,
 		return handle_sign_remote_htlc_to_us(client, msg);
 	case WIRE_HSMD_SIGN_DELAYED_PAYMENT_TO_US:
 		return handle_sign_delayed_payment_to_us(client, msg);
+    /* Eltoo stuff here FIXME enable reacting to the messages*/
+    case WIRE_HSMD_READY_ELTOO_CHANNEL:
+    case WIRE_HSMD_PSIGN_UPDATE_TX:
+    case WIRE_HSMD_COMBINE_PSIG:
+    case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG:
+
+    case WIRE_HSMD_READY_ELTOO_CHANNEL_REPLY:
+    case WIRE_HSMD_PSIGN_UPDATE_TX_REPLY:
+    case WIRE_HSMD_COMBINE_PSIG_REPLY:
+    case WIRE_HSMD_VALIDATE_UPDATE_TX_PSIG_REPLY:
+        break;
+    /* Eltoo stuff ends */
 
 	case WIRE_HSMD_DEV_MEMLEAK:
 	case WIRE_HSMD_ECDH_RESP:
