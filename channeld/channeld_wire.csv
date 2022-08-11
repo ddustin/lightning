@@ -275,3 +275,8 @@ msgdata,channeld_upgraded,new_type,channel_type,
 # Tell peer about our latest and greatest blockheight.
 msgtype,channeld_blockheight,1012
 msgdata,channeld_blockheight,blockheight,u32,
+
+# ELTOO STUFF
+
+# When we receive funding_locked.
+msgtype,channeld_got_funding_locked_eltoo,1079

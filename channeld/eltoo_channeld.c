@@ -584,7 +584,7 @@ static void channel_announcement_negotiate(struct peer *peer)
 	}
 }
 
-static void handle_peer_funding_locked(struct peer *peer, const u8 *msg)
+static void handle_peer_funding_locked_eltoo(struct peer *peer, const u8 *msg)
 {
 	struct channel_id chanid;
 
@@ -618,7 +618,7 @@ static void handle_peer_funding_locked(struct peer *peer, const u8 *msg)
 	peer->tx_sigs_allowed = false;
 	peer->funding_locked[REMOTE] = true;
 	wire_sync_write(MASTER_FD,
-			take(towire_channeld_got_funding_locked(NULL,
+			take(towire_channeld_got_funding_locked_eltoo(NULL,
 						&peer->remote_per_commit)));
 
 	channel_announcement_negotiate(peer);
@@ -2193,7 +2193,7 @@ static void peer_in(struct peer *peer, const u8 *msg)
 
 	/* Must get funding_locked before almost anything. */
 	if (!peer->funding_locked[REMOTE]) {
-		if (type != WIRE_FUNDING_LOCKED
+		if (type != WIRE_FUNDING_LOCKED_ELTOO
 		    && type != WIRE_SHUTDOWN
 		    /* We expect these for v2 !! */
 		    && type != WIRE_TX_SIGNATURES
@@ -2201,14 +2201,14 @@ static void peer_in(struct peer *peer, const u8 *msg)
 		    && type != WIRE_UPDATE_FEE
 		    && type != WIRE_ANNOUNCEMENT_SIGNATURES) {
 			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "%s (%u) before funding locked",
+					 "%s (%u) before funding locked eltoo",
 					 peer_wire_name(type), type);
 		}
 	}
 
 	switch (type) {
-	case WIRE_FUNDING_LOCKED:
-		handle_peer_funding_locked(peer, msg);
+	case WIRE_FUNDING_LOCKED_ELTOO:
+		handle_peer_funding_locked_eltoo(peer, msg);
 		return;
 	case WIRE_ANNOUNCEMENT_SIGNATURES:
 		handle_peer_announcement_signatures(peer, msg);
@@ -2289,11 +2289,11 @@ static void peer_in(struct peer *peer, const u8 *msg)
 	case WIRE_ERROR:
 	case WIRE_OBS2_ONION_MESSAGE:
 	case WIRE_ONION_MESSAGE:
+    case WIRE_FUNDING_LOCKED:
     /* Eltoo stuff */
     case WIRE_OPEN_CHANNEL_ELTOO:
     case WIRE_ACCEPT_CHANNEL_ELTOO:
     case WIRE_FUNDING_CREATED_ELTOO:
-    case WIRE_FUNDING_LOCKED_ELTOO:
     case WIRE_FUNDING_SIGNED_ELTOO:
     case WIRE_UPDATE_SIGNED:
     case WIRE_UPDATE_SIGNED_ACK:
@@ -3738,7 +3738,6 @@ static void req_in(struct peer *peer, const u8 *msg)
 	case WIRE_CHANNELD_LOCAL_CHANNEL_UPDATE:
 	case WIRE_CHANNELD_LOCAL_CHANNEL_ANNOUNCEMENT:
 	case WIRE_CHANNELD_LOCAL_PRIVATE_CHANNEL:
-	case WIRE_CHANNELD_GOT_FUNDING_LOCKED_ELTOO:
 		break;
 	}
 	master_badmsg(-1, msg);
