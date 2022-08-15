@@ -3739,6 +3739,7 @@ static void req_in(struct peer *peer, const u8 *msg)
 	case WIRE_CHANNELD_LOCAL_CHANNEL_ANNOUNCEMENT:
 	case WIRE_CHANNELD_LOCAL_PRIVATE_CHANNEL:
 	case WIRE_CHANNELD_GOT_FUNDING_LOCKED_ELTOO:
+    case WIRE_CHANNELD_GOT_UPDATESIG:
 		break;
 	}
 	master_badmsg(-1, msg);

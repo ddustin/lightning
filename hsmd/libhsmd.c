@@ -39,7 +39,6 @@ struct {
     struct channel_id musig_channel;
     secp256k1_musig_secnonce sec_nonce;
     struct nonce pub_nonce;
-    secp256k1_musig_session session;
 } secretstuff;
 
 /* Have we initialized the secretstuff? */
@@ -1383,11 +1382,13 @@ static u8 *handle_combine_psig(struct hsmd_client *c, const u8 *msg_in)
     struct bip340sig sig;
     struct pubkey inner_pubkey;
     const secp256k1_musig_partial_sig *p_sig_ptrs[2];
+    struct musig_session session;
 
     if (!fromwire_hsmd_combine_psig(tmpctx, msg_in,
                         &channel_id,
                         &p_sig_1,
                         &p_sig_2,
+                        &session,
                         &update_tx,
                         &settle_tx,
                         &inner_pubkey)) {
@@ -1403,7 +1404,7 @@ static u8 *handle_combine_psig(struct hsmd_client *c, const u8 *msg_in)
     if (!bipmusig_partial_sigs_combine_verify(p_sig_ptrs,
                /* num_signers */ 2,
                &inner_pubkey,
-               &secretstuff.session,
+               &session.session,
                &hash_out,
                &sig)) {
         /* FIXME better complaint from hsmd */
@@ -1426,6 +1427,7 @@ static u8 *handle_psign_update_tx(struct hsmd_client *c, const u8 *msg_in)
 	struct secrets secrets;
     struct nonce remote_nonce;
     struct channel_id channel_id;
+    struct musig_session session;
 
     /* MuSig stuff */
     struct pubkey dummy_inner_pubkey; /* only cache needed for signing */
@@ -1482,7 +1484,7 @@ static u8 *handle_psign_update_tx(struct hsmd_client *c, const u8 *msg_in)
            /* num_signers */ 2,
            &hash_out,
            &keyagg_cache,
-           &secretstuff.session,
+           &session.session,
            &p_sig.p_sig);
 
     /* Refill and return own next_nonce, using RNG+extra stuff for more security */
@@ -1492,7 +1494,7 @@ static u8 *handle_psign_update_tx(struct hsmd_client *c, const u8 *msg_in)
            &keyagg_cache,
            hash_out.sha.u.u8);
 
-	return towire_hsmd_psign_update_tx_reply(NULL, &p_sig, &secretstuff.pub_nonce);
+	return towire_hsmd_psign_update_tx_reply(NULL, &p_sig, &session, &secretstuff.pub_nonce);
 }
 
 
