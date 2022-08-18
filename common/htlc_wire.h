@@ -60,6 +60,7 @@ struct failed_htlc {
 
 struct changed_htlc {
 	enum htlc_state newstate;
+    enum eltoo_htlc_state eltoo_newstate;
 	u64 id;
 };
 
