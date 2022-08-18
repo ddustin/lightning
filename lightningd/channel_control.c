@@ -554,6 +554,13 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
     case WIRE_CHANNELD_GOT_UPDATESIG:
         /* FIXME handle this */
         break;
+    case WIRE_CHANNELD_INIT_ELTOO:
+    case WIRE_CHANNELD_GOT_UPDATESIG_REPLY:
+    case WIRE_CHANNELD_GOT_ACK:
+    case WIRE_CHANNELD_GOT_ACK_REPLY:
+    case WIRE_CHANNELD_GOT_SHUTDOWN_ELTOO:
+    case WIRE_CHANNELD_SENDING_UPDATESIG:
+    case WIRE_CHANNELD_SENDING_UPDATESIG_REPLY:
 #if EXPERIMENTAL_FEATURES
 	case WIRE_CHANNELD_UPGRADED:
 		handle_channel_upgrade(sd->channel, msg);
