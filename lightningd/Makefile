@@ -9,7 +9,6 @@ LIGHTNINGD_SRC :=				\
 	lightningd/coin_mvts.c			\
 	lightningd/dual_open_control.c		\
 	lightningd/connect_control.c		\
-	lightningd/eltoo_channel.c			\
 	lightningd/onion_message.c		\
 	lightningd/gossip_control.c		\
 	lightningd/hsm_control.c		\
