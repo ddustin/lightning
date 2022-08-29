@@ -80,6 +80,7 @@ CHANNELD_COMMON_OBJS :=				\
 	common/htlc_tx.o			\
 	common/htlc_wire.o			\
 	common/initial_channel.o		\
+	common/initial_eltoo_channel.o		\
 	common/initial_commit_tx.o		\
 	common/initial_settlement_tx.o		\
 	common/keyset.o				\
