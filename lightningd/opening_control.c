@@ -1141,6 +1141,7 @@ static struct command_result *json_fundchannel_start(struct command *cmd,
 	struct peer *peer;
 	bool *announce_channel;
 	u32 *feerate_per_kw;
+    bool dual, eltoo;
 
 	struct amount_sat *amount;
 	struct amount_msat *push_msat;
@@ -1199,10 +1200,15 @@ static struct command_result *json_fundchannel_start(struct command *cmd,
 		return command_fail(cmd, FUNDING_PEER_NOT_CONNECTED,
 				    "Peer not connected");
 
-	if (!peer->uncommitted_channel) {
-		if (feature_negotiated(cmd->ld->our_features,
+    eltoo = feature_negotiated(cmd->ld->our_features,
+                       peer->their_features,
+                       OPT_ELTOO);
+    dual = feature_negotiated(cmd->ld->our_features,
 				       peer->their_features,
-				       OPT_DUAL_FUND))
+				       OPT_DUAL_FUND);
+
+	if (!peer->uncommitted_channel) {
+		if (!eltoo && dual)
 			return command_fail(cmd, FUNDING_STATE_INVALID,
 					    "Peer negotiated"
 					    " `option_dual_fund`,"
