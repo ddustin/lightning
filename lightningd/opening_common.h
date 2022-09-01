@@ -46,6 +46,9 @@ struct uncommitted_channel {
 	/* Public key for funding tx. */
 	struct pubkey local_funding_pubkey;
 
+	/* Public key for settlement tx. (eltoo only) */
+	struct pubkey local_settle_pubkey;
+
 	/* If true, we are already in fundee-mode and any future
 	 * `fundchannel_start` on our end should fail.
 	 */
@@ -58,6 +61,8 @@ struct uncommitted_channel {
 
 	/* Our channel config. */
 	struct channel_config our_config;
+
+    bool is_eltoo;
 };
 
 struct funding_channel {
@@ -121,6 +126,11 @@ void kill_uncommitted_channel(struct uncommitted_channel *uc,
 void channel_config(struct lightningd *ld,
 		    struct channel_config *ours,
 		    u32 *max_to_self_delay,
+		    struct amount_msat *min_effective_htlc_capacity);
+
+void eltoo_channel_config(struct lightningd *ld,
+		    struct channel_config *ours,
+		    u32 *max_shared_delay,
 		    struct amount_msat *min_effective_htlc_capacity);
 
 #endif /* LIGHTNING_LIGHTNINGD_OPENING_COMMON_H */

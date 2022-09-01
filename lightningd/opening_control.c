@@ -28,6 +28,7 @@
 #include <lightningd/plugin_hook.h>
 #include <lightningd/subd.h>
 #include <openingd/openingd_wiregen.h>
+#include <openingd/eltoo_openingd_wiregen.h>
 #include <wally_psbt.h>
 
 void json_add_uncommitted_channel(struct json_stream *response,
@@ -792,6 +793,66 @@ static void opening_got_offer(struct subd *openingd,
 	plugin_hook_call_openchannel(openingd->ld, payload);
 }
 
+static unsigned int eltoo_openingd_msg(struct subd *openingd,
+				 const u8 *msg, const int *fds)
+{
+	enum eltoo_openingd_wire t = fromwire_peektype(msg);
+	struct uncommitted_channel *uc = openingd->channel;
+
+	switch (t) {
+	case WIRE_OPENINGD_ELTOO_FUNDER_REPLY:
+		if (!uc->fc) {
+			log_broken(openingd->log, "Unexpected FUNDER_REPLY %s",
+				   tal_hex(tmpctx, msg));
+			tal_free(openingd);
+			return 0;
+		}
+		if (tal_count(fds) != 1)
+			return 1;
+		opening_funder_finished(openingd, msg, fds, uc->fc);
+		return 0;
+	case WIRE_OPENINGD_ELTOO_FUNDER_START_REPLY:
+		if (!uc->fc) {
+			log_broken(openingd->log, "Unexpected FUNDER_START_REPLY %s",
+				   tal_hex(tmpctx, msg));
+			tal_free(openingd);
+			return 0;
+		}
+		opening_funder_start_replied(openingd, msg, fds, uc->fc);
+		return 0;
+	case WIRE_OPENINGD_ELTOO_FAILED:
+		openingd_failed(openingd, msg, uc);
+		return 0;
+
+	case WIRE_OPENINGD_ELTOO_FUNDEE:
+		if (tal_count(fds) != 1)
+			return 1;
+		opening_fundee_finished(openingd, msg, fds, uc);
+		return 0;
+
+	case WIRE_OPENINGD_ELTOO_GOT_OFFER:
+		opening_got_offer(openingd, msg, uc);
+		return 0;
+
+	/* We send these! */
+	case WIRE_OPENINGD_ELTOO_INIT:
+	case WIRE_OPENINGD_ELTOO_FUNDER_START:
+	case WIRE_OPENINGD_ELTOO_FUNDER_COMPLETE:
+	case WIRE_OPENINGD_ELTOO_FUNDER_CANCEL:
+	case WIRE_OPENINGD_ELTOO_GOT_OFFER_REPLY:
+	case WIRE_OPENINGD_ELTOO_DEV_MEMLEAK:
+	/* Replies never get here */
+	case WIRE_OPENINGD_DEV_MEMLEAK_REPLY:
+		break;
+	}
+
+	log_broken(openingd->log, "Unexpected msg %s: %s",
+		   openingd_wire_name(t), tal_hex(tmpctx, msg));
+	tal_free(openingd);
+	return 0;
+}
+
+
 static unsigned int openingd_msg(struct subd *openingd,
 				 const u8 *msg, const int *fds)
 {
@@ -851,10 +912,10 @@ static unsigned int openingd_msg(struct subd *openingd,
 	return 0;
 }
 
-bool peer_start_openingd(struct peer *peer, struct peer_fd *peer_fd)
+bool peer_start_openingd(struct peer *peer, struct peer_fd *peer_fd, bool eltoo)
 {
 	int hsmfd;
-	u32 max_to_self_delay;
+	u32 max_delay;
 	struct amount_msat min_effective_htlc_capacity;
 	struct uncommitted_channel *uc;
 	const u8 *msg;
@@ -863,15 +924,17 @@ bool peer_start_openingd(struct peer *peer, struct peer_fd *peer_fd)
 	uc = peer->uncommitted_channel;
 	assert(!uc->open_daemon);
 
+    uc->is_eltoo = eltoo;
+
 	hsmfd = hsm_get_client_fd(peer->ld, &uc->peer->id, uc->dbid,
 				  HSM_CAP_COMMITMENT_POINT
 				  | HSM_CAP_SIGN_REMOTE_TX);
 
 	uc->open_daemon = new_channel_subd(peer, peer->ld,
-					"lightning_openingd",
+					eltoo ? "lightning_eltoo_openingd" : "lightning_openingd",
 					uc, &peer->id, uc->log,
-					true, openingd_wire_name,
-					openingd_msg,
+					true, eltoo ? eltoo_openingd_wire_name : openingd_wire_name,
+					eltoo ? eltoo_openingd_msg : openingd_msg,
 					opend_channel_errmsg,
 					opend_channel_set_billboard,
 					take(&peer_fd->fd),
@@ -885,9 +948,15 @@ bool peer_start_openingd(struct peer *peer, struct peer_fd *peer_fd)
 		return false;
 	}
 
-	channel_config(peer->ld, &uc->our_config,
-		       &max_to_self_delay,
-		       &min_effective_htlc_capacity);
+    if (eltoo) {
+        eltoo_channel_config(peer->ld, &uc->our_config,
+                   &max_delay /* max_shared_delay */,
+                   &min_effective_htlc_capacity);
+    } else {
+        channel_config(peer->ld, &uc->our_config,
+                   &max_delay /* max_to_self_delay */,
+                   &min_effective_htlc_capacity);
+    }
 
 	/* BOLT #2:
 	 *
@@ -897,19 +966,35 @@ bool peer_start_openingd(struct peer *peer, struct peer_fd *peer_fd)
 	 */
 	uc->minimum_depth = peer->ld->config.anchor_confirms;
 
-	msg = towire_openingd_init(NULL,
-				  chainparams,
-				  peer->ld->our_features,
-				  peer->their_features,
-				  &uc->our_config,
-				  max_to_self_delay,
-				  min_effective_htlc_capacity,
-				  &uc->local_basepoints,
-				  &uc->local_funding_pubkey,
-				  uc->minimum_depth,
-				  feerate_min(peer->ld, NULL),
-				  feerate_max(peer->ld, NULL),
-				  IFDEV(peer->ld->dev_force_tmp_channel_id, NULL));
+    if (eltoo) {
+        msg = towire_openingd_eltoo_init(NULL,
+                      chainparams,
+                      peer->ld->our_features,
+                      peer->their_features,
+                      &uc->our_config,
+                      max_delay /* max_shared_delay */,
+                      min_effective_htlc_capacity,
+                      &uc->local_funding_pubkey,
+                      &uc->local_settle_pubkey,
+                      uc->minimum_depth,
+                      feerate_min(peer->ld, NULL),
+                      feerate_max(peer->ld, NULL),
+                      IFDEV(peer->ld->dev_force_tmp_channel_id, NULL));
+    } else {
+        msg = towire_openingd_init(NULL,
+                      chainparams,
+                      peer->ld->our_features,
+                      peer->their_features,
+                      &uc->our_config,
+                      max_delay /* max_to_self_delay */,
+                      min_effective_htlc_capacity,
+                      &uc->local_basepoints,
+                      &uc->local_funding_pubkey,
+                      uc->minimum_depth,
+                      feerate_min(peer->ld, NULL),
+                      feerate_max(peer->ld, NULL),
+                      IFDEV(peer->ld->dev_force_tmp_channel_id, NULL));
+    }
 	subd_send_msg(uc->open_daemon, take(msg));
 	return true;
 }

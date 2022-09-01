@@ -650,7 +650,8 @@ bool peer_start_dualopend(struct peer *peer UNNEEDED, struct peer_fd *peer_fd UN
 { fprintf(stderr, "peer_start_dualopend called!\n"); abort(); }
 /* Generated stub for peer_start_openingd */
 bool peer_start_openingd(struct peer *peer UNNEEDED,
-			 struct peer_fd *peer_fd UNNEEDED)
+			 struct peer_fd *peer_fd UNNEEDED,
+             bool eltoo)
 { fprintf(stderr, "peer_start_openingd called!\n"); abort(); }
 /* Generated stub for peer_wire_name */
 const char *peer_wire_name(int e UNNEEDED)

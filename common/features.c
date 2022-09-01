@@ -105,6 +105,11 @@ static const struct feature_style feature_styles[] = {
 			   * we refuse to parse it. */
 			  [BOLT11_FEATURE] = FEATURE_REPRESENT,
 			  [CHANNEL_FEATURE] = FEATURE_DONT_REPRESENT } },
+	{ OPT_ELTOO,
+	  .copy_style = { [INIT_FEATURE] = FEATURE_REPRESENT,
+			  [NODE_ANNOUNCE_FEATURE] = FEATURE_DONT_REPRESENT,
+			  [BOLT11_FEATURE] = FEATURE_DONT_REPRESENT,
+			  [CHANNEL_FEATURE] = FEATURE_DONT_REPRESENT } },
 };
 
 struct dependency {

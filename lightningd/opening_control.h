@@ -15,7 +15,8 @@ void json_add_uncommitted_channel(struct json_stream *response,
 				  const struct uncommitted_channel *uc);
 
 bool peer_start_openingd(struct peer *peer,
-			 struct peer_fd *peer_fd);
+			 struct peer_fd *peer_fd,
+             bool eltoo);
 
 struct subd *peer_get_owning_subd(struct peer *peer);
 

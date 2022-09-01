@@ -309,7 +309,9 @@ static const char *subdaemons[] = {
 	"lightning_gossipd",
 	"lightning_hsmd",
 	"lightning_onchaind",
-	"lightning_openingd"
+	"lightning_openingd",
+    "lightning_eltoo_channeld",
+    "lightning_eltoo_openingd"
 };
 
 /* Return true if called with a recognized subdaemon e.g. "hsmd" */
@@ -828,6 +830,7 @@ static struct feature_set *default_features(const tal_t *ctx)
 		OPTIONAL_FEATURE(OPT_ANCHOR_OUTPUTS),
 		OPTIONAL_FEATURE(OPT_QUIESCE),
 		OPTIONAL_FEATURE(OPT_ONION_MESSAGES),
+        OPTIONAL_FEATURE(OPT_ELTOO),
 #endif
 	};
 

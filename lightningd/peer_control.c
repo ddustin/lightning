@@ -1216,6 +1216,7 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 	struct channel_id channel_id;
 	struct peer *peer;
 	bool dual_fund;
+    bool eltoo;
 	u8 *error;
 	struct peer_fd *peer_fd = new_peer_fd(tmpctx, fd);
 
@@ -1287,6 +1288,10 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 				       peer->their_features,
 				       OPT_DUAL_FUND);
 
+    eltoo = feature_negotiated(ld->our_features,
+                       peer->their_features,
+                       OPT_ELTOO);
+
 	/* Did we ask for this? */
 	if (!msgtype) {
 		/* If it was dual_fund, it will have peer_unsaved_channel above */
@@ -1301,7 +1306,7 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 			if (!uc->open_daemon
 			    && uc->fc
 			    && uc->fc->open_msg) {
-				if (peer_start_openingd(peer, peer_fd)) {
+				if (peer_start_openingd(peer, peer_fd, eltoo)) {
 					subd_send_msg(uc->open_daemon,
 						      uc->fc->open_msg);
 				}
@@ -1328,7 +1333,7 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 			goto send_error;
 		}
 		peer->uncommitted_channel = new_uncommitted_channel(peer);
-		peer_start_openingd(peer, peer_fd);
+		peer_start_openingd(peer, peer_fd, eltoo);
 		break;
 	case WIRE_OPEN_CHANNEL2:
 		if (!dual_fund) {
@@ -1342,6 +1347,7 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 		channel->cid = channel_id;
 		peer_start_dualopend(peer, peer_fd, channel);
 		break;
+    /* FIXME we should crash here if offered an eltoo channel */
 	default:
 		log_peer_unusual(ld->log, &peer->id,
 				 "Unknown channel %s for %s",

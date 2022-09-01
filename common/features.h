@@ -147,4 +147,7 @@ const char *fmt_featurebits(const tal_t *ctx, const u8 *featurebits);
 
 #define OPT_SHUTDOWN_WRONG_FUNDING		104
 
+ /* `option_eltoo` | ... I ... */
+#define OPT_ELTOO                   50
+
 #endif /* LIGHTNING_COMMON_FEATURES_H */
