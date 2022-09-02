@@ -325,6 +325,7 @@ void fromwire_musig_session(const u8 **cursor, size_t *max,
 /* Get a hex string sig */
 char *fmt_signature(const tal_t *ctx, const secp256k1_ecdsa_signature *sig);
 char *fmt_bip340sig(const tal_t *ctx, const struct bip340sig *bip340sig);
+char *fmt_partial_sig(const tal_t *ctx, const struct partial_sig *psig);
 
 /* For caller convenience, we hand in tag in parts (any can be "") */
 void bip340_sighash_init(struct sha256_ctx *sctx,
