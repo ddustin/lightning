@@ -396,7 +396,8 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    u32 lease_chan_max_msat,
 			    u16 lease_chan_max_ppt,
 			    struct amount_msat htlc_minimum_msat,
-			    struct amount_msat htlc_maximum_msat)
+			    struct amount_msat htlc_maximum_msat,
+                struct bip340sig *last_update_sig)
 {
 	struct channel *channel = tal(peer->ld, struct channel);
 	struct amount_msat htlc_min, htlc_max;
@@ -448,6 +449,7 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 	channel->last_tx->chainparams = chainparams;
 	channel->last_tx_type = TX_UNKNOWN;
 	channel->last_sig = *last_sig;
+    channel->last_update_sig = *last_update_sig;
 	channel->last_htlc_sigs = tal_steal(channel, last_htlc_sigs);
 	channel->channel_info = *channel_info;
 	channel->fee_states = dup_fee_states(channel, fee_states);

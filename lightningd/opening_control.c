@@ -91,7 +91,8 @@ wallet_commit_channel(struct lightningd *ld,
 		      u32 feerate,
 		      const u8 *our_upfront_shutdown_script,
 		      const u8 *remote_upfront_shutdown_script,
-		      const struct channel_type *type)
+		      const struct channel_type *type,
+              struct bip340sig *update_sig)
 {
 	struct channel *channel;
 	struct amount_msat our_msat;
@@ -213,7 +214,8 @@ wallet_commit_channel(struct lightningd *ld,
 						     &lease_start_blockheight)),
 			      0, NULL, 0, 0, /* No leases on v1s */
 			      ld->config.htlc_minimum_msat,
-			      ld->config.htlc_maximum_msat);
+			      ld->config.htlc_maximum_msat,
+                  update_sig);
 
 	/* Now we finally put it in the database. */
 	wallet_channel_insert(ld->wallet, channel);
@@ -296,22 +298,34 @@ static void funding_started_success(struct funding_channel *fc)
 
 static void opening_funder_start_replied(struct subd *openingd, const u8 *resp,
 					 const int *fds,
-					 struct funding_channel *fc)
+					 struct funding_channel *fc,
+                     bool eltoo)
 {
 	bool supports_shutdown_script;
 
-	if (!fromwire_openingd_funder_start_reply(fc, resp,
+	if (eltoo && !fromwire_openingd_eltoo_funder_start_reply(fc, resp,
 						  &fc->funding_scriptpubkey,
 						  &supports_shutdown_script,
 						  &fc->channel_type)) {
 		log_broken(fc->uc->log,
-			   "bad OPENING_FUNDER_REPLY %s",
+			   "bad OPENING_ELTOO_FUNDER_REPLY %s",
 			   tal_hex(resp, resp));
 		was_pending(command_fail(fc->cmd, LIGHTNINGD,
-					 "bad OPENING_FUNDER_REPLY %s",
+					 "bad OPENING_ELTOO_FUNDER_REPLY %s",
 					 tal_hex(fc->cmd, resp)));
 		goto failed;
-	}
+	} else if (!eltoo && !fromwire_openingd_funder_start_reply(fc, resp,
+                          &fc->funding_scriptpubkey,
+                          &supports_shutdown_script,
+                          &fc->channel_type)) {
+        log_broken(fc->uc->log,
+               "bad OPENING_FUNDER_REPLY %s",
+               tal_hex(resp, resp));
+        was_pending(command_fail(fc->cmd, LIGHTNINGD,
+                     "bad OPENING_FUNDER_REPLY %s",
+                     tal_hex(fc->cmd, resp)));
+        goto failed;
+    }
 
 	/* If we're not using the upfront shutdown script, forget it */
 	if (!supports_shutdown_script)
@@ -325,6 +339,83 @@ static void opening_funder_start_replied(struct subd *openingd, const u8 *resp,
 	return;
 
 failed:
+	/* Frees fc too */
+	tal_free(fc->uc);
+}
+
+/* FIXME all this needs changing */
+static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
+				    const int *fds,
+				    struct funding_channel *fc)
+{
+	struct channel_info channel_info;
+	struct channel_id cid;
+	struct bitcoin_outpoint funding;
+	struct bip340sig first_update_sig;
+	struct bitcoin_tx *update_tx;
+	struct channel *channel;
+	struct lightningd *ld = openingd->ld;
+	u8 *remote_upfront_shutdown_script;
+	struct peer_fd *peer_fd;
+	struct channel_type *type;
+
+	/* This is a new channel_info.their_config so set its ID to 0 */
+	channel_info.their_config.id = 0;
+
+	if (!fromwire_openingd_eltoo_funder_reply(resp, resp,
+					   &channel_info.their_config,
+					   &update_tx,
+					   &first_update_sig,
+					   &fc->uc->minimum_depth,
+					   &channel_info.remote_fundingkey,
+					   &channel_info.remote_settlekey,
+					   &funding,
+					   &remote_upfront_shutdown_script,
+					   &type)) {
+		log_broken(fc->uc->log,
+			   "bad OPENING_ELTOO_FUNDER_REPLY %s",
+			   tal_hex(resp, resp));
+		was_pending(command_fail(fc->cmd, LIGHTNINGD,
+					 "bad OPENING_ELTOO_FUNDER_REPLY %s",
+					 tal_hex(fc->cmd, resp)));
+		goto cleanup;
+	}
+	update_tx->chainparams = chainparams;
+
+	peer_fd = new_peer_fd_arr(resp, fds);
+
+	/* Saved with channel to disk */
+	derive_channel_id(&cid, &funding);
+
+	/* Steals fields from uc */
+	channel = wallet_commit_channel(ld, fc->uc,
+					&cid,
+					update_tx,
+                    NULL /* remote_commit_sig */,
+					&funding,
+					fc->funding_sats,
+					fc->push,
+					fc->channel_flags,
+					&channel_info,
+                    0 /* feerate */,
+					fc->our_upfront_shutdown_script,
+					remote_upfront_shutdown_script,
+					type,
+					&first_update_sig);
+	if (!channel) {
+		was_pending(command_fail(fc->cmd, LIGHTNINGD,
+					 "Key generation failure"));
+		goto cleanup;
+	}
+
+	/* Watch for funding confirms */
+	channel_watch_funding(ld, channel);
+
+	funding_success(channel);
+    /* FIXME Start eltoo_channeld instead */
+	peer_start_channeld(channel, peer_fd, NULL, false, NULL);
+
+cleanup:
 	/* Frees fc too */
 	tal_free(fc->uc);
 }
@@ -401,7 +492,8 @@ static void opening_funder_finished(struct subd *openingd, const u8 *resp,
 					feerate,
 					fc->our_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
-					type);
+					type,
+                    NULL /* update_sig */);
 	if (!channel) {
 		was_pending(command_fail(fc->cmd, LIGHTNINGD,
 					 "Key generation failure"));
@@ -498,7 +590,8 @@ static void opening_fundee_finished(struct subd *openingd,
 					feerate,
 					local_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
-					type);
+					type,
+                    NULL /* update_sig */);
 	if (!channel) {
 		uncommitted_channel_disconnect(uc, LOG_BROKEN,
 					       "Commit channel failed");
@@ -809,7 +902,7 @@ static unsigned int eltoo_openingd_msg(struct subd *openingd,
 		}
 		if (tal_count(fds) != 1)
 			return 1;
-		opening_funder_finished(openingd, msg, fds, uc->fc);
+		opening_eltoo_funder_finished(openingd, msg, fds, uc->fc);
 		return 0;
 	case WIRE_OPENINGD_ELTOO_FUNDER_START_REPLY:
 		if (!uc->fc) {
@@ -818,7 +911,7 @@ static unsigned int eltoo_openingd_msg(struct subd *openingd,
 			tal_free(openingd);
 			return 0;
 		}
-		opening_funder_start_replied(openingd, msg, fds, uc->fc);
+		opening_funder_start_replied(openingd, msg, fds, uc->fc, true /* eltoo */);
 		return 0;
 	case WIRE_OPENINGD_ELTOO_FAILED:
 		openingd_failed(openingd, msg, uc);
@@ -878,7 +971,7 @@ static unsigned int openingd_msg(struct subd *openingd,
 			tal_free(openingd);
 			return 0;
 		}
-		opening_funder_start_replied(openingd, msg, fds, uc->fc);
+		opening_funder_start_replied(openingd, msg, fds, uc->fc, false /* eltoo */);
 		return 0;
 	case WIRE_OPENINGD_FAILED:
 		openingd_failed(openingd, msg, uc);
@@ -1203,12 +1296,12 @@ static struct command_result *json_fundchannel_start(struct command *cmd,
     eltoo = feature_negotiated(cmd->ld->our_features,
                        peer->their_features,
                        OPT_ELTOO);
-    dual = feature_negotiated(cmd->ld->our_features,
+    dual = !eltoo && feature_negotiated(cmd->ld->our_features,
 				       peer->their_features,
 				       OPT_DUAL_FUND);
 
 	if (!peer->uncommitted_channel) {
-		if (!eltoo && dual)
+		if (dual)
 			return command_fail(cmd, FUNDING_STATE_INVALID,
 					    "Peer negotiated"
 					    " `option_dual_fund`,"
@@ -1276,15 +1369,26 @@ static struct command_result *json_fundchannel_start(struct command *cmd,
 
 	temporary_channel_id(&tmp_channel_id);
 
-	fc->open_msg
-		= towire_openingd_funder_start(fc,
-					  *amount,
-					  fc->push,
-					  fc->our_upfront_shutdown_script,
-					  upfront_shutdown_script_wallet_index,
-					  *feerate_per_kw,
-					  &tmp_channel_id,
-					  fc->channel_flags);
+    if (eltoo) {
+        fc->open_msg
+            = towire_openingd_eltoo_funder_start(fc,
+                          *amount,
+                          fc->push,
+                          fc->our_upfront_shutdown_script,
+                          upfront_shutdown_script_wallet_index,
+                          &tmp_channel_id,
+                          fc->channel_flags);
+    } else {
+        fc->open_msg
+            = towire_openingd_funder_start(fc,
+                          *amount,
+                          fc->push,
+                          fc->our_upfront_shutdown_script,
+                          upfront_shutdown_script_wallet_index,
+                          *feerate_per_kw,
+                          &tmp_channel_id,
+                          fc->channel_flags);
+    }
 
 	/* Tell connectd to make this active; when it does, we can continue */
 	subd_send_msg(peer->ld->connectd,
