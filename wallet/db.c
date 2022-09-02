@@ -1143,7 +1143,7 @@ static void fillin_missing_local_basepoints(struct lightningd *ld,
 		u8 *msg;
 		struct db_stmt *upstmt;
 		struct basepoints base;
-		struct pubkey funding_pubkey;
+		struct pubkey funding_pubkey, settle_pubkey;
 
 		dbid = db_col_u64(stmt, "channels.id");
 		db_col_node_id(stmt, "peers.node_id", &peer_id);
@@ -1155,7 +1155,7 @@ static void fillin_missing_local_basepoints(struct lightningd *ld,
 
 		msg = wire_sync_read(tmpctx, mc->hsm_fd);
 		if (!fromwire_hsmd_get_channel_basepoints_reply(
-			msg, &base, &funding_pubkey))
+			msg, &base, &funding_pubkey, &settle_pubkey))
 			fatal("malformed hsmd_get_channel_basepoints_reply "
 			      "from hsmd");
 
@@ -1173,8 +1173,9 @@ static void fillin_missing_local_basepoints(struct lightningd *ld,
 		db_bind_pubkey(upstmt, 2, &base.htlc);
 		db_bind_pubkey(upstmt, 3, &base.delayed_payment);
 		db_bind_pubkey(upstmt, 4, &funding_pubkey);
+		db_bind_pubkey(upstmt, 5, &settle_pubkey);
 
-		db_bind_u64(upstmt, 5, dbid);
+		db_bind_u64(upstmt, 6, dbid);
 
 		db_exec_prepared_v2(take(upstmt));
 	}
@@ -1237,6 +1238,7 @@ migrate_inflight_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		struct amount_sat funding_sat;
 		struct node_id peer_id;
 		struct pubkey local_funding_pubkey, remote_funding_pubkey;
+        struct pubkey local_settle_pubkey;
 		struct basepoints local_basepoints UNUSED;
 		struct bitcoin_signature last_sig;
 		u64 cdb_id;
@@ -1264,7 +1266,8 @@ migrate_inflight_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		db_col_txid(stmt, "inflight.funding_tx_id", &funding_txid);
 
 		get_channel_basepoints(ld, &peer_id, cdb_id,
-				       &local_basepoints, &local_funding_pubkey);
+				       &local_basepoints, &local_funding_pubkey,
+                       &local_settle_pubkey);
 
 		funding_wscript = bitcoin_redeem_2of2(stmt, &local_funding_pubkey,
 						      &remote_funding_pubkey);
@@ -1329,6 +1332,7 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		struct amount_sat funding_sat;
 		struct node_id peer_id;
 		struct pubkey local_funding_pubkey, remote_funding_pubkey;
+		struct pubkey local_settle_pubkey;
 		struct basepoints local_basepoints UNUSED;
 		struct bitcoin_signature last_sig;
 		u64 cdb_id;
@@ -1353,7 +1357,8 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		db_col_pubkey(stmt, "c.fundingkey_remote", &remote_funding_pubkey);
 
 		get_channel_basepoints(ld, &peer_id, cdb_id,
-				       &local_basepoints, &local_funding_pubkey);
+				       &local_basepoints, &local_funding_pubkey,
+                       &local_settle_pubkey);
 
 		funding_wscript = bitcoin_redeem_2of2(stmt, &local_funding_pubkey,
 						      &remote_funding_pubkey);

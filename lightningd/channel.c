@@ -105,7 +105,8 @@ void get_channel_basepoints(struct lightningd *ld,
 			    const struct node_id *peer_id,
 			    const u64 dbid,
 			    struct basepoints *local_basepoints,
-			    struct pubkey *local_funding_pubkey)
+			    struct pubkey *local_funding_pubkey,
+                struct pubkey *local_settle_pubkey)
 {
 	u8 *msg;
 
@@ -116,7 +117,7 @@ void get_channel_basepoints(struct lightningd *ld,
 
 	msg = wire_sync_read(tmpctx, ld->hsm_fd);
 	if (!fromwire_hsmd_get_channel_basepoints_reply(msg, local_basepoints,
-						       local_funding_pubkey))
+						       local_funding_pubkey, local_settle_pubkey))
 		fatal("HSM gave bad hsm_get_channel_basepoints_reply %s",
 		      tal_hex(msg, msg));
 }
@@ -202,6 +203,7 @@ struct channel *new_unsaved_channel(struct peer *peer,
 	struct lightningd *ld = peer->ld;
 	struct channel *channel = tal(ld, struct channel);
 	u8 *msg;
+    struct pubkey unused_settle_pubkey;
 
 	channel->peer = peer;
 	/* Not saved to the database yet! */
@@ -278,7 +280,8 @@ struct channel *new_unsaved_channel(struct peer *peer,
 
 	get_channel_basepoints(ld, &peer->id, channel->unsaved_dbid,
 			       &channel->local_basepoints,
-			       &channel->local_funding_pubkey);
+			       &channel->local_funding_pubkey,
+                   &unused_settle_pubkey);
 
 	channel->forgets = tal_arr(channel, struct command *, 0);
 	list_add_tail(&peer->channels, &channel->list);

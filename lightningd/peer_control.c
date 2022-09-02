@@ -1284,13 +1284,14 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 		abort();
 	}
 
-	dual_fund = feature_negotiated(ld->our_features,
-				       peer->their_features,
-				       OPT_DUAL_FUND);
-
     eltoo = feature_negotiated(ld->our_features,
                        peer->their_features,
                        OPT_ELTOO);
+
+    /* Single funder only for now if eltoo */
+	dual_fund = !eltoo && feature_negotiated(ld->our_features,
+				       peer->their_features,
+				       OPT_DUAL_FUND);
 
 	/* Did we ask for this? */
 	if (!msgtype) {
@@ -1322,6 +1323,7 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 	/* OK, it's an unknown channel.  Create a new one if they're trying. */
 	switch (*msgtype) {
 	case WIRE_OPEN_CHANNEL:
+    case WIRE_OPEN_CHANNEL_ELTOO:
 		if (dual_fund) {
 			error = towire_errorfmt(tmpctx, &channel_id,
 						"OPT_DUAL_FUND: cannot use open_channel");
@@ -1347,7 +1349,6 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 		channel->cid = channel_id;
 		peer_start_dualopend(peer, peer_fd, channel);
 		break;
-    /* FIXME we should crash here if offered an eltoo channel */
 	default:
 		log_peer_unusual(ld->log, &peer->id,
 				 "Unknown channel %s for %s",
