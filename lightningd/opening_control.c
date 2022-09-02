@@ -1104,6 +1104,7 @@ static struct command_result *json_fundchannel_complete(struct command *cmd,
 	struct wally_psbt *funding_psbt;
 	u32 *funding_txout_num = NULL;
 	struct funding_channel *fc;
+    bool eltoo;
 
 	if (!param(cmd, buffer, params,
 		   p_req("id", param_node_id, &id),
@@ -1172,10 +1173,22 @@ static struct command_result *json_fundchannel_complete(struct command *cmd,
 
 	/* Set the cmd to this new cmd */
 	peer->uncommitted_channel->fc->cmd = cmd;
-	msg = towire_openingd_funder_complete(NULL,
-					      funding_txid,
-					      *funding_txout_num,
-					      peer->uncommitted_channel->fc->channel_type);
+
+    eltoo = feature_negotiated(cmd->ld->our_features,
+                       peer->their_features,
+                       OPT_ELTOO);
+
+    if (eltoo) {
+        msg = towire_openingd_eltoo_funder_complete(NULL,
+                              funding_txid,
+                              *funding_txout_num,
+                              peer->uncommitted_channel->fc->channel_type);
+    } else {
+        msg = towire_openingd_funder_complete(NULL,
+                              funding_txid,
+                              *funding_txout_num,
+                              peer->uncommitted_channel->fc->channel_type);
+    }
 	subd_send_msg(peer->uncommitted_channel->open_daemon, take(msg));
 	return command_still_pending(cmd);
 }
