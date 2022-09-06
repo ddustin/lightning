@@ -496,6 +496,7 @@ static struct subd *activate_subd(struct peer *peer,
 			 take(towire_connectd_peer_active(NULL, &peer->id,
 							  tp,
 							  channel_id)));
+
 	daemon_conn_send_fd(peer->daemon->master, fd_for_subd);
 	return subd;
 }
@@ -789,6 +790,7 @@ static bool extract_funding_created_funding(const u8 *funding_created,
 
 	switch (t) {
  	case WIRE_FUNDING_CREATED:
+ 	case WIRE_FUNDING_CREATED_ELTOO:
 	/* BOLT #2:
 	 * 1. type: 34 (`funding_created`)
 	 * 2. data:
@@ -844,6 +846,7 @@ static void maybe_update_channelid(struct subd *subd, const u8 *msg)
 {
 	switch (fromwire_peektype(msg)) {
 	case WIRE_OPEN_CHANNEL:
+    case WIRE_OPEN_CHANNEL_ELTOO:
 		extract_channel_id(msg, &subd->channel_id);
 		break;
 	case WIRE_OPEN_CHANNEL2:
@@ -854,6 +857,7 @@ static void maybe_update_channelid(struct subd *subd, const u8 *msg)
 		update_v2_channelid(subd, msg);
 		break;
 	case WIRE_FUNDING_CREATED:
+    case WIRE_FUNDING_CREATED_ELTOO:
 		update_v1_channelid(subd, msg);
 		break;
 	}
@@ -1042,8 +1046,8 @@ static struct io_plan *read_body_from_peer_done(struct io_conn *peer_conn,
        subd = find_subd(peer, &channel_id);
        if (!subd) {
 	       enum peer_wire t = fromwire_peektype(decrypted);
-	       status_peer_debug(&peer->id, "Activating for message %s",
-				 peer_wire_name(t));
+	       status_peer_debug(&peer->id, "Activating for message %s, channel %s",
+				 peer_wire_name(t), type_to_string(subd, struct channel_id, &channel_id));
 	       subd = activate_subd(peer, &t, &channel_id);
 	       if (!subd)
 		       return io_close(peer_conn);
