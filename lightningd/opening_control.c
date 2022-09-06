@@ -1408,8 +1408,6 @@ static struct command_result *json_fundchannel_start(struct command *cmd,
 	subd_send_msg(peer->ld->connectd,
 		      take(towire_connectd_peer_make_active(NULL, &peer->id,
 							    &tmp_channel_id)));
-    printf("telling connectd about a channel: %s\n",
-             type_to_string(peer->ld->connectd, struct channel_id, &tmp_channel_id));    
 
 	return command_still_pending(cmd);
 }
