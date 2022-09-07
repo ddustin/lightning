@@ -105,8 +105,7 @@ void get_channel_basepoints(struct lightningd *ld,
 			    const struct node_id *peer_id,
 			    const u64 dbid,
 			    struct basepoints *local_basepoints,
-			    struct pubkey *local_funding_pubkey,
-                struct pubkey *local_settle_pubkey)
+			    struct pubkey *local_funding_pubkey)
 {
 	u8 *msg;
 
@@ -117,7 +116,7 @@ void get_channel_basepoints(struct lightningd *ld,
 
 	msg = wire_sync_read(tmpctx, ld->hsm_fd);
 	if (!fromwire_hsmd_get_channel_basepoints_reply(msg, local_basepoints,
-						       local_funding_pubkey, local_settle_pubkey))
+						       local_funding_pubkey))
 		fatal("HSM gave bad hsm_get_channel_basepoints_reply %s",
 		      tal_hex(msg, msg));
 }
@@ -203,7 +202,6 @@ struct channel *new_unsaved_channel(struct peer *peer,
 	struct lightningd *ld = peer->ld;
 	struct channel *channel = tal(ld, struct channel);
 	u8 *msg;
-    struct pubkey unused_settle_pubkey;
 
 	channel->peer = peer;
 	/* Not saved to the database yet! */
@@ -280,8 +278,7 @@ struct channel *new_unsaved_channel(struct peer *peer,
 
 	get_channel_basepoints(ld, &peer->id, channel->unsaved_dbid,
 			       &channel->local_basepoints,
-			       &channel->local_funding_pubkey,
-                   &unused_settle_pubkey);
+			       &channel->local_funding_pubkey);
 
 	channel->forgets = tal_arr(channel, struct command *, 0);
 	list_add_tail(&peer->channels, &channel->list);
@@ -379,7 +376,6 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    bool connected,
 			    const struct basepoints *local_basepoints,
 			    const struct pubkey *local_funding_pubkey,
-			    const struct pubkey *local_settle_pubkey,
 			    const struct pubkey *future_per_commitment_point,
 			    u32 feerate_base,
 			    u32 feerate_ppm,
@@ -481,7 +477,6 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 	channel->connected = connected;
 	channel->local_basepoints = *local_basepoints;
 	channel->local_funding_pubkey = *local_funding_pubkey;
-	channel->local_settle_pubkey = *local_settle_pubkey;
 	channel->future_per_commitment_point
 		= tal_steal(channel, future_per_commitment_point);
 	channel->feerate_base = feerate_base;

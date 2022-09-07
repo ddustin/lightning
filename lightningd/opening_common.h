@@ -46,9 +46,6 @@ struct uncommitted_channel {
 	/* Public key for funding tx. */
 	struct pubkey local_funding_pubkey;
 
-	/* Public key for settlement tx. (eltoo only) */
-	struct pubkey local_settle_pubkey;
-
 	/* If true, we are already in fundee-mode and any future
 	 * `fundchannel_start` on our end should fail.
 	 */

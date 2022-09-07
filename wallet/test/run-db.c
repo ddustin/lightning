@@ -28,7 +28,7 @@ void derive_channel_id(struct channel_id *channel_id UNNEEDED,
 void   fatal(const char *fmt UNNEEDED, ...)
 { fprintf(stderr, "fatal called!\n"); abort(); }
 /* Generated stub for fromwire_hsmd_get_channel_basepoints_reply */
-bool fromwire_hsmd_get_channel_basepoints_reply(const void *p UNNEEDED, struct basepoints *basepoints UNNEEDED, struct pubkey *funding_pubkey UNNEEDED, struct pubkey *settle_pubkey UNNEEDED)
+bool fromwire_hsmd_get_channel_basepoints_reply(const void *p UNNEEDED, struct basepoints *basepoints UNNEEDED, struct pubkey *funding_pubkey UNNEEDED)
 { fprintf(stderr, "fromwire_hsmd_get_channel_basepoints_reply called!\n"); abort(); }
 /* Generated stub for fromwire_hsmd_get_output_scriptpubkey_reply */
 bool fromwire_hsmd_get_output_scriptpubkey_reply(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, u8 **script UNNEEDED)
@@ -38,8 +38,7 @@ void get_channel_basepoints(struct lightningd *ld UNNEEDED,
 			    const struct node_id *peer_id UNNEEDED,
 			    const u64 dbid UNNEEDED,
 			    struct basepoints *local_basepoints UNNEEDED,
-			    struct pubkey *local_funding_pubkey UNNEEDED,
-                struct pubkey *local_settle_pubkey UNNEEDED)
+			    struct pubkey *local_funding_pubkey UNNEEDED)
 { fprintf(stderr, "get_channel_basepoints called!\n"); abort(); }
 /* Generated stub for towire_hsmd_get_channel_basepoints */
 u8 *towire_hsmd_get_channel_basepoints(const tal_t *ctx UNNEEDED, const struct node_id *peerid UNNEEDED, u64 dbid UNNEEDED)

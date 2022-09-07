@@ -167,9 +167,6 @@ struct channel {
 	/* Our funding tx pubkey. */
 	struct pubkey local_funding_pubkey;
 
-    /* Our settle tx pubkey */
-	struct pubkey local_settle_pubkey;
-
 	/* scriptpubkey for shutdown, if applicable. */
 	const u8 *shutdown_scriptpubkey[NUM_SIDES];
 	/* Address for any final outputs */
@@ -307,7 +304,6 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    bool connected,
 			    const struct basepoints *local_basepoints,
 			    const struct pubkey *local_funding_pubkey,
-			    const struct pubkey *local_settle_pubkey,
 			    const struct pubkey *future_per_commitment_point,
 			    u32 feerate_base,
 			    u32 feerate_ppm,
@@ -475,8 +471,7 @@ void get_channel_basepoints(struct lightningd *ld,
 			    const struct node_id *peer_id,
 			    const u64 dbid,
 			    struct basepoints *local_basepoints,
-			    struct pubkey *local_funding_pubkey,
-                struct pubkey *local_settle_pubkey);
+			    struct pubkey *local_funding_pubkey);
 
 void channel_set_billboard(struct channel *channel, bool perm,
 			   const char *str TAKES);
