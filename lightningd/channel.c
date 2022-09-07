@@ -448,8 +448,11 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 	channel->last_tx = tal_steal(channel, last_tx);
 	channel->last_tx->chainparams = chainparams;
 	channel->last_tx_type = TX_UNKNOWN;
-	channel->last_sig = *last_sig;
-    channel->last_update_sig = *last_update_sig;
+    if (last_sig) {
+	    channel->last_sig = *last_sig;
+    } else {
+        channel->last_update_sig = *last_update_sig;
+    }
 	channel->last_htlc_sigs = tal_steal(channel, last_htlc_sigs);
 	channel->channel_info = *channel_info;
 	channel->fee_states = dup_fee_states(channel, fee_states);
