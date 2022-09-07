@@ -123,6 +123,7 @@ static struct migration dbmigrations[] = {
 	 "  msatoshi_local BIGINT," /* our_msatoshi */
 	 /* START channel_info */
 	 "  fundingkey_remote BLOB,"
+	 "  settlekey_remote BLOB,"
 	 "  revocation_basepoint_remote BLOB,"
 	 "  payment_basepoint_remote BLOB,"
 	 "  htlc_basepoint_remote BLOB,"
@@ -1219,6 +1220,7 @@ migrate_inflight_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 				     "  c.id"
 				     ", p.node_id"
 				     ", c.fundingkey_remote"
+				     ", c.settlekey_remote"
 				     ", inflight.last_tx"
 				     ", inflight.last_sig"
 				     ", inflight.funding_satoshi"
@@ -1238,7 +1240,7 @@ migrate_inflight_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		struct amount_sat funding_sat;
 		struct node_id peer_id;
 		struct pubkey local_funding_pubkey, remote_funding_pubkey;
-        struct pubkey local_settle_pubkey;
+        struct pubkey local_settle_pubkey, remote_settle_pubkey;
 		struct basepoints local_basepoints UNUSED;
 		struct bitcoin_signature last_sig;
 		u64 cdb_id;
@@ -1263,6 +1265,7 @@ migrate_inflight_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		db_col_node_id(stmt, "p.node_id", &peer_id);
 		db_col_amount_sat(stmt, "inflight.funding_satoshi", &funding_sat);
 		db_col_pubkey(stmt, "c.fundingkey_remote", &remote_funding_pubkey);
+		db_col_pubkey(stmt, "c.settlekey_remote", &remote_settle_pubkey);
 		db_col_txid(stmt, "inflight.funding_tx_id", &funding_txid);
 
 		get_channel_basepoints(ld, &peer_id, cdb_id,
@@ -1321,6 +1324,7 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 				     ", c.last_tx"
 				     ", c.funding_satoshi"
 				     ", c.fundingkey_remote"
+				     ", c.settlekey_remote"
 				     ", c.last_sig"
 				     " FROM channels c"
 				     "  LEFT OUTER JOIN peers p"
@@ -1332,7 +1336,7 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		struct amount_sat funding_sat;
 		struct node_id peer_id;
 		struct pubkey local_funding_pubkey, remote_funding_pubkey;
-		struct pubkey local_settle_pubkey;
+		struct pubkey local_settle_pubkey, remote_settle_pubkey;
 		struct basepoints local_basepoints UNUSED;
 		struct bitcoin_signature last_sig;
 		u64 cdb_id;
@@ -1348,6 +1352,7 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		if (db_col_is_null(stmt, "p.node_id")) {
 			db_col_ignore(stmt, "c.funding_satoshi");
 			db_col_ignore(stmt, "c.fundingkey_remote");
+			db_col_ignore(stmt, "c.settlekey_remote");
 			db_col_ignore(stmt, "c.last_sig");
 			continue;
 		}
@@ -1355,6 +1360,7 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		db_col_node_id(stmt, "p.node_id", &peer_id);
 		db_col_amount_sat(stmt, "c.funding_satoshi", &funding_sat);
 		db_col_pubkey(stmt, "c.fundingkey_remote", &remote_funding_pubkey);
+		db_col_pubkey(stmt, "c.settlekey_remote", &remote_settle_pubkey);
 
 		get_channel_basepoints(ld, &peer_id, cdb_id,
 				       &local_basepoints, &local_funding_pubkey,

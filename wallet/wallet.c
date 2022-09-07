@@ -1335,6 +1335,7 @@ static struct channel *wallet_stmt2channel(struct wallet *w, struct db_stmt *stm
 
 	/* Populate channel_info */
 	db_col_pubkey(stmt, "fundingkey_remote", &channel_info.remote_fundingkey);
+	db_col_pubkey(stmt, "settlekey_remote", &channel_info.remote_settlekey);
 	db_col_pubkey(stmt, "revocation_basepoint_remote", &channel_info.theirbase.revocation);
 	db_col_pubkey(stmt, "payment_basepoint_remote", &channel_info.theirbase.payment);
 	db_col_pubkey(stmt, "htlc_basepoint_remote", &channel_info.theirbase.htlc);
@@ -1537,6 +1538,7 @@ static bool wallet_channels_load_active(struct wallet *w)
 					", push_msatoshi"
 					", msatoshi_local"
 					", fundingkey_remote"
+					", settlekey_remote"
 					", revocation_basepoint_remote"
 					", payment_basepoint_remote"
 					", htlc_basepoint_remote"
@@ -1933,6 +1935,7 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 	wallet_channel_config_save(w, &chan->channel_info.their_config);
 	stmt = db_prepare_v2(w->db, SQL("UPDATE channels SET"
 					"  fundingkey_remote=?,"
+					"  settlekey_remote=?,"
 					"  revocation_basepoint_remote=?,"
 					"  payment_basepoint_remote=?,"
 					"  htlc_basepoint_remote=?,"
@@ -1943,18 +1946,19 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 					"  future_per_commitment_point=?"
 					" WHERE id=?"));
 	db_bind_pubkey(stmt, 0,  &chan->channel_info.remote_fundingkey);
-	db_bind_pubkey(stmt, 1,  &chan->channel_info.theirbase.revocation);
-	db_bind_pubkey(stmt, 2,  &chan->channel_info.theirbase.payment);
-	db_bind_pubkey(stmt, 3,  &chan->channel_info.theirbase.htlc);
-	db_bind_pubkey(stmt, 4,  &chan->channel_info.theirbase.delayed_payment);
-	db_bind_pubkey(stmt, 5,  &chan->channel_info.remote_per_commit);
-	db_bind_pubkey(stmt, 6,  &chan->channel_info.old_remote_per_commit);
-	db_bind_u64(stmt, 7, chan->channel_info.their_config.id);
+	db_bind_pubkey(stmt, 1,  &chan->channel_info.remote_settlekey);
+	db_bind_pubkey(stmt, 2,  &chan->channel_info.theirbase.revocation);
+	db_bind_pubkey(stmt, 3,  &chan->channel_info.theirbase.payment);
+	db_bind_pubkey(stmt, 4,  &chan->channel_info.theirbase.htlc);
+	db_bind_pubkey(stmt, 5,  &chan->channel_info.theirbase.delayed_payment);
+	db_bind_pubkey(stmt, 6,  &chan->channel_info.remote_per_commit);
+	db_bind_pubkey(stmt, 7,  &chan->channel_info.old_remote_per_commit);
+	db_bind_u64(stmt, 8, chan->channel_info.their_config.id);
 	if (chan->future_per_commitment_point)
-		db_bind_pubkey(stmt, 8, chan->future_per_commitment_point);
+		db_bind_pubkey(stmt, 9, chan->future_per_commitment_point);
 	else
-		db_bind_null(stmt, 8);
-	db_bind_u64(stmt, 9, chan->dbid);
+		db_bind_null(stmt, 9);
+	db_bind_u64(stmt, 10, chan->dbid);
 	db_exec_prepared_v2(take(stmt));
 
 	/* FIXME: Updates channel_feerates by discarding and rewriting. */

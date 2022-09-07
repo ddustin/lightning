@@ -1275,10 +1275,17 @@ void peer_active(struct lightningd *ld, const u8 *msg, int fd)
 		case CHANNELD_SHUTTING_DOWN:
 		case CLOSINGD_SIGEXCHANGE:
 			assert(!channel->owner);
-			peer_start_channeld(channel,
-					    peer_fd,
-					    NULL, true,
-					    NULL);
+            if (true /* FIXME track eltoo-ness of channels */) {
+                peer_start_eltoo_channeld(channel,
+                            peer_fd,
+                            NULL, true,
+                            NULL);
+            } else {
+                peer_start_channeld(channel,
+                            peer_fd,
+                            NULL, true,
+                            NULL);
+            }
 			goto subd_setup_done;
 		}
 		abort();
