@@ -148,6 +148,8 @@ struct channel {
 	enum wallet_tx_type last_tx_type;
 	struct bitcoin_signature last_sig;
     struct bip340sig last_update_sig; /* Eltoo only */
+    struct partial_sig their_last_psig, our_last_psig;
+    struct musig_session session;
 	const struct bitcoin_signature *last_htlc_sigs;
 
 	/* Keys for channel */
@@ -164,6 +166,9 @@ struct channel {
 
 	/* Our funding tx pubkey. */
 	struct pubkey local_funding_pubkey;
+
+    /* Our settle tx pubkey */
+	struct pubkey local_settle_pubkey;
 
 	/* scriptpubkey for shutdown, if applicable. */
 	const u8 *shutdown_scriptpubkey[NUM_SIDES];
