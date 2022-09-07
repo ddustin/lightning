@@ -39,7 +39,7 @@ void fromwire_secrets(const u8 **ptr, size_t *max, struct secrets *s)
 #endif
 
 struct keys {
-	struct privkey f, s, r, h, p, d;
+	struct privkey f, r, h, p, d;
 	struct sha256 shaseed;
 };
 
