@@ -1551,6 +1551,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 	struct short_channel_id scid;
 
 	/* Sanity check */
+    /* FIXME this doesn't work for eltoo. */
 	if (!check_funding_tx(tx, channel)) {
 		channel_internal_error(channel, "Bad tx %s: %s",
 				       type_to_string(tmpctx,

@@ -19,7 +19,7 @@ struct json_stream;
 /* FIXME: Define serialization primitive for this? */
 struct channel_info {
 	struct channel_config their_config;
-	struct pubkey remote_fundingkey, remote_settlekey;
+	struct pubkey remote_fundingkey;
 	struct basepoints theirbase;
 	/* The old_remote_per_commit is for the locked-in remote commit_tx,
 	 * and the remote_per_commit is for the commit_tx we're modifying now. */
