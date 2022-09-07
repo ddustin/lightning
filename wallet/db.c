@@ -152,6 +152,7 @@ static struct migration dbmigrations[] = {
 	 "  htlc_minimum_msat BIGINT,"
 	 "  to_self_delay INTEGER,"
 	 "  max_accepted_htlcs INTEGER,"
+	 "  shared_delay INTEGER,"
 	 "  PRIMARY KEY (id)"
 	 ");"),
      NULL},

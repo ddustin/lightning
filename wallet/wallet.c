@@ -1212,7 +1212,7 @@ static bool wallet_channel_config_load(struct wallet *w, const u64 id,
 	const char *query = SQL(
 	    "SELECT dust_limit_satoshis, max_htlc_value_in_flight_msat, "
 	    "channel_reserve_satoshis, htlc_minimum_msat, to_self_delay, "
-	    "max_accepted_htlcs, max_dust_htlc_exposure_msat "
+	    "max_accepted_htlcs, max_dust_htlc_exposure_msat, shared_delay "
 	    " FROM channel_configs WHERE id= ? ;");
 	struct db_stmt *stmt = db_prepare_v2(w->db, query);
 	db_bind_u64(stmt, 0, id);
@@ -1232,6 +1232,7 @@ static bool wallet_channel_config_load(struct wallet *w, const u64 id,
 	cc->max_accepted_htlcs = db_col_int(stmt, "max_accepted_htlcs");
 	db_col_amount_msat(stmt, "max_dust_htlc_exposure_msat",
 			   &cc->max_dust_htlc_exposure_msat);
+	cc->shared_delay = db_col_int(stmt, "shared_delay");
 	tal_free(stmt);
 	return ok;
 }
@@ -1775,7 +1776,8 @@ static void wallet_channel_config_save(struct wallet *w,
 					"  htlc_minimum_msat=?,"
 					"  to_self_delay=?,"
 					"  max_accepted_htlcs=?,"
-					"  max_dust_htlc_exposure_msat=?"
+					"  max_dust_htlc_exposure_msat=?,"
+                    "  shared_delay=?"
 					" WHERE id=?;"));
 	db_bind_amount_sat(stmt, 0, &cc->dust_limit);
 	db_bind_amount_msat(stmt, 1, &cc->max_htlc_value_in_flight);
@@ -1784,7 +1786,8 @@ static void wallet_channel_config_save(struct wallet *w,
 	db_bind_int(stmt, 4, cc->to_self_delay);
 	db_bind_int(stmt, 5, cc->max_accepted_htlcs);
 	db_bind_amount_msat(stmt, 6, &cc->max_dust_htlc_exposure_msat);
-	db_bind_u64(stmt, 7, cc->id);
+	db_bind_int(stmt, 7, cc->shared_delay);
+	db_bind_u64(stmt, 8, cc->id);
 	db_exec_prepared_v2(take(stmt));
 }
 
