@@ -202,6 +202,7 @@ wallet_commit_channel(struct lightningd *ld,
 			      true,
 			      &uc->local_basepoints,
 			      &uc->local_funding_pubkey,
+                  &uc->local_settle_pubkey,
 			      NULL,
 			      ld->config.fee_base,
 			      ld->config.fee_per_satoshi,
@@ -344,7 +345,6 @@ failed:
 	tal_free(fc->uc);
 }
 
-/* FIXME all this needs changing */
 static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 				    const int *fds,
 				    struct funding_channel *fc)
@@ -413,8 +413,7 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 	channel_watch_funding(ld, channel);
 
 	funding_success(channel);
-    /* FIXME Start eltoo_channeld instead */
-	peer_start_channeld(channel, peer_fd, NULL, false, NULL);
+	peer_start_eltoo_channeld(channel, peer_fd, NULL, false /* reconnected */, false /* reestablish_only */);
 
 cleanup:
 	/* Frees fc too */
@@ -599,7 +598,7 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 			      &channel->funding.txid, &channel->remote_funding_locked);
 
 	/* On to normal operation! */
-	peer_start_channeld(channel, peer_fd, fwd_msg, false, NULL);
+	peer_start_eltoo_channeld(channel, peer_fd, fwd_msg, false /* reconnected */, false /* reestablish_only */);
 
 	tal_free(uc);
 	return;
