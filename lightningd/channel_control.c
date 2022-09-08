@@ -206,6 +206,20 @@ static void lockin_complete(struct channel *channel)
 	channel_record_open(channel);
 }
 
+bool channel_on_funding_locked_eltoo(struct channel *channel)
+{
+	if (channel->remote_funding_locked) {
+		channel_internal_error(channel,
+				       "channel_got_funding_locked_eltoo twice");
+		return false;
+	}
+
+	log_debug(channel->log, "Got funding_locked_eltoo");
+	channel->remote_funding_locked = true;
+
+	return true;
+}
+
 bool channel_on_funding_locked(struct channel *channel,
 			       struct pubkey *next_per_commitment_point)
 {
@@ -220,6 +234,32 @@ bool channel_on_funding_locked(struct channel *channel,
 	channel->remote_funding_locked = true;
 
 	return true;
+}
+
+/* We were informed by channeld that it announced the channel and sent
+ * an update, so we can now start sending a node_announcement. The
+ * first step is to build the provisional announcement and ask the HSM
+ * to sign it. */
+
+static void peer_got_funding_locked_eltoo(struct channel *channel, const u8 *msg)
+{
+	struct pubkey next_per_commitment_point;
+
+	if (!fromwire_channeld_got_funding_locked_eltoo(msg)) {
+		channel_internal_error(channel,
+				       "bad channel_got_funding_locked %s",
+				       tal_hex(channel, msg));
+		return;
+	}
+
+	if (!channel_on_funding_locked(channel, &next_per_commitment_point))
+		return;
+
+	if (channel->scid)
+		lockin_complete(channel);
+	else
+		/* Remember that we got the lockin */
+		wallet_channel_save(channel->peer->ld->wallet, channel);
 }
 
 /* We were informed by channeld that it announced the channel and sent
@@ -517,6 +557,9 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 	case WIRE_CHANNELD_GOT_FUNDING_LOCKED:
 		peer_got_funding_locked(sd->channel, msg);
 		break;
+	case WIRE_CHANNELD_GOT_FUNDING_LOCKED_ELTOO:
+		peer_got_funding_locked_eltoo(sd->channel, msg);
+        break;
 	case WIRE_CHANNELD_GOT_ANNOUNCEMENT:
 		peer_got_announcement(sd->channel, msg);
 		break;
@@ -548,9 +591,6 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 	case WIRE_CHANNELD_LOCAL_PRIVATE_CHANNEL:
 		handle_local_private_channel(sd->channel, msg);
 		break;
-	case WIRE_CHANNELD_GOT_FUNDING_LOCKED_ELTOO:
-        /* FIXME Handle this */
-        break;
     case WIRE_CHANNELD_GOT_UPDATESIG:
         /* FIXME handle this */
         break;
