@@ -1870,12 +1870,12 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 					"  lease_chan_max_msat=?," // 40
 					"  lease_chan_max_ppt=?," // 41
 					"  htlc_minimum_msat=?," // 42
-					"  htlc_maximum_msat=?" // 43
-                    "  settle_tx=?" // 44
-                    "  their_psig=?" // 45
-                    "  our_psig=?" // 46
-                    "  musig_session=?" // 47
-                    "  their_next_nonce=?" // 48
+					"  htlc_maximum_msat=?," // 43
+                    "  settle_tx=?," // 44
+                    "  their_psig=?," // 45
+                    "  our_psig=?," // 46
+                    "  musig_session=?," // 47
+                    "  their_next_nonce=?," // 48
                     "  our_next_nonce=?" // 49
 					" WHERE id=?")); // 50
 	db_bind_u64(stmt, 0, chan->their_shachain.id);

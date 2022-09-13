@@ -141,6 +141,14 @@ static struct migration dbmigrations[] = {
 	 "  last_sig BLOB,"
 	 "  closing_fee_received INTEGER,"
 	 "  closing_sig_received BLOB,"
+     /* START Eltoo stuff*/
+	 "  settle_tx BLOB,"
+     "  their_psig BLOB,"
+     "  our_psig BLOB,"
+     "  musig_session BLOB,"
+     "  their_next_nonce BLOB,"
+     "  our_next_nonce BLOB,"
+     /* END Eltoo stuff */
 	 "  PRIMARY KEY (id)"
 	 ");"),
      NULL},
