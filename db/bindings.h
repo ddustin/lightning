@@ -43,6 +43,12 @@ void db_bind_short_channel_id_arr(struct db_stmt *stmt, int col,
 				  const struct short_channel_id *id);
 void db_bind_signature(struct db_stmt *stmt, int col,
 		       const secp256k1_ecdsa_signature *sig);
+void db_bind_partial_sig(struct db_stmt *stmt, int col,
+		       const struct partial_sig *psig);
+void db_bind_musig_session(struct db_stmt *stmt, int col,
+               const struct musig_session *session);
+void db_bind_musig_nonce(struct db_stmt *stmt, int col,
+               const struct nonce *nonce);
 void db_bind_timeabs(struct db_stmt *stmt, int col, struct timeabs t);
 void db_bind_tx(struct db_stmt *stmt, int col, const struct wally_tx *tx);
 void db_bind_psbt(struct db_stmt *stmt, int col, const struct wally_psbt *psbt);

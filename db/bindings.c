@@ -188,6 +188,34 @@ void db_bind_signature(struct db_stmt *stmt, int col,
 	db_bind_blob(stmt, col, buf, 64);
 }
 
+void db_bind_partial_sig(struct db_stmt *stmt, int col,
+		       const struct partial_sig *psig)
+{
+	u8 *buf = tal_arr(stmt, u8, 32);
+	int ret = secp256k1_musig_partial_sig_serialize(secp256k1_ctx,
+							      buf, &psig->p_sig);
+	assert(ret == 1);
+	db_bind_blob(stmt, col, buf, 32);
+}
+
+void db_bind_musig_session(struct db_stmt *stmt, int col,
+               const struct musig_session *session)
+{
+	u8 *buf = tal_arr(stmt, u8, 133);
+    memcpy(buf, session->session.data, 133);
+	db_bind_blob(stmt, col, buf, 133);
+}
+
+void db_bind_musig_nonce(struct db_stmt *stmt, int col,
+		       const struct nonce *nonce)
+{
+	u8 *buf = tal_arr(stmt, u8, 66);
+	int ret = secp256k1_musig_pubnonce_serialize(secp256k1_ctx,
+							      buf, &nonce->nonce);
+	assert(ret == 1);
+	db_bind_blob(stmt, col, buf, 66);
+}
+
 void db_bind_timeabs(struct db_stmt *stmt, int col, struct timeabs t)
 {
 	u64 timestamp =  t.ts.tv_nsec + (((u64) t.ts.tv_sec) * ((u64) NSEC_IN_SEC));

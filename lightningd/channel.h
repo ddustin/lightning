@@ -3,6 +3,7 @@
 #include "config.h"
 #include <common/channel_id.h>
 #include <common/channel_type.h>
+#include <common/keyset.h>
 #include <common/tx_roles.h>
 #include <common/utils.h>
 #include <lightningd/channel_state.h>
@@ -147,10 +148,11 @@ struct channel {
 	struct bitcoin_tx *last_tx;
 	enum wallet_tx_type last_tx_type;
 	struct bitcoin_signature last_sig;
-    struct bip340sig last_update_sig; /* Eltoo only */
-    struct partial_sig their_last_psig, our_last_psig;
-    struct musig_session session;
 	const struct bitcoin_signature *last_htlc_sigs;
+
+    /* Eltoo-only fields */
+    struct bitcoin_tx *settle_tx;
+    struct eltoo_keyset eltoo_keyset;
 
 	/* Keys for channel */
 	struct channel_info channel_info;
@@ -323,7 +325,12 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    u16 lease_chan_max_ppt,
 			    struct amount_msat htlc_minimum_msat,
 			    struct amount_msat htlc_maximum_msat,
-                struct bip340sig *update_sig);
+                struct bitcoin_tx *settle_tx,
+                struct partial_sig *their_psig,
+                struct partial_sig *our_psig,
+                struct musig_session *session,
+                struct nonce *their_next_nonce,
+                struct nonce *our_next_nonce);
 
 /* new_inflight - Create a new channel_inflight for a channel */
 struct channel_inflight *

@@ -394,7 +394,12 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    u16 lease_chan_max_ppt,
 			    struct amount_msat htlc_minimum_msat,
 			    struct amount_msat htlc_maximum_msat,
-                struct bip340sig *last_update_sig)
+                struct bitcoin_tx *settle_tx,
+                struct partial_sig *their_psig,
+                struct partial_sig *our_psig,
+                struct musig_session *session,
+                struct nonce *their_next_nonce,
+                struct nonce *our_next_nonce)
 {
 	struct channel *channel = tal(peer->ld, struct channel);
 	struct amount_msat htlc_min, htlc_max;
@@ -448,7 +453,15 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
     if (last_sig) {
 	    channel->last_sig = *last_sig;
     } else {
-        channel->last_update_sig = *last_update_sig;
+        /* If we're not using ecdsa, we're doing eltoo... */
+        assert(settle_tx);
+    	channel->settle_tx = tal_steal(channel, settle_tx);
+        channel->settle_tx->chainparams = chainparams;
+        channel->eltoo_keyset.other_psig = *their_psig;
+        channel->eltoo_keyset.self_psig = *our_psig;
+        channel->eltoo_keyset.session = *session;
+        channel->eltoo_keyset.other_next_nonce = *their_next_nonce;
+        channel->eltoo_keyset.self_next_nonce = *our_next_nonce;
     }
 	channel->last_htlc_sigs = tal_steal(channel, last_htlc_sigs);
 	channel->channel_info = *channel_info;

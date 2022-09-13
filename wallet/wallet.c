@@ -1486,7 +1486,12 @@ static struct channel *wallet_stmt2channel(struct wallet *w, struct db_stmt *stm
 			   lease_chan_max_ppt,
 			   htlc_minimum_msat,
 			   htlc_maximum_msat,
-               NULL /* FIXME last_update_sig */);
+               NULL /* FIXME settle_tx */,
+               NULL /* FIXME their_psig */,
+               NULL /* FIXME our_psig */,
+               NULL /* FIXME session */,
+               NULL /* FIXME their_next_nonce */,
+               NULL /* FIXME our_next_nonce */);
 
 	if (!wallet_channel_load_inflights(w, chan)) {
 		tal_free(chan);
@@ -1866,7 +1871,13 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 					"  lease_chan_max_ppt=?," // 41
 					"  htlc_minimum_msat=?," // 42
 					"  htlc_maximum_msat=?" // 43
-					" WHERE id=?")); // 44
+                    "  settle_tx=?" // 44
+                    "  their_psig=?" // 45
+                    "  our_psig=?" // 46
+                    "  musig_session=?" // 47
+                    "  their_next_nonce=?" // 48
+                    "  our_next_nonce=?" // 49
+					" WHERE id=?")); // 50
 	db_bind_u64(stmt, 0, chan->their_shachain.id);
 	if (chan->scid)
 		db_bind_short_channel_id(stmt, 1, chan->scid);
@@ -1931,7 +1942,13 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 	}
 	db_bind_amount_msat(stmt, 42, &chan->htlc_minimum_msat);
 	db_bind_amount_msat(stmt, 43, &chan->htlc_maximum_msat);
-	db_bind_u64(stmt, 44, chan->dbid);
+	db_bind_psbt(stmt, 44, chan->settle_tx->psbt);
+	db_bind_partial_sig(stmt, 45, &chan->eltoo_keyset.other_psig);
+	db_bind_partial_sig(stmt, 46, &chan->eltoo_keyset.self_psig);
+    db_bind_musig_session(stmt, 47, &chan->eltoo_keyset.session);
+    db_bind_musig_nonce(stmt, 48, &chan->eltoo_keyset.other_next_nonce);
+    db_bind_musig_nonce(stmt, 49, &chan->eltoo_keyset.self_next_nonce);
+	db_bind_u64(stmt, 50, chan->dbid);
 	db_exec_prepared_v2(take(stmt));
 
 	wallet_channel_config_save(w, &chan->channel_info.their_config);

@@ -93,7 +93,12 @@ wallet_commit_channel(struct lightningd *ld,
 		      const u8 *our_upfront_shutdown_script,
 		      const u8 *remote_upfront_shutdown_script,
 		      const struct channel_type *type,
-              struct bip340sig *update_sig)
+              struct bitcoin_tx *settle_tx,
+              struct partial_sig *their_psig,
+              struct partial_sig *our_psig,
+              struct musig_session *session,
+              struct nonce *their_next_nonce,
+              struct nonce *our_next_nonce)
 {
 	struct channel *channel;
 	struct amount_msat our_msat;
@@ -216,7 +221,12 @@ wallet_commit_channel(struct lightningd *ld,
 			      0, NULL, 0, 0, /* No leases on v1s */
 			      ld->config.htlc_minimum_msat,
 			      ld->config.htlc_maximum_msat,
-                  update_sig);
+                  settle_tx,
+                  their_psig,
+                  our_psig,
+                  session,
+                  their_next_nonce,
+                  our_next_nonce);
 
 	/* Now we finally put it in the database. */
 	wallet_channel_insert(ld->wallet, channel);
@@ -351,13 +361,15 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 	struct channel_info channel_info;
 	struct channel_id cid;
 	struct bitcoin_outpoint funding;
-	struct bip340sig first_update_sig;
-	struct bitcoin_tx *update_tx;
+	struct bitcoin_tx *update_tx, *settle_tx;
 	struct channel *channel;
 	struct lightningd *ld = openingd->ld;
 	u8 *remote_upfront_shutdown_script;
 	struct peer_fd *peer_fd;
 	struct channel_type *type;
+    struct partial_sig their_psig, our_psig;
+    struct musig_session session;
+    struct nonce their_next_nonce, our_next_nonce;
 
 	/* This is a new channel_info.their_config so set its ID to 0 */
 	channel_info.their_config.id = 0;
@@ -365,10 +377,15 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 	if (!fromwire_openingd_eltoo_funder_reply(resp, resp,
 					   &channel_info.their_config,
 					   &update_tx,
-					   &first_update_sig,
+                       &settle_tx,
 					   &fc->uc->minimum_depth,
 					   &channel_info.remote_fundingkey,
 					   &channel_info.theirbase.payment,
+                       &their_psig,
+                       &our_psig,
+                       &session,
+                       &their_next_nonce,
+                       &our_next_nonce,
 					   &funding,
 					   &remote_upfront_shutdown_script,
 					   &type)) {
@@ -410,7 +427,12 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 					fc->our_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-					&first_update_sig);
+                    settle_tx,
+                    &their_psig,
+                    &our_psig,
+                    &session,
+                    &their_next_nonce,
+                    &our_next_nonce);
 	if (!channel) {
 		was_pending(command_fail(fc->cmd, LIGHTNINGD,
 					 "Key generation failure"));
@@ -501,7 +523,12 @@ static void opening_funder_finished(struct subd *openingd, const u8 *resp,
 					fc->our_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    NULL /* update_sig */);
+                    NULL /* settle_tx */,
+                    NULL /* their_psig */,
+                    NULL /* our_psig */,
+                    NULL /* session */,
+                    NULL /* their_next_nonce */,
+                    NULL /* our_next_nonce */);
 	if (!channel) {
 		was_pending(command_fail(fc->cmd, LIGHTNINGD,
 					 "Key generation failure"));
@@ -529,8 +556,7 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 {
 	const u8 *fwd_msg;
 	struct channel_info channel_info;
-	struct bip340sig first_update_sig;
-	struct bitcoin_tx *settle_tx;
+	struct bitcoin_tx *update_tx, *settle_tx;
 	struct channel_id cid;
 	struct lightningd *ld = openingd->ld;
 	struct bitcoin_outpoint funding;
@@ -542,6 +568,10 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 	struct peer_fd *peer_fd;
 	struct channel_type *type;
 
+    struct partial_sig their_psig, our_psig;
+    struct musig_session session;
+    struct nonce their_next_nonce, our_next_nonce;
+
 	log_debug(uc->log, "Got opening_eltoo_fundee_finish_response");
 
 	/* This is a new channel_info.their_config, set its ID to 0 */
@@ -549,13 +579,17 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 
 	peer_fd = new_peer_fd_arr(tmpctx, fds);
 
-    /* FIXME is this really the right fields to send? */
     if (!fromwire_openingd_eltoo_fundee(tmpctx, reply,
 				     &channel_info.their_config,
-				     &settle_tx,
-				     &first_update_sig,
+				     &update_tx,
+                     &settle_tx,
 				     &channel_info.remote_fundingkey,
 				     &channel_info.theirbase.payment,
+                     &their_psig,
+                     &our_psig,
+                     &session,
+                     &their_next_nonce,
+                     &our_next_nonce,
 				     &funding,
 				     &funding_sats,
 				     &push,
@@ -575,12 +609,14 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
     /* We make sure other basepoints are valid
      * even if unused...
      * FIXME wallet db gets upset if I don't do this due to statement construction...  */
+    /* FIXME Just copy by value? */
     memcpy(&channel_info.theirbase.revocation, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
     memcpy(&channel_info.theirbase.htlc, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
     memcpy(&channel_info.theirbase.delayed_payment, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
     memcpy(&channel_info.remote_per_commit, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
     memcpy(&channel_info.old_remote_per_commit, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
 
+	update_tx->chainparams = chainparams;
 	settle_tx->chainparams = chainparams;
 
 	derive_channel_id(&cid, &funding);
@@ -588,7 +624,7 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 	/* Consumes uc */
 	channel = wallet_commit_channel(ld, uc,
 					&cid,
-					settle_tx,
+					update_tx,
 					NULL /* remote_commit_sig */,
 					&funding,
 					funding_sats,
@@ -599,7 +635,13 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 					local_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    &first_update_sig);
+                    settle_tx,
+                    &their_psig,
+                    &our_psig,
+                    &session,
+                    &their_next_nonce,
+                    &our_next_nonce);
+
 	if (!channel) {
 		uncommitted_channel_disconnect(uc, LOG_BROKEN,
 					       "Commit channel failed");
@@ -704,7 +746,12 @@ static void opening_fundee_finished(struct subd *openingd,
 					local_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    NULL /* update_sig */);
+                    NULL /* settle_tx */,
+                    NULL /* their_psig */,
+                    NULL /* our_psig */,
+                    NULL /* session */,
+                    NULL /* their_next_nonce */,
+                    NULL /* our_next_nonce */);
 	if (!channel) {
 		uncommitted_channel_disconnect(uc, LOG_BROKEN,
 					       "Commit channel failed");
