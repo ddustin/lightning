@@ -595,13 +595,13 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 		handle_local_private_channel(sd->channel, msg);
 		break;
     case WIRE_CHANNELD_GOT_UPDATESIG:
-        /* FIXME handle this */
+		peer_got_updatesig(sd->channel, msg);
         break;
     case WIRE_CHANNELD_SENDING_UPDATESIG:
-        /* FIXME handle this */
+		peer_sending_updatesig(sd->channel, msg);
         break;
     case WIRE_CHANNELD_GOT_ACK:
-        /* FIXME handle this */
+		peer_got_ack(sd->channel, msg);
         break;
     case WIRE_CHANNELD_INIT_ELTOO:
     case WIRE_CHANNELD_GOT_UPDATESIG_REPLY:
@@ -742,6 +742,8 @@ void peer_start_eltoo_channeld(struct channel *channel,
 				       &channel->eltoo_keyset.other_psig,
 				       &channel->eltoo_keyset.self_psig,
                        &channel->eltoo_keyset.session,
+                       &channel->eltoo_keyset.other_next_nonce,
+                       &channel->eltoo_keyset.self_next_nonce,
 				       &channel->channel_info.remote_fundingkey,
 				       &channel->channel_info.remote_fundingkey,
 /*				       &channel->channel_info.theirbase.payment,*/
