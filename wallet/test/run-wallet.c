@@ -148,6 +148,9 @@ bool fromwire_channeld_offer_htlc_reply(const tal_t *ctx UNNEEDED, const void *p
 /* Generated stub for fromwire_channeld_sending_commitsig */
 bool fromwire_channeld_sending_commitsig(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, u64 *commitnum UNNEEDED, struct penalty_base **pbase UNNEEDED, struct fee_states **fee_states UNNEEDED, struct height_states **blockheight_states UNNEEDED, struct changed_htlc **changed UNNEEDED, struct bitcoin_signature *commit_sig UNNEEDED, struct bitcoin_signature **htlc_sigs UNNEEDED)
 { fprintf(stderr, "fromwire_channeld_sending_commitsig called!\n"); abort(); }
+/* Generated stub for fromwire_channeld_sending_updatesig */
+bool fromwire_channeld_sending_updatesig(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, u64 *update_num UNNEEDED, struct changed_htlc **changed UNNEEDED, struct partial_sig *our_update_p_sig UNNEEDED, struct musig_session *session UNNEEDED)
+{ fprintf(stderr, "fromwire_channeld_sending_updatesig called!\n"); abort(); }
 /* Generated stub for fromwire_connectd_peer_active */
 bool fromwire_connectd_peer_active(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct node_id *id UNNEEDED, u16 **msgtype UNNEEDED, struct channel_id *channel_id UNNEEDED)
 { fprintf(stderr, "fromwire_connectd_peer_active called!\n"); abort(); }
@@ -746,6 +749,9 @@ u8 *towire_channeld_offer_htlc(const tal_t *ctx UNNEEDED, struct amount_msat amo
 /* Generated stub for towire_channeld_sending_commitsig_reply */
 u8 *towire_channeld_sending_commitsig_reply(const tal_t *ctx UNNEEDED)
 { fprintf(stderr, "towire_channeld_sending_commitsig_reply called!\n"); abort(); }
+/* Generated stub for towire_channeld_sending_updatesig_reply */
+u8 *towire_channeld_sending_updatesig_reply(const tal_t *ctx UNNEEDED)
+{ fprintf(stderr, "towire_channeld_sending_updatesig_reply called!\n"); abort(); }
 /* Generated stub for towire_connectd_peer_final_msg */
 u8 *towire_connectd_peer_final_msg(const tal_t *ctx UNNEEDED, const struct node_id *id UNNEEDED, const u8 *msg UNNEEDED)
 { fprintf(stderr, "towire_connectd_peer_final_msg called!\n"); abort(); }

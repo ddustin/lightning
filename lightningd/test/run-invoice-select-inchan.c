@@ -88,9 +88,6 @@ struct htlc_out *channel_has_htlc_out(struct channel *channel UNNEEDED)
 struct channel_inflight *channel_inflight_find(struct channel *channel UNNEEDED,
 					       const struct bitcoin_txid *txid UNNEEDED)
 { fprintf(stderr, "channel_inflight_find called!\n"); abort(); }
-/* Generated stub for channel_internal_error */
-void channel_internal_error(struct channel *channel UNNEEDED, const char *fmt UNNEEDED, ...)
-{ fprintf(stderr, "channel_internal_error called!\n"); abort(); }
 /* Generated stub for channel_last_funding_feerate */
 u32 channel_last_funding_feerate(const struct channel *channel UNNEEDED)
 { fprintf(stderr, "channel_last_funding_feerate called!\n"); abort(); }

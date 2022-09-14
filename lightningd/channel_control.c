@@ -745,8 +745,7 @@ void peer_start_eltoo_channeld(struct channel *channel,
                        &channel->eltoo_keyset.other_next_nonce,
                        &channel->eltoo_keyset.self_next_nonce,
 				       &channel->channel_info.remote_fundingkey,
-				       &channel->channel_info.remote_fundingkey,
-/*				       &channel->channel_info.theirbase.payment,*/
+				       &channel->channel_info.theirbase.payment, /* their_settle_pubkey */
 				       channel->opener,
 				       channel->feerate_base,
 				       channel->feerate_ppm,
