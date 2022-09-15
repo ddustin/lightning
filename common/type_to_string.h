@@ -32,6 +32,7 @@ union printable_types {
 	const struct bip340sig *bip340sig;
     const struct nonce *nonce;
     const struct partial_sig *partial_sig;
+    const struct musig_session *musig_session;
 	const struct channel *channel;
 	const struct amount_msat *amount_msat;
 	const struct amount_sat *amount_sat;

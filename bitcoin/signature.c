@@ -723,13 +723,13 @@ REGISTER_TYPE_TO_HEXSTR(partial_sig);
 void towire_musig_session(u8 **pptr, const struct musig_session *session)
 {
     /* No proper serialization/parsing supplied, we're just copying bytes */
-    towire_u8_array(pptr, session->session.data, 133);
+    towire_u8_array(pptr, session->session.data, sizeof(session->session.data));
 }
 
 void fromwire_musig_session(const u8 **cursor, size_t *max,
             struct musig_session *session){
     /* No proper serialization/parsing supplied, we're just copying bytes */
-    if (!fromwire(cursor, max, session->session.data, 133))
+    if (!fromwire(cursor, max, session->session.data, sizeof(session->session.data)))
         return;
 }
 
@@ -739,6 +739,13 @@ char *fmt_bip340sig(const tal_t *ctx, const struct bip340sig *bip340sig)
 }
 
 REGISTER_TYPE_TO_HEXSTR(bip340sig);
+
+char *fmt_musig_session(const tal_t *ctx, const struct musig_session *musig_session)
+{
+    return tal_hexstr(ctx, musig_session->session.data, sizeof(musig_session->session.data));
+}
+
+REGISTER_TYPE_TO_HEXSTR(musig_session);
 
 /* BIP-340:
  *
