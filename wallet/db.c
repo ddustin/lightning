@@ -142,10 +142,10 @@ static struct migration dbmigrations[] = {
 	 "  closing_fee_received INTEGER,"
 	 "  closing_sig_received BLOB,"
      /* START Eltoo stuff*/
-	 "  settle_tx BLOB,"
-     "  their_psig BLOB,"
-     "  our_psig BLOB,"
-     "  musig_session BLOB,"
+	 "  last_settle_tx BLOB,"
+     "  last_their_psig BLOB,"
+     "  last_our_psig BLOB,"
+     "  last_session BLOB,"
      "  their_next_nonce BLOB,"
      "  our_next_nonce BLOB,"
      /* END Eltoo stuff */

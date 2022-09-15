@@ -455,8 +455,8 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
     } else {
         /* If we're not using ecdsa, we're doing eltoo... */
         assert(settle_tx);
-    	channel->settle_tx = tal_steal(channel, settle_tx);
-        channel->settle_tx->chainparams = chainparams;
+    	channel->last_settle_tx = tal_steal(channel, settle_tx);
+        channel->last_settle_tx->chainparams = chainparams;
         channel->eltoo_keyset.other_psig = *their_psig;
         channel->eltoo_keyset.self_psig = *our_psig;
         channel->eltoo_keyset.session = *session;
@@ -688,6 +688,27 @@ void channel_set_last_tx(struct channel *channel,
 	tal_free(channel->last_tx);
 	channel->last_tx = tal_steal(channel, tx);
 	channel->last_tx_type = txtypes;
+}
+
+void channel_set_last_eltoo_txs(struct channel *channel,
+             struct bitcoin_tx *update_tx,
+             struct bitcoin_tx *settle_tx,
+             struct partial_sig *their_psig,
+             struct partial_sig *our_psig,
+             struct musig_session *session,
+			 enum wallet_tx_type txtypes)
+{
+	assert(update_tx->chainparams);
+	assert(settle_tx->chainparams);
+	tal_free(channel->last_tx);
+	channel->last_tx = tal_steal(channel, update_tx);
+	channel->last_tx_type = txtypes;
+	tal_free(channel->last_settle_tx);
+    channel->last_settle_tx = tal_steal(channel, settle_tx);
+
+    channel->eltoo_keyset.other_psig = *their_psig;
+    channel->eltoo_keyset.self_psig = *their_psig;
+    channel->eltoo_keyset.session = *session;
 }
 
 void channel_set_state(struct channel *channel,

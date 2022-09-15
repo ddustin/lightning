@@ -595,12 +595,14 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 		handle_local_private_channel(sd->channel, msg);
 		break;
     case WIRE_CHANNELD_GOT_UPDATESIG:
+        /* FIXME not implemented */
 		peer_got_updatesig(sd->channel, msg);
         break;
     case WIRE_CHANNELD_SENDING_UPDATESIG:
 		peer_sending_updatesig(sd->channel, msg);
         break;
     case WIRE_CHANNELD_GOT_ACK:
+        /* FIXME not implemented */
 		peer_got_ack(sd->channel, msg);
         break;
     case WIRE_CHANNELD_INIT_ELTOO:

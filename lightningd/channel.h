@@ -151,7 +151,9 @@ struct channel {
 	const struct bitcoin_signature *last_htlc_sigs;
 
     /* Eltoo-only fields */
-    struct bitcoin_tx *settle_tx;
+    /* last_tx aka last_update_tx */
+    struct bitcoin_tx *last_settle_tx;
+    /* Stores "last" psigs, session */
     struct eltoo_keyset eltoo_keyset;
 
 	/* Keys for channel */
@@ -419,6 +421,14 @@ struct channel *find_channel_by_id(const struct peer *peer,
 /* Find this channel within peer */
 struct channel *find_channel_by_scid(const struct peer *peer,
 				     const struct short_channel_id *scid);
+
+void channel_set_last_eltoo_txs(struct channel *channel,
+			 struct bitcoin_tx *update_tx,
+			 struct bitcoin_tx *settle_tx,
+             struct partial_sig *their_psig,
+             struct partial_sig *our_psig,
+             struct musig_session *session,
+			 enum wallet_tx_type type);
 
 void channel_set_last_tx(struct channel *channel,
 			 struct bitcoin_tx *tx,
