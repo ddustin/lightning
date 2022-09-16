@@ -1293,7 +1293,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 		return DELETE_WATCH;
 	}
 
-	// TODO: Handle the case where we get here with an inflight splice
+	// DTODO: Handle the case where we get here with an inflight splice
 	// 1) Make the inflight *not* replace the existing tx until 6 confs
 	// 2) Current code just sets the last_sig to 0x0. Need to set that to the right thing
 	// 3) Make it go!
@@ -1357,7 +1357,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 		else if (false && channel->state != CHANNELD_AWAITING_SPLICE
 			&& !short_channel_id_eq(channel->scid, &scid)) {
 
-			/* TODO: This is firing after 6 depth splice */
+			/* DTODO: This is firing after 6 depth splice */
 
 			/* During reorgs:
 			 * This normally restarts channeld, initialized with updated scid

@@ -14,7 +14,7 @@ DONE * Make commit_sigs work after splice confirms
 * validate point of no return when lightningd
 * At the last step before signing the splice, validate all the commit sigs etc thoroughly before.
 * 
-* Change all TODOs in my code to DTODOs
+DONE * Change all TODOs in my code to DTODOs
 * Add helpful log messages in places to be able to see what's going on
 * Figure out why we can't pay invoices after splice_init
 * Change splice RPC to use channel_id instead of peer_id

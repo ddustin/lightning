@@ -103,7 +103,7 @@ bool hsmd_check_client_capabilities(struct hsmd_client *client,
 		return (client->capabilities & HSM_CAP_SIGN_CLOSING_TX) != 0;
 
 	case WIRE_HSMD_SIGN_SPLICE_TX:
-		return true; //TODO: check capabilities
+		return true; //DTODO: check capabilities
 
 	case WIRE_HSMD_SIGN_OPTION_WILL_FUND_OFFER:
 		return (client->capabilities & HSM_CAP_SIGN_WILL_FUND_OFFER) != 0;
@@ -1068,7 +1068,7 @@ static u8 *handle_sign_mutual_close_tx(struct hsmd_client *c, const u8 *msg_in)
 }
 
 /* This is used by channeld to sign the final splice tx. */
-//TODO: Merge this into the close_tx
+//DTODO: Merge this into the close_tx
 static u8 *handle_sign_splice_tx(struct hsmd_client *c, const u8 *msg_in)
 {
 	struct secret channel_seed;

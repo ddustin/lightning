@@ -2501,7 +2501,7 @@ static u8 *opener_commits(struct state *state,
 	}
 
 
-	// TODO: Copy the below procedure for splicing
+	// DTODO: Copy the below procedure for splicing
 	// We probably need to do this in response to commitment_signed message
 	// and / or in the revoke_and_ack code
 
