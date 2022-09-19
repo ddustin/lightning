@@ -41,16 +41,15 @@ static bool state_update_ok(struct channel *channel,
 	 * (we initialize in SENT_ADD_HTLC / RCVD_ADD_COMMIT, so those
 	 * work). */
 	if ((!is_eltoo && expected == RCVD_REMOVE_HTLC)
-        || (is_eltoo && expected == RCVD_ADD_ACK_COMMIT))
+        || (is_eltoo && expected == RCVD_ADD_ACK_COMMIT)) {
 		expected = RCVD_REMOVE_COMMIT;
+    }
 
     /* Jump over two unused states */
-    if (is_eltoo && expected == SENT_ADD_ACK_COMMIT)
+    if (is_eltoo && expected == SENT_ADD_ACK_COMMIT) {
         expected = SENT_REMOVE_HTLC;
+    }
 
-/*
-HTLC in 0 invalid update SENT_ADD_REVOCATION->SEN
-T_REMOVE_HTLC*/
 	if (newstate != expected) {
 		channel_internal_error(channel,
 				       "HTLC %s %"PRIu64" invalid update %s->%s",
@@ -1942,6 +1941,9 @@ void peer_got_ack(struct channel *channel, const u8 *msg)
 	struct changed_htlc *changed;
     struct partial_sig their_psig, our_psig;
     struct musig_session session;
+    int i;
+	struct lightningd *ld = channel->peer->ld;
+
     if (!fromwire_channeld_got_ack(msg, msg, &update_num, &changed, &their_psig, &our_psig, &session)) {
 		channel_internal_error(channel, "bad channel_sending_updatesig_ack %s",
 				       tal_hex(channel, msg));
@@ -1952,7 +1954,19 @@ void peer_got_ack(struct channel *channel, const u8 *msg)
 		  "got ack %"PRIu64": %zu changed",
 		  update_num, tal_count(changed));
 
-    /* FIXME stash signing information, update state?  */
+    /* Update HTLC info to advance state */
+	for (i = 0; i < tal_count(changed); i++) {
+		if (!changed_htlc(channel, changed + i)) {
+			channel_internal_error(channel,
+				   "channel_got_ack: update failed");
+			return;
+		}
+	}
+
+    /* FIXME stash signing information, more state?  */
+
+    /* write to db, then respond */
+	wallet_channel_save(ld->wallet, channel);
 
 	/* Tell it we've got it, and to go ahead. */
 	subd_send_msg(channel->owner,
@@ -1983,7 +1997,7 @@ void peer_sending_updatesig(struct channel *channel, const u8 *msg)
 	for (i = 0; i < tal_count(changed_htlcs); i++) {
 		if (!changed_htlc(channel, changed_htlcs + i)) {
 			channel_internal_error(channel,
-				   "channel_sending_commitsig: update failed");
+				   "channel_sending_updatesig: update failed");
 			return;
 		}
 
