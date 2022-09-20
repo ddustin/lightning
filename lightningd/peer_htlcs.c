@@ -40,14 +40,13 @@ static bool state_update_ok(struct channel *channel,
 	/* We never get told about RCVD_REMOVE_HTLC, so skip over that
 	 * (we initialize in SENT_ADD_HTLC / RCVD_ADD_COMMIT, so those
 	 * work). */
-	if ((!is_eltoo && expected == RCVD_REMOVE_HTLC)
-        || (is_eltoo && expected == RCVD_ADD_ACK_COMMIT)) {
-		expected = RCVD_REMOVE_COMMIT;
+    if (expected == RCVD_REMOVE_HTLC) {
+        expected = RCVD_REMOVE_COMMIT;
     }
 
-    /* Jump over two unused states */
-    if (is_eltoo && expected == SENT_ADD_ACK_COMMIT) {
-        expected = SENT_REMOVE_HTLC;
+    /* Jump over two eltoo-unused states to expect "terminal" state */
+    if (is_eltoo && (expected % 5 == 2)) {
+        expected += 2;
     }
 
 	if (newstate != expected) {
@@ -1186,7 +1185,8 @@ static bool peer_accepted_htlc(const tal_t *ctx,
 	struct lightningd *ld = channel->peer->ld;
 	struct htlc_accepted_hook_payload *hook_payload;
     /* FIXME Need better switch/field to check if eltoo... */
-    enum htlc_state new_state = channel->last_settle_tx ? SENT_ADD_ACK : RCVD_ADD_ACK_REVOCATION;
+    /* FIXME 2: Maybe we *do* want to jump to same state, then adjust "expected" as required */
+    enum htlc_state new_state = RCVD_ADD_ACK_REVOCATION;
 
 	*failmsg = NULL;
 	*badonion = 0;
@@ -1769,6 +1769,8 @@ static bool update_out_htlc(struct channel *channel,
 	struct lightningd *ld = channel->peer->ld;
 	struct htlc_out *hout;
 	struct wallet_payment *payment;
+    /* FIXME better switch for eltoo behavior... */
+    bool is_eltoo = channel->last_settle_tx;
 
 	hout = find_htlc_out(&ld->htlcs_out, channel, id);
 	if (!hout) {
@@ -1809,7 +1811,9 @@ static bool update_out_htlc(struct channel *channel,
 		tal_del_destructor(hout, destroy_hout_subd_died);
 		hout->timeout = tal_free(hout->timeout);
 		tal_steal(ld, hout);
-	} else if (newstate == RCVD_REMOVE_ACK_REVOCATION) {
+	} else if ((newstate == RCVD_REMOVE_ACK_REVOCATION) ||
+    (is_eltoo && newstate == RCVD_REMOVE_UPDATE)) {
+        /* FIXME Need this code path to actually be hit  */
 		remove_htlc_out(channel, hout);
 	}
 	return true;
@@ -2328,9 +2332,9 @@ void peer_got_updatesig(struct channel *channel, const u8 *msg)
 		}
 	}
 
-	/* Since we're about to send revoke, bump state again. */
-    /* FIXME do we need something like this?
-	if (!peer_sending_revocation(channel, added, fulfilled, failed, changed))
+	/* Since we're about to send ACK, bump state again. */
+    /* FIXME not sure we need this duplicated code, we're accepting below
+	if (!peer_sending_ack(channel, added, fulfilled, failed, changed))
 		return;
     */
 
