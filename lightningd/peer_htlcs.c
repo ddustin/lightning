@@ -2224,6 +2224,7 @@ static bool peer_sending_ack(struct channel *channel,
 				     SENT_REMOVE_ACK))
 			return false;
 	}
+    /* FIXE no idea if this stuff is required
 	for (i = 0; i < tal_count(failed); i++) {
 		if (!update_out_htlc(channel, failed[i]->id, SENT_REMOVE_REVOCATION))
 			return false;
@@ -2241,6 +2242,7 @@ static bool peer_sending_ack(struct channel *channel,
 	}
 
 	channel->last_was_revoke = true;
+*/
 	return true;
 }
 
