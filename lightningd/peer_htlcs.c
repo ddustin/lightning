@@ -43,9 +43,13 @@ static bool state_update_ok(struct channel *channel,
     if (expected == RCVD_REMOVE_HTLC) {
         expected = RCVD_REMOVE_COMMIT;
     }
+    // else if (is_eltoo && expected == RCVD_REMOVE_HTLC) {
+    //    /* Jump one further for eltoo */
+    //    expected = SENT_REMOVE_ACK;
+    //}
 
     /* Jump over two eltoo-unused states to expect "terminal" state */
-    if (is_eltoo && (expected % 5 == 2)) {
+    else if (is_eltoo && (expected % 5 == 2)) {
         expected += 2;
     }
 
@@ -1345,6 +1349,28 @@ static void fulfill_our_htlc_out(struct channel *channel, struct htlc_out *hout,
 	}
 }
 
+/* FIXME only diff isi final state...
+static bool peer_fulfilled_our_eltoo_htlc(struct channel *channel,
+				    const struct fulfilled_htlc *fulfilled)
+{
+	struct lightningd *ld = channel->peer->ld;
+	struct htlc_out *hout;
+
+	hout = find_htlc_out(&ld->htlcs_out, channel, fulfilled->id);
+	if (!hout) {
+		channel_internal_error(channel,
+				    "fulfilled_our_htlc unknown htlc %"PRIu64,
+				    fulfilled->id);
+		return false;
+	}
+
+	if (!htlc_out_update_state(channel, hout, SENT_REMOVE_ACK))
+		return false;
+
+	fulfill_our_htlc_out(channel, hout, &fulfilled->payment_preimage);
+	return true;
+}*/
+
 static bool peer_fulfilled_our_htlc(struct channel *channel,
 				    const struct fulfilled_htlc *fulfilled)
 {
@@ -1769,8 +1795,6 @@ static bool update_out_htlc(struct channel *channel,
 	struct lightningd *ld = channel->peer->ld;
 	struct htlc_out *hout;
 	struct wallet_payment *payment;
-    /* FIXME better switch for eltoo behavior... */
-    bool is_eltoo = channel->last_settle_tx;
 
 	hout = find_htlc_out(&ld->htlcs_out, channel, id);
 	if (!hout) {
@@ -1811,9 +1835,7 @@ static bool update_out_htlc(struct channel *channel,
 		tal_del_destructor(hout, destroy_hout_subd_died);
 		hout->timeout = tal_free(hout->timeout);
 		tal_steal(ld, hout);
-	} else if ((newstate == RCVD_REMOVE_ACK_REVOCATION) ||
-    (is_eltoo && newstate == RCVD_REMOVE_UPDATE)) {
-        /* FIXME Need this code path to actually be hit  */
+	} else if (newstate == RCVD_REMOVE_ACK_REVOCATION) {
 		remove_htlc_out(channel, hout);
 	}
 	return true;
@@ -2189,6 +2211,40 @@ static bool channel_added_their_htlc(struct channel *channel,
 }
 
 /* The peer doesn't tell us this separately, but logically it's a separate
+ * step to receiving updatesig */
+static bool peer_sending_ack(struct channel *channel,
+				    struct fulfilled_htlc *fulfilled,
+				    struct failed_htlc **failed,
+				    struct changed_htlc *changed)
+{
+	size_t i;
+
+	for (i = 0; i < tal_count(fulfilled); i++) {
+		if (!update_out_htlc(channel, fulfilled[i].id,
+				     SENT_REMOVE_ACK))
+			return false;
+	}
+	for (i = 0; i < tal_count(failed); i++) {
+		if (!update_out_htlc(channel, failed[i]->id, SENT_REMOVE_REVOCATION))
+			return false;
+	}
+	for (i = 0; i < tal_count(changed); i++) {
+		if (changed[i].newstate == RCVD_ADD_ACK_COMMIT) {
+			if (!update_out_htlc(channel, changed[i].id,
+					     SENT_ADD_ACK_REVOCATION))
+				return false;
+		} else {
+			if (!update_in_htlc(channel, changed[i].id,
+					    SENT_REMOVE_ACK_REVOCATION))
+				return false;
+		}
+	}
+
+	channel->last_was_revoke = true;
+	return true;
+}
+
+/* The peer doesn't tell us this separately, but logically it's a separate
  * step to receiving commitsig */
 static bool peer_sending_revocation(struct channel *channel,
 				    struct added_htlc *added,
@@ -2332,11 +2388,9 @@ void peer_got_updatesig(struct channel *channel, const u8 *msg)
 		}
 	}
 
-	/* Since we're about to send ACK, bump state again. */
-    /* FIXME not sure we need this duplicated code, we're accepting below
-	if (!peer_sending_ack(channel, added, fulfilled, failed, changed))
+	/* Since we're about to send ACK(and fulfilled a second ago), bump state again and delete complete htlcs. */
+	if (!peer_sending_ack(channel, fulfilled, failed, changed))
 		return;
-    */
 
     /* Stores fully signed transactions, and partial sigs for reestablishment! */
 	if (!peer_save_updatesig_received(channel, update_num, update_tx, settle_tx, &their_psig, &our_psig, &session))
