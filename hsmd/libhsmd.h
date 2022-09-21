@@ -89,4 +89,7 @@ void hsmd_status_failed(enum status_failreason code,
 bool hsmd_check_client_capabilities(struct hsmd_client *client,
 				    enum hsmd_wire t);
 
+/* Hash function that just converts channel id into an int */
+size_t channel_id_key(const struct channel_id *id);
+
 #endif /* LIGHTNING_HSMD_LIBHSMD_H */
