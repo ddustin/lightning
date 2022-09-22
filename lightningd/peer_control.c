@@ -1651,7 +1651,7 @@ static enum watch_result funding_spent(struct channel *channel,
 
 	wallet_channeltxs_add(channel->peer->ld->wallet, channel,
 			      WIRE_ONCHAIND_INIT, &txid, 0, block->height);
-	return onchaind_funding_spent(channel, tx, block->height);
+    return onchaind_funding_spent(channel, tx, block->height);
 }
 
 void channel_watch_wrong_funding(struct lightningd *ld, struct channel *channel)
