@@ -1111,20 +1111,24 @@ htlc_accepted_hook_final(struct htlc_accepted_hook_payload *request STEALS)
 						NULL, request->failtlvtype,
 						request->failtlvpos)));
 	} else if (rs->nextcase == ONION_FORWARD) {
+        log_debug(channel->log,
+              "Forwarding HTLC");
 		forward_htlc(hin, hin->cltv_expiry,
 			     request->payload->amt_to_forward,
 			     request->payload->outgoing_cltv,
 			     request->payload->forward_channel,
 			     serialize_onionpacket(tmpctx, rs->next),
 			     request->next_blinding);
-	} else
+	} else {
+        log_debug(channel->log,
+              "Handling HTLC locally");
 		handle_localpay(hin,
 				request->payload->amt_to_forward,
 				request->payload->outgoing_cltv,
 				*request->payload->total_msat,
 				request->payload->payment_secret,
 				request->payload->payment_metadata);
-
+    }
 	tal_free(request);
 }
 
