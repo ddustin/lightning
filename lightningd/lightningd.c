@@ -310,8 +310,10 @@ static const char *subdaemons[] = {
 	"lightning_hsmd",
 	"lightning_onchaind",
 	"lightning_openingd",
+    // FIXME "lightning_eltoo_closingd",
     "lightning_eltoo_channeld",
-    "lightning_eltoo_openingd"
+    "lightning_eltoo_openingd",
+    "lightning_eltoo_onchaind"
 };
 
 /* Return true if called with a recognized subdaemon e.g. "hsmd" */

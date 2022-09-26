@@ -142,6 +142,7 @@ msgdata,onchaind_notify_coin_mvt,mvt,chain_coin_mvt,
 
 # Eltoo stuff following (Hello World for now)
 msgtype,eltoo_onchaind_init,5061
+msgdata,eltoo_onchaind_init,chainparams,chainparams,
 msgdata,eltoo_onchaind_init,tx_parts,tx_parts,
 
 # This says we're ready; give us htlcs and preimages.
