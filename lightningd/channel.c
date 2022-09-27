@@ -707,7 +707,7 @@ void channel_set_last_eltoo_txs(struct channel *channel,
     channel->last_settle_tx = tal_steal(channel, settle_tx);
 
     channel->eltoo_keyset.other_psig = *their_psig;
-    channel->eltoo_keyset.self_psig = *their_psig;
+    channel->eltoo_keyset.self_psig = *our_psig;
     channel->eltoo_keyset.session = *session;
 }
 

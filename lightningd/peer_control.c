@@ -29,6 +29,7 @@
 #include <common/status.h>
 #include <common/timeout.h>
 #include <common/type_to_string.h>
+#include <common/update_tx.h>
 #include <common/utils.h>
 #include <common/version.h>
 #include <common/wire_error.h>
@@ -942,13 +943,84 @@ static void json_add_channel(struct lightningd *ld,
 
 	json_add_htlcs(ld, response, channel);
 
-    /* FIXME add latest update_tx and settle_tx, ideally re-bound */
-    if (channel->last_tx) {
-        json_add_tx(response, "last_update_tx", channel->last_tx);
-    }
-
     if (channel->last_settle_tx) {
-        json_add_tx(response, "last_settle_tx", channel->last_settle_tx);
+        if (channel->last_tx->wtx->locktime == 500000000) {
+            json_add_tx(response, "last_update_tx", channel->last_tx);
+            /* FIXME Settle tx needs to be re-bound still! Let's not do binding before realtime... */
+            json_add_tx(response, "last_settle_tx", channel->last_settle_tx);
+        } else {
+            // Check if this is initial tx, if not, rebind and add sig
+            // Note that if txid changes(adding fee input), you need to rebind again!
+            u8 *p = tal_arr(tmpctx, u8, 0);
+            const u8 *p_start;
+            struct bitcoin_tx *bound_update_tx, *bound_settle_tx;
+            size_t p_len;
+            const secp256k1_musig_partial_sig * psig_ptrs[2];
+            const struct pubkey * pubkey_ptrs[2];
+            struct bip340sig sig;
+            int ok;
+            secp256k1_musig_keyagg_cache dummy_cache;
+            struct pubkey inner_pubkey;
+            struct eltoo_keyset keyset_copy;
+            struct bitcoin_txid txid;
+
+            towire_bitcoin_tx(&p, channel->last_tx);
+            p_start = p;
+            p_len = tal_count(p);
+            bound_update_tx = fromwire_bitcoin_tx(tmpctx, &p_start, &p_len);
+            assert(bound_update_tx);
+
+            /* re-set and serialize settle tx next */
+            p = tal_arr(tmpctx, u8, 0);
+            towire_bitcoin_tx(&p, channel->last_settle_tx);
+            p_start = p;
+
+            p_len = tal_count(p);
+            bound_settle_tx = fromwire_bitcoin_tx(tmpctx, &p_start, &p_len);
+            assert(bound_settle_tx);
+
+            psig_ptrs[0] = &channel->eltoo_keyset.self_psig.p_sig;
+            psig_ptrs[1] = &channel->eltoo_keyset.other_psig.p_sig;
+
+            /* FIXME channel->eltoo_keyset should be set at same time as these fields are */
+            keyset_copy.self_funding_key = channel->local_funding_pubkey;
+            keyset_copy.other_funding_key = channel->channel_info.remote_fundingkey;
+            //channel->eltoo_keyset.self_funding_key = channel->channel_info.remote_fundingkey;
+            //channel->eltoo_keyset.other_funding_key = channel->channel_info.remote_fundingkey;
+            /* FIXME: inner_pubkey should be in PSBT, don't need to make key here */
+            pubkey_ptrs[0] = &keyset_copy.self_funding_key;
+            pubkey_ptrs[1] = &keyset_copy.other_funding_key;
+
+            ok = bipmusig_partial_sigs_combine(psig_ptrs,
+                2 /* num_signers */,
+                &channel->eltoo_keyset.session.session,
+                &sig);
+            assert(ok); // Trusted data!!!
+
+            bipmusig_inner_pubkey(&inner_pubkey,
+                &dummy_cache,
+                pubkey_ptrs,
+                2 /* n_pubkeys */);
+
+            /* FIXME pass in pubkeys, not keyset ... or get pubkeys from PSBT directly */
+            bind_update_tx_to_funding_outpoint(bound_update_tx,
+                bound_settle_tx,
+                &channel->funding,
+                &keyset_copy,
+                &inner_pubkey,
+                &sig);
+
+            /* Really direct txid surgery... libwally routine needed */
+            bitcoin_txid(bound_update_tx, &txid);
+            memcpy(bound_settle_tx->wtx->inputs[0].txhash, &txid, 32);
+
+            /* FIXME publish both bound and unbound versions */
+            json_add_tx(response, "last_update_tx", bound_update_tx);
+
+            json_add_tx(response, "last_settle_tx", bound_settle_tx);
+
+            /* FIXME Deallocate copied txns? */
+        }
     }
 
 	json_object_end(response);
