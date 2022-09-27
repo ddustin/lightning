@@ -1019,6 +1019,11 @@ static void json_add_channel(struct lightningd *ld,
 
             json_add_tx(response, "last_settle_tx", bound_settle_tx);
 
+            json_add_tx(response, "unbound_update_tx", channel->last_tx);
+
+            json_add_tx(response, "unbound_settle_tx", channel->last_settle_tx);
+
+
             /* FIXME Deallocate copied txns? */
         }
     }
