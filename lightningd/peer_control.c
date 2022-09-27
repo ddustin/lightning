@@ -939,7 +939,18 @@ static void json_add_channel(struct lightningd *ld,
 				    "out_msatoshi_fulfilled",
 				    "out_fulfilled_msat");
 
+
 	json_add_htlcs(ld, response, channel);
+
+    /* FIXME add latest update_tx and settle_tx, ideally re-bound */
+    if (channel->last_tx) {
+        json_add_tx(response, "last_update_tx", channel->last_tx);
+    }
+
+    if (channel->last_settle_tx) {
+        json_add_tx(response, "last_settle_tx", channel->last_settle_tx);
+    }
+
 	json_object_end(response);
 }
 
