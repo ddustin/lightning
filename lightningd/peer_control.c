@@ -945,8 +945,11 @@ static void json_add_channel(struct lightningd *ld,
 
     if (channel->last_settle_tx) {
         if (channel->last_tx->wtx->locktime == 500000000) {
+            struct bitcoin_txid txid;
             json_add_tx(response, "last_update_tx", channel->last_tx);
-            /* FIXME Settle tx needs to be re-bound still! Let's not do binding before realtime... */
+            /* Really direct txid surgery... libwally routine needed */
+            bitcoin_txid(channel->last_tx, &txid);
+            memcpy(channel->last_settle_tx->wtx->inputs[0].txhash, &txid, 32);
             json_add_tx(response, "last_settle_tx", channel->last_settle_tx);
         } else {
             // Check if this is initial tx, if not, rebind and add sig
