@@ -673,10 +673,12 @@ static void onchain_error(struct channel *channel,
  * onchaind (like any other owner), and restart */
 enum watch_result onchaind_funding_spent(struct channel *channel,
 					 const struct bitcoin_tx *tx,
+                     size_t input_num,
 					 u32 blockheight)
 {
     if (channel->our_config.is_eltoo) {
-        return eltoo_onchaind_funding_spent(channel, tx, blockheight);
+        /* input_num is required due to ANYPREVOUT signature */
+        return eltoo_onchaind_funding_spent(channel, tx, blockheight, input_num);
     }
 
 	u8 *msg;
@@ -838,6 +840,7 @@ enum watch_result onchaind_funding_spent(struct channel *channel,
  * onchaind (like any other owner), and restart */
 enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
 					 const struct bitcoin_tx *tx,
+                     size_t input_num,
 					 u32 blockheight)
 {
 	u8 *msg;
@@ -885,9 +888,13 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
 		return KEEP_WATCHING;
 	}
 
-    /* Hello World :) */
-	msg = towire_eltoo_onchaind_init(channel, chainparams,
-                    tx_parts_from_wally_tx(tmpctx, tx->wtx, -1, -1), channel->last_tx, channel->last_settle_tx);
+	msg = towire_eltoo_onchaind_init(channel,
+        chainparams,
+        channel->funding_sats,
+        tx_parts_from_wally_tx(tmpctx, tx->wtx, -1, -1),
+        input_num,
+        channel->last_tx,
+        channel->last_settle_tx);
 	subd_send_msg(channel->owner, take(msg));
 
 	watch_tx_and_outputs(channel, tx);
@@ -915,7 +922,7 @@ void onchaind_replay_channels(struct lightningd *ld)
 
 		for (size_t j = 0; j < tal_count(txs); j++) {
 			if (txs[j].type == WIRE_ONCHAIND_INIT) {
-				onchaind_funding_spent(chan, txs[j].tx,
+				onchaind_funding_spent(chan, txs[j].tx, txs[j].input_num,
 						       txs[j].blockheight);
 
 			} else if (txs[j].type == WIRE_ONCHAIND_SPENT) {

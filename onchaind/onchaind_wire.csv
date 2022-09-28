@@ -140,10 +140,12 @@ msgdata,onchaind_annotate_txin,type,enum wallet_tx_type,
 msgtype,onchaind_notify_coin_mvt,5037
 msgdata,onchaind_notify_coin_mvt,mvt,chain_coin_mvt,
 
-# Eltoo stuff following (Hello World for now)
+# Eltoo stuff following
 msgtype,eltoo_onchaind_init,5061
 msgdata,eltoo_onchaind_init,chainparams,chainparams,
+msgdata,eltoo_onchaind_init,funding_amount_satoshi,amount_sat,
 msgdata,eltoo_onchaind_init,tx_parts,tx_parts,
+msgdata,eltoo_onchaind_init,input_num,u32,
 msgdata,eltoo_onchaind_init,update_tx,bitcoin_tx,
 msgdata,eltoo_onchaind_init,settle_tx,bitcoin_tx,
 

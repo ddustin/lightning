@@ -14,11 +14,6 @@ bool deprecated_apis = false;
 struct channel *any_channel_by_scid(struct lightningd *ld UNNEEDED,
 				    const struct short_channel_id *scid UNNEEDED)
 { fprintf(stderr, "any_channel_by_scid called!\n"); abort(); }
-/* Generated stub for bind_settle_tx */
-void bind_settle_tx(const struct bitcoin_tx *update_tx UNNEEDED,
-                    int output_index UNNEEDED,
-                    struct bitcoin_tx *settle_tx UNNEEDED)
-{ fprintf(stderr, "bind_settle_tx called!\n"); abort(); }
 /* Generated stub for bind_txs_to_funding_outpoint */
 struct bitcoin_tx **bind_txs_to_funding_outpoint(const struct bitcoin_tx *update_tx UNNEEDED,
                              const struct bitcoin_outpoint *funding UNNEEDED,
@@ -520,6 +515,7 @@ void notify_invoice_payment(struct lightningd *ld UNNEEDED, struct amount_msat a
 /* Generated stub for onchaind_funding_spent */
 enum watch_result onchaind_funding_spent(struct channel *channel UNNEEDED,
 					 const struct bitcoin_tx *tx UNNEEDED,
+                     size_t input_num UNNEEDED,
 					 u32 blockheight UNNEEDED)
 { fprintf(stderr, "onchaind_funding_spent called!\n"); abort(); }
 /* Generated stub for param */

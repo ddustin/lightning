@@ -51,11 +51,6 @@ bool deprecated_apis = true;
 /* Generated stub for bigsize_put */
 size_t bigsize_put(u8 buf[BIGSIZE_MAX_LEN] UNNEEDED, bigsize_t v UNNEEDED)
 { fprintf(stderr, "bigsize_put called!\n"); abort(); }
-/* Generated stub for bind_settle_tx */
-void bind_settle_tx(const struct bitcoin_tx *update_tx UNNEEDED,
-                    int output_index UNNEEDED,
-                    struct bitcoin_tx *settle_tx UNNEEDED)
-{ fprintf(stderr, "bind_settle_tx called!\n"); abort(); }
 /* Generated stub for bind_txs_to_funding_outpoint */
 struct bitcoin_tx **bind_txs_to_funding_outpoint(const struct bitcoin_tx *update_tx UNNEEDED,
                              const struct bitcoin_outpoint *funding UNNEEDED,
@@ -558,6 +553,7 @@ void notify_forward_event(struct lightningd *ld UNNEEDED,
 /* Generated stub for onchaind_funding_spent */
 enum watch_result onchaind_funding_spent(struct channel *channel UNNEEDED,
 					 const struct bitcoin_tx *tx UNNEEDED,
+                     size_t input_num UNNEEDED,
 					 u32 blockheight UNNEEDED)
 { fprintf(stderr, "onchaind_funding_spent called!\n"); abort(); }
 /* Generated stub for onion_decode */
