@@ -232,6 +232,11 @@ static bool invalid_last_tx(const struct bitcoin_tx *tx)
 #endif
 }
 
+static void eltoo_finalize_and_send_last(struct lightningd *ld)
+{
+    assert(ld);
+}
+
 static void sign_and_send_last(struct lightningd *ld,
 			       struct channel *channel,
 			       struct bitcoin_tx *last_tx,
@@ -253,9 +258,32 @@ static void sign_and_send_last(struct lightningd *ld,
 	remove_sig(last_tx);
 }
 
+void eltoo_drop_to_chain(struct lightningd *ld, struct channel *channel,
+		   bool cooperative)
+{
+	// Channel inflights aren't eltoo-aware... struct channel_inflight *inflight;
+
+    /* FIXME We need to drop *every* commitment transaction to chain
+    if (!cooperative && !list_empty(&channel->inflights)) {
+        list_for_each(&channel->inflights, inflight, list)
+            sign_and_send_last(ld, channel,
+                       inflight->last_tx,
+                       &inflight->last_sig);
+    } else
+    */
+    /* FIXME figure out interface */
+    eltoo_finalize_and_send_last(ld);
+
+	resolve_close_command(ld, channel, cooperative);
+}
+
 void drop_to_chain(struct lightningd *ld, struct channel *channel,
 		   bool cooperative)
 {
+    if (channel->our_config.is_eltoo) {
+        eltoo_drop_to_chain(ld, channel, cooperative);
+        return;
+    }
 	struct channel_inflight *inflight;
 	/* BOLT #2:
 	 *
@@ -945,11 +973,10 @@ static void json_add_channel(struct lightningd *ld,
 
     if (channel->last_settle_tx) {
         if (channel->last_tx->wtx->locktime == 500000000) {
-            struct bitcoin_txid txid;
+            bind_settle_tx(channel->last_tx,
+                0 /* output_index: we can't know for sure until update tx confirms... */,
+                channel->last_settle_tx);
             json_add_tx(response, "last_update_tx", channel->last_tx);
-            /* Really direct txid surgery... libwally routine needed */
-            bitcoin_txid(channel->last_tx, &txid);
-            memcpy(channel->last_settle_tx->wtx->inputs[0].txhash, &txid, 32);
             json_add_tx(response, "last_settle_tx", channel->last_settle_tx);
         } else {
             // Check if this is initial tx, if not, rebind and add sig
@@ -965,8 +992,6 @@ static void json_add_channel(struct lightningd *ld,
             secp256k1_musig_keyagg_cache dummy_cache;
             struct pubkey inner_pubkey;
             struct eltoo_keyset keyset_copy;
-            struct bitcoin_txid txid;
-
             towire_bitcoin_tx(&p, channel->last_tx);
             p_start = p;
             p_len = tal_count(p);
@@ -1006,16 +1031,17 @@ static void json_add_channel(struct lightningd *ld,
                 2 /* n_pubkeys */);
 
             /* FIXME pass in pubkeys, not keyset ... or get pubkeys from PSBT directly */
-            bind_update_tx_to_funding_outpoint(bound_update_tx,
+            bind_tx_to_funding_outpoint(bound_update_tx,
                 bound_settle_tx,
                 &channel->funding,
                 &keyset_copy,
                 &inner_pubkey,
                 &sig);
 
-            /* Really direct txid surgery... libwally routine needed */
-            bitcoin_txid(bound_update_tx, &txid);
-            memcpy(bound_settle_tx->wtx->inputs[0].txhash, &txid, 32);
+            bind_settle_tx(bound_update_tx,
+                0 /* output_index: we can't know for sure until update tx confirms, this is
+                for ease of use */,
+                bound_settle_tx);
 
             json_add_tx(response, "last_update_tx", bound_update_tx);
 

@@ -86,6 +86,8 @@ u8 *p2wpkh_for_keyidx(const tal_t *ctx, struct lightningd *ld, u64 keyidx);
 /* We've loaded peers from database, set them going. */
 void setup_peers(struct lightningd *ld);
 
+void eltoo_drop_to_chain(struct lightningd *ld, struct channel *channel,
+           bool cooperative);
 void drop_to_chain(struct lightningd *ld, struct channel *channel, bool cooperative);
 
 void channel_watch_funding(struct lightningd *ld, struct channel *channel);

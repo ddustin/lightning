@@ -14,14 +14,19 @@ bool deprecated_apis = false;
 struct channel *any_channel_by_scid(struct lightningd *ld UNNEEDED,
 				    const struct short_channel_id *scid UNNEEDED)
 { fprintf(stderr, "any_channel_by_scid called!\n"); abort(); }
-/* Generated stub for bind_update_tx_to_funding_outpoint */
-void bind_update_tx_to_funding_outpoint(struct bitcoin_tx *update_tx UNNEEDED,
-                    const struct bitcoin_tx *settle_tx UNNEEDED,
+/* Generated stub for bind_settle_tx */
+void bind_settle_tx(const struct bitcoin_tx *update_tx UNNEEDED,
+                    int output_index UNNEEDED,
+                    struct bitcoin_tx *settle_tx UNNEEDED)
+{ fprintf(stderr, "bind_settle_tx called!\n"); abort(); }
+/* Generated stub for bind_tx_to_funding_outpoint */
+void bind_tx_to_funding_outpoint(struct bitcoin_tx *update_tx UNNEEDED,
+                    struct bitcoin_tx *settle_tx UNNEEDED,
                     const struct bitcoin_outpoint *funding_outpoint UNNEEDED,
                     const struct eltoo_keyset *eltoo_keyset UNNEEDED,
                     const struct pubkey *psbt_inner_pubkey UNNEEDED,
                     const struct bip340sig *sig UNNEEDED)
-{ fprintf(stderr, "bind_update_tx_to_funding_outpoint called!\n"); abort(); }
+{ fprintf(stderr, "bind_tx_to_funding_outpoint called!\n"); abort(); }
 /* Generated stub for bitcoind_getutxout_ */
 void bitcoind_getutxout_(struct bitcoind *bitcoind UNNEEDED,
 			 const struct bitcoin_outpoint *outpoint UNNEEDED,
