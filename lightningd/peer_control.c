@@ -232,8 +232,37 @@ static bool invalid_last_tx(const struct bitcoin_tx *tx)
 #endif
 }
 
-static void eltoo_finalize_and_send_last(struct lightningd *ld)
+static void eltoo_finalize_and_send_last(struct lightningd *ld, struct channel *channel)
 {
+    struct bitcoin_tx **bound_update_and_settle_txs;
+	struct bitcoin_txid txid;
+
+    /* Eltoo keyset should probably have all pubkeys... */
+    bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->last_tx,
+                     &channel->funding,
+                     channel->last_settle_tx,
+                     &channel->eltoo_keyset.self_psig,
+                     &channel->eltoo_keyset.other_psig,
+                     &channel->local_funding_pubkey,
+                     &channel->channel_info.remote_fundingkey,
+                     &channel->eltoo_keyset.session);
+
+    /* N.B. txid instability possible with eltoo, need to handle? */
+	bitcoin_txid(bound_update_and_settle_txs[0], &txid);
+
+	wallet_transaction_add(ld->wallet, bound_update_and_settle_txs[0]->wtx, 0, 0);
+	wallet_transaction_annotate(ld->wallet, &txid,
+				    TX_CHANNEL_UNILATERAL /* FIXME What should this be anyways? */,
+				    channel->dbid);
+
+	/* Keep broadcasting until we say stop (can fail due to dup,
+	 * if they beat us to the broadcast). */
+    /* FIXME We need to add fees via anchor */
+	broadcast_tx(ld->topology, channel, bound_update_and_settle_txs[0], NULL);
+
+    /* FIXME maybe the roundtrip isn't needed... just rely on this subroutine */
+	remove_sig(bound_update_and_settle_txs[0]);
+
     assert(ld);
 }
 
@@ -272,7 +301,7 @@ void eltoo_drop_to_chain(struct lightningd *ld, struct channel *channel,
     } else
     */
     /* FIXME figure out interface */
-    eltoo_finalize_and_send_last(ld);
+    eltoo_finalize_and_send_last(ld, channel);
 
 	resolve_close_command(ld, channel, cooperative);
 }
