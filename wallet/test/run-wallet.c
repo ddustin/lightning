@@ -56,14 +56,16 @@ void bind_settle_tx(const struct bitcoin_tx *update_tx UNNEEDED,
                     int output_index UNNEEDED,
                     struct bitcoin_tx *settle_tx UNNEEDED)
 { fprintf(stderr, "bind_settle_tx called!\n"); abort(); }
-/* Generated stub for bind_tx_to_funding_outpoint */
-void bind_tx_to_funding_outpoint(struct bitcoin_tx *update_tx UNNEEDED,
-                    struct bitcoin_tx *settle_tx UNNEEDED,
-                    const struct bitcoin_outpoint *funding_outpoint UNNEEDED,
-                    const struct eltoo_keyset *eltoo_keyset UNNEEDED,
-                    const struct pubkey *psbt_inner_pubkey UNNEEDED,
-                    const struct bip340sig *sig UNNEEDED)
-{ fprintf(stderr, "bind_tx_to_funding_outpoint called!\n"); abort(); }
+/* Generated stub for bind_txs_to_funding_outpoint */
+struct bitcoin_tx **bind_txs_to_funding_outpoint(const struct bitcoin_tx *update_tx UNNEEDED,
+                             const struct bitcoin_outpoint *funding UNNEEDED,
+                             const struct bitcoin_tx *settle_tx UNNEEDED,
+                             const struct partial_sig *psig1 UNNEEDED,
+                             const struct partial_sig *psig2 UNNEEDED,
+                             const struct pubkey *funding_pubkey1 UNNEEDED,
+                             const struct pubkey *funding_pubkey2 UNNEEDED,
+                             const struct musig_session *session UNNEEDED)
+{ fprintf(stderr, "bind_txs_to_funding_outpoint called!\n"); abort(); }
 /* Generated stub for bitcoind_getutxout_ */
 void bitcoind_getutxout_(struct bitcoind *bitcoind UNNEEDED,
 			 const struct bitcoin_outpoint *outpoint UNNEEDED,
