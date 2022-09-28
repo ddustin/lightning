@@ -1017,7 +1017,6 @@ static void json_add_channel(struct lightningd *ld,
             bitcoin_txid(bound_update_tx, &txid);
             memcpy(bound_settle_tx->wtx->inputs[0].txhash, &txid, 32);
 
-            /* FIXME publish both bound and unbound versions */
             json_add_tx(response, "last_update_tx", bound_update_tx);
 
             json_add_tx(response, "last_settle_tx", bound_settle_tx);
