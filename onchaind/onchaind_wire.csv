@@ -148,6 +148,8 @@ msgdata,eltoo_onchaind_init,tx_parts,tx_parts,
 msgdata,eltoo_onchaind_init,input_num,u32,
 msgdata,eltoo_onchaind_init,update_tx,bitcoin_tx,
 msgdata,eltoo_onchaind_init,settle_tx,bitcoin_tx,
+msgdata,eltoo_onchaind_init,tx_blockheight,u32,
+msgdata,eltoo_onchaind_init,our_msat,amount_msat,
 
 # This says we're ready; give us htlcs and preimages.
 msgtype,eltoo_onchaind_init_reply,5161

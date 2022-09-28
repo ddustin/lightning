@@ -894,7 +894,9 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
         tx_parts_from_wally_tx(tmpctx, tx->wtx, -1, -1),
         input_num,
         channel->last_tx,
-        channel->last_settle_tx);
+        channel->last_settle_tx,
+        blockheight,
+        channel->our_msat);
 	subd_send_msg(channel->owner, take(msg));
 
 	watch_tx_and_outputs(channel, tx);
