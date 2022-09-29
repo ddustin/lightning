@@ -145,13 +145,21 @@ msgtype,eltoo_onchaind_init,5061
 msgdata,eltoo_onchaind_init,chainparams,chainparams,
 msgdata,eltoo_onchaind_init,funding_amount_satoshi,amount_sat,
 msgdata,eltoo_onchaind_init,tx_parts,tx_parts,
+msgdata,eltoo_onchaind_init,locktime,u32,
 msgdata,eltoo_onchaind_init,input_num,u32,
 msgdata,eltoo_onchaind_init,update_tx,bitcoin_tx,
 msgdata,eltoo_onchaind_init,settle_tx,bitcoin_tx,
 msgdata,eltoo_onchaind_init,tx_blockheight,u32,
 msgdata,eltoo_onchaind_init,our_msat,amount_msat,
+msgdata,eltoo_onchaind_init,local_scriptpubkey_len,u16,
+msgdata,eltoo_onchaind_init,local_scriptpubkey,u8,local_scriptpubkey_len
+msgdata,eltoo_onchaind_init,remote_scriptpubkey_len,u16,
+msgdata,eltoo_onchaind_init,remote_scriptpubkey,u8,remote_scriptpubkey_len
 
 # This says we're ready; give us htlcs and preimages.
 msgtype,eltoo_onchaind_init_reply,5161
 
-
+# Same pattern of messages for simplicity, without unused things
+msgtype,eltoo_onchaind_htlcs,5062
+msgdata,eltoo_onchaind_htlcs,num_htlcs,u32,
+msgdata,eltoo_onchaind_htlcs,htlc,htlc_stub,num_htlcs

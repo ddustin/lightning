@@ -137,8 +137,10 @@ static void handle_onchain_init_reply(struct channel *channel, const u8 *msg)
 
 static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *msg)
 {
+	struct htlc_stub *stubs;
+	u64 commit_num = channel->last_tx->wtx->locktime; /* update_num */
 
-    /* FIXME any information required in reply? */
+    /* Signaling ready, send more data */
 	if (!fromwire_eltoo_onchaind_init_reply(msg)) {
 		channel_internal_error(channel, "Invalid eltoo_onchaind_init_reply %s",
 				       tal_hex(tmpctx, msg));
@@ -152,7 +154,12 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 			  REASON_UNKNOWN,
 			  "Onchain init reply");
 
-    /* Send eltoo_onchaind any other mesages required */
+	/* Tell it about any relevant HTLCs
+     * FIXME (only one set for eltoo... we shouldn't be storing everything)  */
+	stubs = wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel,
+				  commit_num);
+	msg = towire_eltoo_onchaind_htlcs(channel, stubs);
+	subd_send_msg(channel->owner, take(msg));
 
 	/* Tell it about any preimages we know. */
 	onchaind_tell_fulfill(channel);
@@ -600,6 +607,7 @@ static unsigned int onchain_msg(struct subd *sd, const u8 *msg, const int *fds U
 	case WIRE_ONCHAIND_KNOWN_PREIMAGE:
 	case WIRE_ONCHAIND_DEV_MEMLEAK:
 	case WIRE_ONCHAIND_DEV_MEMLEAK_REPLY:
+    case WIRE_ELTOO_ONCHAIND_HTLCS:
 		break;
     /* These are illegal */
     case WIRE_ELTOO_ONCHAIND_INIT:
@@ -640,6 +648,7 @@ static unsigned int eltoo_onchain_msg(struct subd *sd, const u8 *msg, const int 
 	case WIRE_ONCHAIND_DEV_MEMLEAK:
 	case WIRE_ONCHAIND_DEV_MEMLEAK_REPLY:
     case WIRE_ELTOO_ONCHAIND_INIT:
+    case WIRE_ELTOO_ONCHAIND_HTLCS:
 		break;
     /* These are illegal */
     case WIRE_ONCHAIND_INIT_REPLY:
@@ -888,15 +897,26 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
 		return KEEP_WATCHING;
 	}
 
+	channel_set_state(channel,
+			  FUNDING_SPEND_SEEN,
+			  ONCHAIN,
+			  REASON_UNKNOWN,
+			  "Onchain init reply");
+
+    /* Add HTLCs to init, since we know which HTLCs will be exposed */
 	msg = towire_eltoo_onchaind_init(channel,
         chainparams,
         channel->funding_sats,
         tx_parts_from_wally_tx(tmpctx, tx->wtx, -1, -1),
+        tx->wtx->locktime,
         input_num,
         channel->last_tx,
         channel->last_settle_tx,
         blockheight,
-        channel->our_msat);
+        channel->our_msat,
+        channel->shutdown_scriptpubkey[LOCAL],
+        channel->shutdown_scriptpubkey[REMOTE]
+);
 	subd_send_msg(channel->owner, take(msg));
 
 	watch_tx_and_outputs(channel, tx);
