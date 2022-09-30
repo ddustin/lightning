@@ -158,8 +158,3 @@ msgdata,eltoo_onchaind_init,remote_scriptpubkey,u8,remote_scriptpubkey_len
 
 # This says we're ready; give us htlcs and preimages.
 msgtype,eltoo_onchaind_init_reply,5161
-
-# Same pattern of messages for simplicity, without unused things
-msgtype,eltoo_onchaind_htlcs,5062
-msgdata,eltoo_onchaind_htlcs,num_htlcs,u32,
-msgdata,eltoo_onchaind_htlcs,htlc,htlc_stub,num_htlcs

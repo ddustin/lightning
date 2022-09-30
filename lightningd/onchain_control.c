@@ -135,10 +135,15 @@ static void handle_onchain_init_reply(struct channel *channel, const u8 *msg)
 	onchaind_tell_fulfill(channel);
 }
 
+/* Only change here is fromwire_eltoo_onchaind_init_reply without commit_num
+   and FIXME in the future we will grab the O(1) HTLC records for latest tx rather
+   than the growing HTLC db. We can probably drop the "tell" stuff? */
 static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *msg)
 {
 	struct htlc_stub *stubs;
-	u64 commit_num = channel->last_tx->wtx->locktime; /* update_num */
+	bool *tell, *tell_immediate;
+    /* We are only interested in latest HTLCs, the ones we will recall */
+	u64 commit_num = channel->last_tx->wtx->locktime;
 
     /* Signaling ready, send more data */
 	if (!fromwire_eltoo_onchaind_init_reply(msg)) {
@@ -158,13 +163,20 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
      * FIXME (only one set for eltoo... we shouldn't be storing everything)  */
 	stubs = wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel,
 				  commit_num);
-	msg = towire_eltoo_onchaind_htlcs(channel, stubs);
+	tell = tal_arr(stubs, bool, tal_count(stubs));
+	tell_immediate = tal_arr(stubs, bool, tal_count(stubs));
+
+	for (size_t i = 0; i < tal_count(stubs); i++) {
+		tell[i] = tell_if_missing(channel, &stubs[i],
+					  &tell_immediate[i]);
+	}
+	msg = towire_onchaind_htlcs(channel, stubs, tell, tell_immediate);
+
 	subd_send_msg(channel->owner, take(msg));
 
 	/* Tell it about any preimages we know. */
 	onchaind_tell_fulfill(channel);
 }
-
 
 /**
  * Notify onchaind about the depth change of the watched tx.
@@ -607,7 +619,6 @@ static unsigned int onchain_msg(struct subd *sd, const u8 *msg, const int *fds U
 	case WIRE_ONCHAIND_KNOWN_PREIMAGE:
 	case WIRE_ONCHAIND_DEV_MEMLEAK:
 	case WIRE_ONCHAIND_DEV_MEMLEAK_REPLY:
-    case WIRE_ELTOO_ONCHAIND_HTLCS:
 		break;
     /* These are illegal */
     case WIRE_ELTOO_ONCHAIND_INIT:
@@ -648,7 +659,6 @@ static unsigned int eltoo_onchain_msg(struct subd *sd, const u8 *msg, const int 
 	case WIRE_ONCHAIND_DEV_MEMLEAK:
 	case WIRE_ONCHAIND_DEV_MEMLEAK_REPLY:
     case WIRE_ELTOO_ONCHAIND_INIT:
-    case WIRE_ELTOO_ONCHAIND_HTLCS:
 		break;
     /* These are illegal */
     case WIRE_ONCHAIND_INIT_REPLY:
