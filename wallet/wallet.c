@@ -1487,9 +1487,8 @@ static struct channel *wallet_stmt2channel(struct wallet *w, struct db_stmt *stm
 			   htlc_minimum_msat,
 			   htlc_maximum_msat,
                NULL /* FIXME last_settle_tx */,
-               NULL /* FIXME last_their_psig */,
-               NULL /* FIXME last_our_psig */,
-               NULL /* FIXME last_session */,
+               NULL /* FIXME last_committed_state */,
+               NULL /* FIXME last_complete_state */,
                NULL /* FIXME their_next_nonce */,
                NULL /* FIXME our_next_nonce */);
 
@@ -1943,9 +1942,9 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 	db_bind_amount_msat(stmt, 42, &chan->htlc_minimum_msat);
 	db_bind_amount_msat(stmt, 43, &chan->htlc_maximum_msat);
 	db_bind_psbt(stmt, 44, chan->last_settle_tx->psbt);
-	db_bind_partial_sig(stmt, 45, &chan->eltoo_keyset.other_psig);
-	db_bind_partial_sig(stmt, 46, &chan->eltoo_keyset.self_psig);
-    db_bind_musig_session(stmt, 47, &chan->eltoo_keyset.session);
+	db_bind_partial_sig(stmt, 45, &chan->eltoo_keyset.last_complete_state.other_psig);
+	db_bind_partial_sig(stmt, 46, &chan->eltoo_keyset.last_complete_state.self_psig);
+    db_bind_musig_session(stmt, 47, &chan->eltoo_keyset.last_complete_state.session);
     db_bind_musig_nonce(stmt, 48, &chan->eltoo_keyset.other_next_nonce);
     db_bind_musig_nonce(stmt, 49, &chan->eltoo_keyset.self_next_nonce);
 	db_bind_u64(stmt, 50, chan->dbid);

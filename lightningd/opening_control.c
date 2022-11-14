@@ -94,9 +94,8 @@ wallet_commit_channel(struct lightningd *ld,
 		      const u8 *remote_upfront_shutdown_script,
 		      const struct channel_type *type,
               struct bitcoin_tx *settle_tx,
-              struct partial_sig *their_psig,
-              struct partial_sig *our_psig,
-              struct musig_session *session,
+              struct eltoo_sign *complete_state,
+              struct eltoo_sign *committed_state,
               struct nonce *their_next_nonce,
               struct nonce *our_next_nonce)
 {
@@ -222,9 +221,8 @@ wallet_commit_channel(struct lightningd *ld,
 			      ld->config.htlc_minimum_msat,
 			      ld->config.htlc_maximum_msat,
                   settle_tx,
-                  their_psig,
-                  our_psig,
-                  session,
+                  complete_state,
+                  committed_state,
                   their_next_nonce,
                   our_next_nonce);
 
@@ -367,8 +365,8 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 	u8 *remote_upfront_shutdown_script;
 	struct peer_fd *peer_fd;
 	struct channel_type *type;
-    struct partial_sig their_psig, our_psig;
-    struct musig_session session;
+    /* Committed state is blank */
+    struct eltoo_sign complete_state, dummy_committed_state;
     struct nonce their_next_nonce, our_next_nonce;
 
 	/* This is a new channel_info.their_config so set its ID to 0 */
@@ -381,9 +379,9 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 					   &fc->uc->minimum_depth,
 					   &channel_info.remote_fundingkey,
 					   &channel_info.theirbase.payment,
-                       &their_psig,
-                       &our_psig,
-                       &session,
+                       &complete_state.other_psig,
+                       &complete_state.self_psig,
+                       &complete_state.session,
                        &their_next_nonce,
                        &our_next_nonce,
 					   &funding,
@@ -428,9 +426,8 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 					remote_upfront_shutdown_script,
 					type,
                     settle_tx,
-                    &their_psig,
-                    &our_psig,
-                    &session,
+                    &complete_state,
+                    &dummy_committed_state,
                     &their_next_nonce,
                     &our_next_nonce);
 	if (!channel) {
@@ -524,9 +521,8 @@ static void opening_funder_finished(struct subd *openingd, const u8 *resp,
 					remote_upfront_shutdown_script,
 					type,
                     NULL /* settle_tx */,
-                    NULL /* their_psig */,
-                    NULL /* our_psig */,
-                    NULL /* session */,
+                    NULL /* complete_state */,
+                    NULL /* committed_state */,
                     NULL /* their_next_nonce */,
                     NULL /* our_next_nonce */);
 	if (!channel) {
@@ -568,8 +564,7 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 	struct peer_fd *peer_fd;
 	struct channel_type *type;
 
-    struct partial_sig their_psig, our_psig;
-    struct musig_session session;
+    struct eltoo_sign complete_state, dummy_committed_state;
     struct nonce their_next_nonce, our_next_nonce;
 
 	log_debug(uc->log, "Got opening_eltoo_fundee_finish_response");
@@ -585,9 +580,9 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
                      &settle_tx,
 				     &channel_info.remote_fundingkey,
 				     &channel_info.theirbase.payment,
-                     &their_psig,
-                     &our_psig,
-                     &session,
+                     &complete_state.other_psig,
+                     &complete_state.self_psig,
+                     &complete_state.session,
                      &their_next_nonce,
                      &our_next_nonce,
 				     &funding,
@@ -636,9 +631,8 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 					remote_upfront_shutdown_script,
 					type,
                     settle_tx,
-                    &their_psig,
-                    &our_psig,
-                    &session,
+                    &complete_state,
+                    &dummy_committed_state,
                     &their_next_nonce,
                     &our_next_nonce);
 
@@ -747,9 +741,8 @@ static void opening_fundee_finished(struct subd *openingd,
 					remote_upfront_shutdown_script,
 					type,
                     NULL /* settle_tx */,
-                    NULL /* their_psig */,
-                    NULL /* our_psig */,
-                    NULL /* session */,
+                    NULL /* complete_state */,
+                    NULL /* committed_state */,
                     NULL /* their_next_nonce */,
                     NULL /* our_next_nonce */);
 	if (!channel) {

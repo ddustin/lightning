@@ -241,11 +241,11 @@ static void eltoo_finalize_and_send_last(struct lightningd *ld, struct channel *
     bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->last_tx,
                      &channel->funding,
                      channel->last_settle_tx,
-                     &channel->eltoo_keyset.self_psig,
-                     &channel->eltoo_keyset.other_psig,
+                     &channel->eltoo_keyset.last_complete_state.self_psig,
+                     &channel->eltoo_keyset.last_complete_state.other_psig,
                      &channel->local_funding_pubkey,
                      &channel->channel_info.remote_fundingkey,
-                     &channel->eltoo_keyset.session);
+                     &channel->eltoo_keyset.last_complete_state.session);
 
     /* N.B. txid instability possible with eltoo, need to handle? */
 	bitcoin_txid(bound_update_and_settle_txs[0], &txid);
@@ -1007,11 +1007,11 @@ static void json_add_channel(struct lightningd *ld,
         bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->last_tx,
                          &channel->funding,
                          channel->last_settle_tx,
-                         &channel->eltoo_keyset.self_psig,
-                         &channel->eltoo_keyset.other_psig,
+                         &channel->eltoo_keyset.last_complete_state.self_psig,
+                         &channel->eltoo_keyset.last_complete_state.other_psig,
                          &channel->local_funding_pubkey,
                          &channel->channel_info.remote_fundingkey,
-                         &channel->eltoo_keyset.session);
+                         &channel->eltoo_keyset.last_complete_state.session);
 
         json_add_tx(response, "last_update_tx", bound_update_and_settle_txs[0]);
         json_add_tx(response, "last_settle_tx", bound_update_and_settle_txs[1]);

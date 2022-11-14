@@ -1657,9 +1657,8 @@ static bool test_channel_inflight_crud(struct lightningd *ld, const tal_t *ctx)
 			   AMOUNT_MSAT(0),
 			   AMOUNT_MSAT(-1ULL),
                NULL /* settle_tx */,
-               NULL /* their_psig */,
-               NULL /* our_psig */,
-               NULL /* session */,
+               NULL /* complete_state */,
+               NULL /* committed_state */,
                NULL /* their_next_nonce */,
                NULL /* our_next_nonce */);
 	db_begin_transaction(w->db);
