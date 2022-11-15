@@ -328,8 +328,8 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    struct amount_msat htlc_minimum_msat,
 			    struct amount_msat htlc_maximum_msat,
                 struct bitcoin_tx *settle_tx,
-                struct eltoo_sign *last_committed_state,
                 struct eltoo_sign *last_complete_state,
+                struct eltoo_sign *last_committed_state,
                 struct nonce *their_next_nonce,
                 struct nonce *our_next_nonce);
 

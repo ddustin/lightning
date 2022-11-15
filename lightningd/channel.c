@@ -395,8 +395,8 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    struct amount_msat htlc_minimum_msat,
 			    struct amount_msat htlc_maximum_msat,
                 struct bitcoin_tx *settle_tx,
-                struct eltoo_sign *last_committed_state,
                 struct eltoo_sign *last_complete_state,
+                struct eltoo_sign *last_committed_state,
                 struct nonce *their_next_nonce,
                 struct nonce *our_next_nonce)
 {
@@ -456,8 +456,8 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
         assert(settle_tx);
     	channel->last_settle_tx = tal_steal(channel, settle_tx);
         channel->last_settle_tx->chainparams = chainparams;
-        channel->eltoo_keyset.last_committed_state = *last_committed_state;
         channel->eltoo_keyset.last_complete_state = *last_complete_state;
+        channel->eltoo_keyset.last_committed_state = *last_committed_state;
         channel->eltoo_keyset.other_next_nonce = *their_next_nonce;
         channel->eltoo_keyset.self_next_nonce = *our_next_nonce;
     }
@@ -704,9 +704,10 @@ void channel_set_last_eltoo_txs(struct channel *channel,
 	tal_free(channel->last_settle_tx);
     channel->last_settle_tx = tal_steal(channel, settle_tx);
 
-    channel->eltoo_keyset.last_committed_state.other_psig = *their_psig;
-    channel->eltoo_keyset.last_committed_state.self_psig = *our_psig;
-    channel->eltoo_keyset.last_committed_state.session = *session;
+    /* Since we have the complete set, it's complete, not "committed" */
+    channel->eltoo_keyset.last_complete_state.other_psig = *their_psig;
+    channel->eltoo_keyset.last_complete_state.self_psig = *our_psig;
+    channel->eltoo_keyset.last_complete_state.session = *session;
 }
 
 void channel_set_state(struct channel *channel,
