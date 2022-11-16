@@ -1486,9 +1486,12 @@ static struct channel *wallet_stmt2channel(struct wallet *w, struct db_stmt *stm
 			   lease_chan_max_ppt,
 			   htlc_minimum_msat,
 			   htlc_maximum_msat,
-               NULL /* FIXME last_settle_tx */,
-               NULL /* FIXME last_committed_state */,
                NULL /* FIXME last_complete_state */,
+               NULL /* FIXME complete_update_tx */,
+               NULL /* FIXME complete_settle_tx */,
+               NULL /* FIXME last_committed_state */,
+               NULL /* FIXME committed_update_tx */,
+               NULL /* FIXME committed_settle_tx */,
                NULL /* FIXME their_next_nonce */,
                NULL /* FIXME our_next_nonce */);
 
@@ -1870,13 +1873,19 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 					"  lease_chan_max_ppt=?," // 41
 					"  htlc_minimum_msat=?," // 42
 					"  htlc_maximum_msat=?," // 43
-                    "  last_settle_tx=?," // 44
-                    "  last_their_psig=?," // 45
-                    "  last_our_psig=?," // 46
-                    "  last_session=?," // 47
-                    "  their_next_nonce=?," // 48
-                    "  our_next_nonce=?" // 49
-					" WHERE id=?")); // 50
+                    "  last_complete_update_tx=?," // 44
+                    "  last_complete_settle_tx=?," // 45
+                    "  last_committed_update_tx=?," // 46
+                    "  last_committed_settle_tx=?," // 47
+                    "  last_complete_their_psig=?," // 48
+                    "  last_complete_our_psig=?," // 49
+                    "  last_complete_session=?," // 50
+                    "  last_committed_their_psig=?," // 51
+                    "  last_committed_our_psig=?," // 52
+                    "  last_committed_session=?," // 53
+                    "  their_next_nonce=?," // 54
+                    "  our_next_nonce=?" // 55
+					" WHERE id=?")); // 56
 	db_bind_u64(stmt, 0, chan->their_shachain.id);
 	if (chan->scid)
 		db_bind_short_channel_id(stmt, 1, chan->scid);
@@ -1905,7 +1914,11 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 	db_bind_talarr(stmt, 17, chan->shutdown_scriptpubkey[REMOTE]);
 	db_bind_u64(stmt, 18, chan->final_key_idx);
 	db_bind_u64(stmt, 19, chan->our_config.id);
-	db_bind_psbt(stmt, 20, chan->last_tx->psbt);
+    if (!chan->our_config.is_eltoo) {
+	    db_bind_psbt(stmt, 20, chan->last_tx->psbt);
+    } else {
+        db_bind_null(stmt, 20);
+    }
 	db_bind_signature(stmt, 21, &chan->last_sig.s);
 	db_bind_int(stmt, 22, chan->last_was_revoke);
 	db_bind_int(stmt, 23, chan->min_possible_feerate);
@@ -1941,13 +1954,29 @@ void wallet_channel_save(struct wallet *w, struct channel *chan)
 	}
 	db_bind_amount_msat(stmt, 42, &chan->htlc_minimum_msat);
 	db_bind_amount_msat(stmt, 43, &chan->htlc_maximum_msat);
-	db_bind_psbt(stmt, 44, chan->last_settle_tx->psbt);
-	db_bind_partial_sig(stmt, 45, &chan->eltoo_keyset.last_complete_state.other_psig);
-	db_bind_partial_sig(stmt, 46, &chan->eltoo_keyset.last_complete_state.self_psig);
-    db_bind_musig_session(stmt, 47, &chan->eltoo_keyset.last_complete_state.session);
-    db_bind_musig_nonce(stmt, 48, &chan->eltoo_keyset.other_next_nonce);
-    db_bind_musig_nonce(stmt, 49, &chan->eltoo_keyset.self_next_nonce);
-	db_bind_u64(stmt, 50, chan->dbid);
+    if (chan->eltoo_keyset.complete_update_tx) {
+	    db_bind_psbt(stmt, 44, chan->eltoo_keyset.complete_update_tx->psbt);
+    	db_bind_psbt(stmt, 45, chan->eltoo_keyset.complete_settle_tx->psbt);
+    } else {
+		db_bind_null(stmt, 44);
+		db_bind_null(stmt, 45);
+    }
+    if (chan->eltoo_keyset.committed_update_tx) {
+        db_bind_psbt(stmt, 46, chan->eltoo_keyset.committed_update_tx->psbt);
+        db_bind_psbt(stmt, 47, chan->eltoo_keyset.committed_settle_tx->psbt);
+    } else {
+		db_bind_null(stmt, 46);
+		db_bind_null(stmt, 47);
+    }
+	db_bind_partial_sig(stmt, 48, &chan->eltoo_keyset.last_complete_state.other_psig);
+	db_bind_partial_sig(stmt, 49, &chan->eltoo_keyset.last_complete_state.self_psig);
+    db_bind_musig_session(stmt, 50, &chan->eltoo_keyset.last_complete_state.session);
+	db_bind_partial_sig(stmt, 51, &chan->eltoo_keyset.last_committed_state.other_psig);
+	db_bind_partial_sig(stmt, 52, &chan->eltoo_keyset.last_committed_state.self_psig);
+    db_bind_musig_session(stmt, 53, &chan->eltoo_keyset.last_committed_state.session);
+    db_bind_musig_nonce(stmt, 54, &chan->eltoo_keyset.other_next_nonce);
+    db_bind_musig_nonce(stmt, 55, &chan->eltoo_keyset.self_next_nonce);
+	db_bind_u64(stmt, 56, chan->dbid);
 	db_exec_prepared_v2(take(stmt));
 
 	wallet_channel_config_save(w, &chan->channel_info.their_config);

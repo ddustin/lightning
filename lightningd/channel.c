@@ -356,7 +356,7 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    struct amount_msat our_msat,
 			    struct amount_msat msat_to_us_min,
 			    struct amount_msat msat_to_us_max,
-			    /* Stolen */
+			    /* NULL or stolen */
 			    struct bitcoin_tx *last_tx,
 			    const struct bitcoin_signature *last_sig,
 			    /* NULL or stolen */
@@ -394,9 +394,13 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    u16 lease_chan_max_ppt,
 			    struct amount_msat htlc_minimum_msat,
 			    struct amount_msat htlc_maximum_msat,
-                struct bitcoin_tx *settle_tx,
+                /* NULL or stolen */
                 struct eltoo_sign *last_complete_state,
+                struct bitcoin_tx *complete_update_tx,
+                struct bitcoin_tx *complete_settle_tx,
                 struct eltoo_sign *last_committed_state,
+                struct bitcoin_tx *committed_update_tx,
+                struct bitcoin_tx *committed_settle_tx,
                 struct nonce *their_next_nonce,
                 struct nonce *our_next_nonce)
 {
@@ -446,18 +450,38 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 	channel->our_msat = our_msat;
 	channel->msat_to_us_min = msat_to_us_min;
 	channel->msat_to_us_max = msat_to_us_max;
-	channel->last_tx = tal_steal(channel, last_tx);
-	channel->last_tx->chainparams = chainparams;
-	channel->last_tx_type = TX_UNKNOWN;
+    if (last_tx) {
+        channel->last_tx = tal_steal(channel, last_tx);
+        channel->last_tx->chainparams = chainparams;
+        channel->last_tx_type = TX_UNKNOWN;
+    }
     if (last_sig) {
 	    channel->last_sig = *last_sig;
     } else {
         /* If we're not using ecdsa, we're doing eltoo... */
-        assert(settle_tx);
-    	channel->last_settle_tx = tal_steal(channel, settle_tx);
-        channel->last_settle_tx->chainparams = chainparams;
         channel->eltoo_keyset.last_complete_state = *last_complete_state;
         channel->eltoo_keyset.last_committed_state = *last_committed_state;
+        
+        /* Migrate over potentially 4 transactions*/
+        channel->eltoo_keyset.complete_update_tx = tal_steal(channel, complete_update_tx);
+        channel->eltoo_keyset.complete_settle_tx = tal_steal(channel, complete_settle_tx);
+        channel->eltoo_keyset.committed_update_tx = tal_steal(channel, committed_update_tx);
+        channel->eltoo_keyset.committed_settle_tx = tal_steal(channel, committed_settle_tx);
+
+        /* Should caller handle this instead? */
+        if (complete_update_tx) {
+            channel->eltoo_keyset.complete_update_tx->chainparams = chainparams;
+        }
+        if (complete_settle_tx) {
+            channel->eltoo_keyset.complete_settle_tx->chainparams = chainparams;
+        }
+        if (committed_update_tx) {
+            channel->eltoo_keyset.committed_update_tx->chainparams = chainparams;
+        }
+        if (committed_settle_tx) {
+            channel->eltoo_keyset.committed_settle_tx->chainparams = chainparams;
+        }
+
         channel->eltoo_keyset.other_next_nonce = *their_next_nonce;
         channel->eltoo_keyset.self_next_nonce = *our_next_nonce;
     }
@@ -696,15 +720,15 @@ void channel_set_last_eltoo_txs(struct channel *channel,
              struct musig_session *session,
 			 enum wallet_tx_type txtypes)
 {
+    /* Since we have the complete set, it's complete, not "committed" */
 	assert(update_tx->chainparams);
 	assert(settle_tx->chainparams);
-	tal_free(channel->last_tx);
-	channel->last_tx = tal_steal(channel, update_tx);
+	tal_free(channel->eltoo_keyset.complete_update_tx);
+    channel->eltoo_keyset.complete_update_tx = tal_steal(channel, update_tx);
 	channel->last_tx_type = txtypes;
-	tal_free(channel->last_settle_tx);
-    channel->last_settle_tx = tal_steal(channel, settle_tx);
+	tal_free(channel->eltoo_keyset.complete_settle_tx);
+    channel->eltoo_keyset.complete_settle_tx = tal_steal(channel, settle_tx);
 
-    /* Since we have the complete set, it's complete, not "committed" */
     channel->eltoo_keyset.last_complete_state.other_psig = *their_psig;
     channel->eltoo_keyset.last_complete_state.self_psig = *our_psig;
     channel->eltoo_keyset.last_complete_state.session = *session;

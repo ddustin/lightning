@@ -34,8 +34,7 @@ static bool state_update_ok(struct channel *channel,
 			    u64 htlc_id, const char *dir)
 {
 	enum htlc_state expected = oldstate + 1;
-    /* FIXME better switch */
-    bool is_eltoo = channel->last_settle_tx;
+    bool is_eltoo = channel->our_config.is_eltoo;
 
 	/* We never get told about RCVD_REMOVE_HTLC, so skip over that
 	 * (we initialize in SENT_ADD_HTLC / RCVD_ADD_COMMIT, so those
@@ -333,8 +332,7 @@ void fulfill_htlc(struct htlc_in *hin, const struct preimage *preimage)
 	u8 *msg;
 	struct channel *channel = hin->key.channel;
 	struct wallet *wallet = channel->peer->ld->wallet;
-    /* FIXME: Better switch on eltoo behavior... or just move SENT_ADD_ACK to RCVD_ADD_ACK_REVOCATION and jump? */
-    enum htlc_state final_state = channel->last_settle_tx ? SENT_ADD_ACK : RCVD_ADD_ACK_REVOCATION;
+    enum htlc_state final_state = channel->our_config.is_eltoo ? SENT_ADD_ACK : RCVD_ADD_ACK_REVOCATION;
 
 	if (hin->hstate != final_state) {
 		log_debug(channel->log,

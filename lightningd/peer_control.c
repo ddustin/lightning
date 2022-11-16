@@ -238,9 +238,9 @@ static void eltoo_finalize_and_send_last(struct lightningd *ld, struct channel *
 	struct bitcoin_txid txid;
 
     /* Eltoo keyset should probably have all pubkeys... */
-    bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->last_tx,
+    bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->eltoo_keyset.complete_update_tx,
                      &channel->funding,
-                     channel->last_settle_tx,
+                     channel->eltoo_keyset.complete_settle_tx,
                      &channel->eltoo_keyset.last_complete_state.self_psig,
                      &channel->eltoo_keyset.last_complete_state.other_psig,
                      &channel->local_funding_pubkey,
@@ -692,7 +692,7 @@ static void json_add_channel(struct lightningd *ld,
 
 	json_object_start(response, key);
 	json_add_string(response, "state", channel_state_name(channel));
-	if (channel->last_tx && !invalid_last_tx(channel->last_tx)) {
+	if (!channel->our_config.is_eltoo && channel->last_tx && !invalid_last_tx(channel->last_tx)) {
 		struct bitcoin_txid txid;
 		bitcoin_txid(channel->last_tx, &txid);
 
@@ -776,8 +776,10 @@ static void json_add_channel(struct lightningd *ld,
 						 "our_funding_msat",
 						 inflight->funding->our_funds);
 			/* Add the expected commitment tx id also */
-			bitcoin_txid(inflight->last_tx, &txid);
-			json_add_txid(response, "scratch_txid", &txid);
+            if (!channel->our_config.is_eltoo) {
+			    bitcoin_txid(inflight->last_tx, &txid);
+			    json_add_txid(response, "scratch_txid", &txid);
+            }
 			json_object_end(response);
 		}
 		json_array_end(response);
@@ -1000,13 +1002,13 @@ static void json_add_channel(struct lightningd *ld,
 
 	json_add_htlcs(ld, response, channel);
 
-    if (channel->last_settle_tx) {
+    if (channel->our_config.is_eltoo) {
         struct bitcoin_tx **bound_update_and_settle_txs;
 
         /* Eltoo keyset should probably have all pubkeys... */
-        bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->last_tx,
+        bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->eltoo_keyset.complete_update_tx,
                          &channel->funding,
-                         channel->last_settle_tx,
+                         channel->eltoo_keyset.complete_settle_tx,
                          &channel->eltoo_keyset.last_complete_state.self_psig,
                          &channel->eltoo_keyset.last_complete_state.other_psig,
                          &channel->local_funding_pubkey,
@@ -1015,8 +1017,8 @@ static void json_add_channel(struct lightningd *ld,
 
         json_add_tx(response, "last_update_tx", bound_update_and_settle_txs[0]);
         json_add_tx(response, "last_settle_tx", bound_update_and_settle_txs[1]);
-        json_add_tx(response, "unbound_update_tx", channel->last_tx);
-        json_add_tx(response, "unbound_settle_tx", channel->last_settle_tx);
+        json_add_tx(response, "unbound_update_tx", channel->eltoo_keyset.complete_update_tx);
+        json_add_tx(response, "unbound_settle_tx", channel->eltoo_keyset.complete_settle_tx);
         /* FIXME Deallocate copied txns? */
     }
 

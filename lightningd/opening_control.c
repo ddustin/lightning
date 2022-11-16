@@ -93,9 +93,12 @@ wallet_commit_channel(struct lightningd *ld,
 		      const u8 *our_upfront_shutdown_script,
 		      const u8 *remote_upfront_shutdown_script,
 		      const struct channel_type *type,
-              struct bitcoin_tx *settle_tx,
               struct eltoo_sign *complete_state,
+              struct bitcoin_tx *complete_update_tx,
+              struct bitcoin_tx *complete_settle_tx,
               struct eltoo_sign *committed_state,
+              struct bitcoin_tx *committed_update_tx,
+              struct bitcoin_tx *committed_settle_tx,
               struct nonce *their_next_nonce,
               struct nonce *our_next_nonce)
 {
@@ -220,9 +223,12 @@ wallet_commit_channel(struct lightningd *ld,
 			      0, NULL, 0, 0, /* No leases on v1s */
 			      ld->config.htlc_minimum_msat,
 			      ld->config.htlc_maximum_msat,
-                  settle_tx,
                   complete_state,
+                  complete_update_tx,
+                  complete_settle_tx, 
                   committed_state,
+                  committed_update_tx,
+                  committed_settle_tx, 
                   their_next_nonce,
                   our_next_nonce);
 
@@ -359,14 +365,14 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 	struct channel_info channel_info;
 	struct channel_id cid;
 	struct bitcoin_outpoint funding;
-	struct bitcoin_tx *update_tx, *settle_tx;
 	struct channel *channel;
 	struct lightningd *ld = openingd->ld;
 	u8 *remote_upfront_shutdown_script;
 	struct peer_fd *peer_fd;
 	struct channel_type *type;
     /* Committed state is blank */
-    struct eltoo_sign complete_state, dummy_committed_state;
+    struct eltoo_sign complete_state, empty_committed_state;
+    struct bitcoin_tx *complete_update_tx, *complete_settle_tx;
     struct nonce their_next_nonce, our_next_nonce;
 
 	/* This is a new channel_info.their_config so set its ID to 0 */
@@ -374,8 +380,8 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 
 	if (!fromwire_openingd_eltoo_funder_reply(resp, resp,
 					   &channel_info.their_config,
-					   &update_tx,
-                       &settle_tx,
+					   &complete_update_tx,
+                       &complete_settle_tx,
 					   &fc->uc->minimum_depth,
 					   &channel_info.remote_fundingkey,
 					   &channel_info.theirbase.payment,
@@ -395,7 +401,8 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 					 tal_hex(fc->cmd, resp)));
 		goto cleanup;
 	}
-	update_tx->chainparams = chainparams;
+	complete_update_tx->chainparams = chainparams;
+	complete_settle_tx->chainparams = chainparams;
 
     /* We make sure other basepoints are valid
      * even if unused...
@@ -414,7 +421,7 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 	/* Steals fields from uc */
 	channel = wallet_commit_channel(ld, fc->uc,
 					&cid,
-					update_tx,
+					NULL /* last_tx */,
                     NULL /* remote_commit_sig */,
 					&funding,
 					fc->funding_sats,
@@ -425,9 +432,12 @@ static void opening_eltoo_funder_finished(struct subd *openingd, const u8 *resp,
 					fc->our_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    settle_tx,
                     &complete_state,
-                    &dummy_committed_state,
+                    complete_update_tx,
+                    complete_settle_tx,
+                    &empty_committed_state,
+                    NULL /* committed_update_tx */,
+                    NULL /* committed_settle_tx */,
                     &their_next_nonce,
                     &our_next_nonce);
 	if (!channel) {
@@ -520,9 +530,12 @@ static void opening_funder_finished(struct subd *openingd, const u8 *resp,
 					fc->our_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    NULL /* settle_tx */,
                     NULL /* complete_state */,
+                    NULL /* complete_update_tx */,
+                    NULL /* complete_settle_tx */,
                     NULL /* committed_state */,
+                    NULL /* committed_update_tx */,
+                    NULL /* committed_settle_tx */,
                     NULL /* their_next_nonce */,
                     NULL /* our_next_nonce */);
 	if (!channel) {
@@ -552,7 +565,6 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 {
 	const u8 *fwd_msg;
 	struct channel_info channel_info;
-	struct bitcoin_tx *update_tx, *settle_tx;
 	struct channel_id cid;
 	struct lightningd *ld = openingd->ld;
 	struct bitcoin_outpoint funding;
@@ -564,7 +576,8 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 	struct peer_fd *peer_fd;
 	struct channel_type *type;
 
-    struct eltoo_sign complete_state, dummy_committed_state;
+    struct eltoo_sign complete_state, empty_committed_state;
+    struct bitcoin_tx *complete_update_tx, *complete_settle_tx;
     struct nonce their_next_nonce, our_next_nonce;
 
 	log_debug(uc->log, "Got opening_eltoo_fundee_finish_response");
@@ -576,8 +589,8 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 
     if (!fromwire_openingd_eltoo_fundee(tmpctx, reply,
 				     &channel_info.their_config,
-				     &update_tx,
-                     &settle_tx,
+				     &complete_update_tx,
+                     &complete_settle_tx,
 				     &channel_info.remote_fundingkey,
 				     &channel_info.theirbase.payment,
                      &complete_state.other_psig,
@@ -611,15 +624,15 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
     memcpy(&channel_info.remote_per_commit, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
     memcpy(&channel_info.old_remote_per_commit, &channel_info.theirbase.payment, sizeof(channel_info.theirbase.payment));
 
-	update_tx->chainparams = chainparams;
-	settle_tx->chainparams = chainparams;
+	complete_update_tx->chainparams = chainparams;
+	complete_settle_tx->chainparams = chainparams;
 
 	derive_channel_id(&cid, &funding);
 
 	/* Consumes uc */
 	channel = wallet_commit_channel(ld, uc,
 					&cid,
-					update_tx,
+					NULL /* remote_commit */,
 					NULL /* remote_commit_sig */,
 					&funding,
 					funding_sats,
@@ -630,9 +643,12 @@ static void opening_eltoo_fundee_finished(struct subd *openingd,
 					local_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    settle_tx,
                     &complete_state,
-                    &dummy_committed_state,
+                    complete_update_tx,
+                    complete_settle_tx,
+                    &empty_committed_state,
+                    NULL /* committed_update_tx */,
+                    NULL /* committed_settle_tx */,
                     &their_next_nonce,
                     &our_next_nonce);
 
@@ -740,9 +756,12 @@ static void opening_fundee_finished(struct subd *openingd,
 					local_upfront_shutdown_script,
 					remote_upfront_shutdown_script,
 					type,
-                    NULL /* settle_tx */,
                     NULL /* complete_state */,
+                    NULL /* complete_update_tx */,
+                    NULL /* complete_settle_tx */,
                     NULL /* committed_state */,
+                    NULL /* committed_update_tx */,
+                    NULL /* committed_settle_tx */,
                     NULL /* their_next_nonce */,
                     NULL /* our_next_nonce */);
 	if (!channel) {

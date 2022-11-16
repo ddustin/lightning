@@ -151,8 +151,6 @@ struct channel {
 	const struct bitcoin_signature *last_htlc_sigs;
 
     /* Eltoo-only fields */
-    /* last_tx aka last_update_tx */
-    struct bitcoin_tx *last_settle_tx;
     /* Stores "last" psigs, session */
     struct eltoo_keyset eltoo_keyset;
 
@@ -327,9 +325,12 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 			    u16 lease_chan_max_ppt,
 			    struct amount_msat htlc_minimum_msat,
 			    struct amount_msat htlc_maximum_msat,
-                struct bitcoin_tx *settle_tx,
                 struct eltoo_sign *last_complete_state,
+			    struct bitcoin_tx *complete_update_tx,
+			    struct bitcoin_tx *complete_settle_tx,
                 struct eltoo_sign *last_committed_state,
+			    struct bitcoin_tx *committed_update_tx,
+			    struct bitcoin_tx *committed_settle_tx,
                 struct nonce *their_next_nonce,
                 struct nonce *our_next_nonce);
 
