@@ -70,6 +70,7 @@ ONCHAIND_COMMON_OBJS :=				\
 	common/subdaemon.o			\
 	common/type_to_string.o			\
 	common/utils.o				\
+    common/update_tx.o          \
 	common/utxo.o				\
 	common/version.o			\
 	common/wallet.o				\
