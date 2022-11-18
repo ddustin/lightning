@@ -143,7 +143,8 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 	struct htlc_stub *stubs;
 	bool *tell, *tell_immediate;
     /* We are only interested in latest HTLCs, the ones we will recall */
-	u64 commit_num = channel->last_tx->wtx->locktime;
+	u64 complete_update_num = channel->eltoo_keyset.complete_update_tx->wtx->locktime;
+    // u64 committed_update_num = complete_update_num + 1; /* May not exist, that's ok */
 
     /* Signaling ready, send more data */
 	if (!fromwire_eltoo_onchaind_init_reply(msg)) {
@@ -154,15 +155,14 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 
 	/* FIXME: We may already be ONCHAIN state when we implement restart! */
 	channel_set_state(channel,
-			  FUNDING_SPEND_SEEN,
-			  ONCHAIN,
+			  FUNDING_SPEND_SEEN /* old_state */,
+			  ONCHAIN /* state */,
 			  REASON_UNKNOWN,
 			  "Onchain init reply");
 
-	/* Tell it about any relevant HTLCs
-     * FIXME (only one set for eltoo... we shouldn't be storing everything)  */
+	/* Tell it about any relevant HTLCs */
 	stubs = wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel,
-				  commit_num);
+				  complete_update_num);
 	tell = tal_arr(stubs, bool, tal_count(stubs));
 	tell_immediate = tal_arr(stubs, bool, tal_count(stubs));
 
@@ -174,7 +174,21 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 
 	subd_send_msg(channel->owner, take(msg));
 
-	/* Tell it about any preimages we know. */
+    /* FIXME Do the same steps again for committed htlcs, if they exist
+	stubs = wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel,
+				  committed_update_num);
+	tell = tal_arr(stubs, bool, tal_count(stubs));
+	tell_immediate = tal_arr(stubs, bool, tal_count(stubs));
+
+	for (size_t i = 0; i < tal_count(stubs); i++) {
+		tell[i] = tell_if_missing(channel, &stubs[i],
+					  &tell_immediate[i]);
+	}
+	msg = towire_onchaind_htlcs(channel, stubs, tell, tell_immediate);
+
+	subd_send_msg(channel->owner, take(msg)); */
+
+	/* Finally, ell it about any preimages we know. */
 	onchaind_tell_fulfill(channel);
 }
 
@@ -922,12 +936,6 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
 			   strerror(errno));
 		return KEEP_WATCHING;
 	}
-
-	channel_set_state(channel,
-			  FUNDING_SPEND_SEEN,
-			  ONCHAIN,
-			  REASON_UNKNOWN,
-			  "Onchain init reply");
 
     /* Add HTLCs to init, since we know which HTLCs will be exposed */
 	msg = towire_eltoo_onchaind_init(channel,
