@@ -540,6 +540,33 @@ bool is_p2wpkh(const u8 *script, struct bitcoin_address *addr)
 	return true;
 }
 
+bool is_p2tr(const u8 *script, u8 *xonly_pubkey)
+{
+	size_t script_len = tal_count(script);
+
+	if (script_len != BITCOIN_SCRIPTPUBKEY_P2TR_LEN)
+		return false;
+	if (script[0] != OP_1)
+		return false;
+    /* x-only pubkey */
+	if (script[1] != OP_PUSHBYTES(32))
+		return false;
+	if (xonly_pubkey)
+		memcpy(xonly_pubkey, script+2, 32);
+	return true;
+}
+
+bool is_ephemeral_anchor(const u8 *script)
+{
+	size_t script_len = tal_count(script);
+
+	if (script_len != 1)
+		return false;
+	if (script[0] != OP_1)
+		return false;
+    return true;
+}
+
 bool is_known_scripttype(const u8 *script)
 {
 	return is_p2wpkh(script, NULL) || is_p2wsh(script, NULL)
@@ -957,24 +984,6 @@ u8 *bitcoin_spk_ephemeral_anchor(const tal_t *ctx)
 	return script;
 }
 
-u8 *bitcoin_tapscript_to_node(const tal_t *ctx, const struct pubkey *settlement_pubkey)
-{
-	u8 *script = tal_arr(ctx, u8, 0);
-
-    /* BOLT #??
-     * `tr(aggregated_key, EXPR_BALANCE)`
-     *
-     * where EXPR_BALANCE =
-     *
-     * 1 OP_CHECKSEQUENCEVERIFY settlement_pubkey OP_CHECKSIGVERIFY
-    */
-	add_push_xonly_key(&script, settlement_pubkey);
-	add_op(&script, OP_CHECKSIGVERIFY);
-	add_number(&script, 1);
-	add_op(&script, OP_CHECKSEQUENCEVERIFY);
-    return script;
-}
-
 void compute_taptree_merkle_root(struct sha256 *hash_out, u8 **scripts, size_t num_scripts)
 {
     int ok;
@@ -1208,8 +1217,8 @@ u8 *make_eltoo_htlc_success_script(const tal_t *ctx, const struct pubkey *settle
 {
     /* where EXPR_SUCCESS =
      *
-     * `<settlement_pubkey> OP_CHECKSIGVERIFY OP_SIZE <32> OP_EQUALVERIFY OP_HASH160 <H>
-     * OP_EQUALVERIFY 1 OP_CHECKSEQUENCEVERIFY`
+     * `<settlement_pubkey> OP_CHECKSIGVERIFY OP_SIZE <20> OP_EQUALVERIFY OP_HASH160 <H>
+OP_EQUAL`
      */
 	u8 *script = tal_arr(ctx, u8, 0);
 	add_push_xonly_key(&script, settlement_pubkey);
@@ -1219,9 +1228,7 @@ u8 *make_eltoo_htlc_success_script(const tal_t *ctx, const struct pubkey *settle
 	add_op(&script, OP_EQUALVERIFY);
 	add_op(&script, OP_HASH160);
     script_push_bytes(&script, invoice_hash, 20);
-	add_op(&script, OP_EQUALVERIFY);
-	add_number(&script, 1);
-	add_op(&script, OP_CHECKSEQUENCEVERIFY);
+	add_op(&script, OP_EQUAL);
     return script;
 }
 
@@ -1229,16 +1236,12 @@ u8 *make_eltoo_htlc_timeout_script(const tal_t *ctx, const struct pubkey *settle
 {
     /* and EXPR_TIMEOUT =
      *
-     *`<N> OP_CHECKLOCKTIMEVERIFY OP_VERIFY <settlement_pubkey> OP_CHECKSIGVERIFY 1
-     * OP_CHECKSEQUENCEVERIFY`
+     * `<settlement_pubkey> OP_CHECKSIGVERIFY N OP_CHECKLOCKTIMEVERIFY`
      */
 	u8 *script = tal_arr(ctx, u8, 0);
-	add_number(&script, htlc_timeout);
-	add_op(&script, OP_CHECKLOCKTIMEVERIFY);
-	add_op(&script, OP_VERIFY);
 	add_push_xonly_key(&script, settlement_pubkey);
 	add_op(&script, OP_CHECKSIGVERIFY);
-	add_number(&script, 1);
-	add_op(&script, OP_CHECKSEQUENCEVERIFY);
+	add_number(&script, htlc_timeout);
+	add_op(&script, OP_CHECKLOCKTIMEVERIFY);
     return script;
 }

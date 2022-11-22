@@ -157,6 +157,10 @@ msgdata,eltoo_onchaind_init,local_scriptpubkey_len,u16,
 msgdata,eltoo_onchaind_init,local_scriptpubkey,u8,local_scriptpubkey_len
 msgdata,eltoo_onchaind_init,remote_scriptpubkey_len,u16,
 msgdata,eltoo_onchaind_init,remote_scriptpubkey,u8,remote_scriptpubkey_len
+msgdata,eltoo_onchaind_init,self_funding_key,pubkey,
+msgdata,eltoo_onchaind_init,other_funding_key,pubkey,
+msgdata,eltoo_onchaind_init,self_settle_key,pubkey,
+msgdata,eltoo_onchaind_init,other_settle_key,pubkey,
 
 # This says we're ready; give us htlcs and preimages.
 msgtype,eltoo_onchaind_init_reply,5161

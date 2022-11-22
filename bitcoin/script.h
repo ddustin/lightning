@@ -159,6 +159,12 @@ bool is_p2wsh(const u8 *script, struct sha256 *addr);
 /* Is this (version 0) pay to witness pubkey hash? (extract addr if not NULL) */
 bool is_p2wpkh(const u8 *script, struct bitcoin_address *addr);
 
+/* Is this a taproot output? (exract xonly_pubkey bytes if not NULL) */
+bool is_p2tr(const u8 *script, u8 *xonly_pubkey);
+
+/* Is this output an ephemeral anchor? */
+bool is_ephemeral_anchor(const u8 *script);
+
 /* Is this one of the four above script types? */
 bool is_known_scripttype(const u8 *script);
 
@@ -173,9 +179,6 @@ void script_push_bytes(u8 **scriptp, const void *mem, size_t len);
 
 /* "anyonecanspend" Ephemeral anchor outputs */
 u8 *bitcoin_spk_ephemeral_anchor(const tal_t *ctx);
-
-/* to_node balance output script with anti-pinning 1 block CSV */
-u8 *bitcoin_tapscript_to_node(const tal_t *ctx, const struct pubkey *settlement_pubkey);
 
 /* Computes taproot merkle root from list of up to two scripts in depth 1 tree, in order */
 void compute_taptree_merkle_root(struct sha256 *hash_out, u8 **scripts, size_t num_scripts);
