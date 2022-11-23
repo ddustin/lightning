@@ -1511,7 +1511,6 @@ static void send_commit(struct peer *peer)
 	 * should verify.
 	 */
 	for (u32 i = 0; peer->splice_count; i++) {
-		u8 *msg;
 		enum channeld_wire type;
 		bool is_found;
 		struct bitcoin_outpoint outpoint;
@@ -1996,7 +1995,7 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 
 	/* Validate the commitment sigs for all splcies awaiting confimration.
 	 * Since we're looping anyway, we'll check splice HTLC sigs as well. */
-	for (u32 i = 0; peer->splice_count; i++) {
+	for (i = 0; peer->splice_count; i++) {
 		u8 *master_msg;
 		enum channeld_wire type;
 		bool is_found;
@@ -3047,7 +3046,7 @@ static struct bitcoin_tx *bitcoin_tx_from_txid(struct peer *peer,
 {
 	u8 *msg;
 	struct bitcoin_tx *tx = NULL;
-	enum peer_wire type;
+	enum channeld_wire type;
 
 	msg = towire_channeld_splice_lookup_tx(tmpctx, &txid);
 
