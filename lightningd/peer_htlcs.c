@@ -1936,7 +1936,12 @@ static bool peer_save_commitsig_sent(struct channel *channel, u64 commitnum)
 }
 
 /* Only difference is incrementing local next_index, since there's only 1 */
-static bool peer_save_updatesig_sent(struct channel *channel, u64 update_num)
+static bool peer_save_updatesig_sent(struct channel *channel,
+                                     u64 update_num,
+                                     struct partial_sig *our_psig,
+                                     struct musig_session *session,
+                                     struct bitcoin_tx *committed_update_tx TAKES,
+                                     struct bitcoin_tx *committed_settle_tx TAKES)
 {
 	struct lightningd *ld = channel->peer->ld;
 
@@ -1950,7 +1955,11 @@ static bool peer_save_updatesig_sent(struct channel *channel, u64 update_num)
 
 	channel->next_index[LOCAL]++;
 
-	/* FIXME: Save to database, with sig and HTLCs. */
+    channel->eltoo_keyset.last_committed_state.self_psig = *our_psig;
+    channel->eltoo_keyset.last_committed_state.session = *session;
+    channel->eltoo_keyset.committed_update_tx = tal_steal(channel, committed_update_tx);
+    channel->eltoo_keyset.committed_settle_tx = tal_steal(channel, committed_settle_tx);
+
 	wallet_channel_save(ld->wallet, channel);
 	return true;
 }
@@ -1991,7 +2000,18 @@ void peer_got_ack(struct channel *channel, const u8 *msg)
 		}
 	}
 
-    /* FIXME stash signing information, more state?  */
+    /* Write new complete state into channel before writing to db */
+    tal_free(channel->eltoo_keyset.complete_update_tx);
+    tal_free(channel->eltoo_keyset.complete_settle_tx);
+    channel->eltoo_keyset.complete_update_tx = tal_steal(channel, channel->eltoo_keyset.committed_update_tx);
+    channel->eltoo_keyset.committed_update_tx = NULL;
+    channel->eltoo_keyset.complete_settle_tx = tal_steal(channel, channel->eltoo_keyset.committed_settle_tx);
+    channel->eltoo_keyset.committed_settle_tx = NULL;
+    channel->eltoo_keyset.last_complete_state.self_psig = channel->eltoo_keyset.last_committed_state.self_psig;
+    channel->eltoo_keyset.last_complete_state.other_psig = their_psig;
+    channel->eltoo_keyset.last_complete_state.session = session;
+
+    /* And null out committed state */
 
     /* write to db, then respond */
 	wallet_channel_save(ld->wallet, channel);
@@ -2009,7 +2029,6 @@ void peer_sending_updatesig(struct channel *channel, const u8 *msg)
 	size_t i, maxid = 0, num_local_added = 0;
 	struct lightningd *ld = channel->peer->ld;
 
-    /* These are unused currently... */
 	struct partial_sig our_update_psig;
     struct musig_session session;
     struct bitcoin_tx *committed_update_tx;
@@ -2055,7 +2074,8 @@ void peer_sending_updatesig(struct channel *channel, const u8 *msg)
 		channel->next_htlc_id += num_local_added;
 	}
 
-	if (!peer_save_updatesig_sent(channel, update_num))
+    /* Add newest state to channel, then save to db */
+	if (!peer_save_updatesig_sent(channel, update_num, &our_update_psig, &session, committed_update_tx, committed_settle_tx))
 		return;
 
 	/* Last was commit. FIXME do we want to reuse these fields? maybe? */

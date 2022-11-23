@@ -729,6 +729,8 @@ void channel_set_last_eltoo_txs(struct channel *channel,
 	tal_free(channel->eltoo_keyset.complete_settle_tx);
     channel->eltoo_keyset.complete_settle_tx = tal_steal(channel, settle_tx);
 
+    /* FIXME We also clear out committed */
+
     channel->eltoo_keyset.last_complete_state.other_psig = *their_psig;
     channel->eltoo_keyset.last_complete_state.self_psig = *our_psig;
     channel->eltoo_keyset.last_complete_state.session = *session;
