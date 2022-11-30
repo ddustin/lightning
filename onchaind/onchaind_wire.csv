@@ -82,6 +82,8 @@ msgdata,onchaind_spent,locktime,u32,
 msgdata,onchaind_spent,input_num,u32,
 msgdata,onchaind_spent,blockheight,u32,
 
+# FIXME make a onchaind_spent_reply to let node know about latest utxo ?
+
 # master->onchaind: We will receive more than one of these, as depth changes.
 msgtype,onchaind_depth,5005
 msgdata,onchaind_depth,txid,bitcoin_txid,
