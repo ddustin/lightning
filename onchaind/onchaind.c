@@ -2097,6 +2097,7 @@ static void wait_for_resolved(struct tracked_output **outs)
 		u32 input_num, depth, tx_blockheight;
 		struct preimage preimage;
 		struct tx_parts *tx_parts;
+        u32 unused_locktime;
 
 		if (tal_count(queued_msgs)) {
 			msg = tal_steal(outs, queued_msgs[0]);
@@ -2109,7 +2110,7 @@ static void wait_for_resolved(struct tracked_output **outs)
 
 		if (fromwire_onchaind_depth(msg, &txid, &depth))
 			tx_new_depth(outs, &txid, depth);
-		else if (fromwire_onchaind_spent(msg, msg, &tx_parts, &input_num,
+		else if (fromwire_onchaind_spent(msg, msg, &tx_parts, &unused_locktime, &input_num,
 						&tx_blockheight)) {
 			output_spent(&outs, tx_parts, input_num, tx_blockheight);
 		} else if (fromwire_onchaind_known_preimage(msg, &preimage))

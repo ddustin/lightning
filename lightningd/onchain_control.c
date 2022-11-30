@@ -263,7 +263,7 @@ static void onchain_txo_spent(struct channel *channel, const struct bitcoin_tx *
 
 	watch_tx_and_outputs(channel, tx);
 
-	msg = towire_onchaind_spent(channel, parts, input_num, blockheight);
+	msg = towire_onchaind_spent(channel, parts, input_num, tx->wtx->locktime, blockheight);
 	subd_send_msg(channel->owner, take(msg));
 
 }
