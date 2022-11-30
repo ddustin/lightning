@@ -1004,8 +1004,8 @@ static void json_add_channel(struct lightningd *ld,
 
     if (channel->our_config.is_eltoo) {
         struct bitcoin_tx **bound_update_and_settle_txs;
-
         /* Eltoo keyset should probably have all pubkeys... */
+        /* FIXME would be nice to rebind to latest utxo, not just funding output that may by spent already */
         bound_update_and_settle_txs = bind_txs_to_funding_outpoint(channel->eltoo_keyset.complete_update_tx,
                          &channel->funding,
                          channel->eltoo_keyset.complete_settle_tx,
