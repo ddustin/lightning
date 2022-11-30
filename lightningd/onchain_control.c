@@ -955,7 +955,10 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
         &channel->local_funding_pubkey,
         &channel->channel_info.remote_fundingkey,
         &channel->local_basepoints.payment /* settlement key */,
-        &channel->channel_info.theirbase.payment /* settlement key */
+        &channel->channel_info.theirbase.payment /* settlement key */,
+        &channel->eltoo_keyset.last_complete_state.self_psig,
+        &channel->eltoo_keyset.last_complete_state.other_psig,
+        &channel->eltoo_keyset.last_complete_state.session
 );
 	subd_send_msg(channel->owner, take(msg));
 

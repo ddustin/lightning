@@ -162,6 +162,10 @@ msgdata,eltoo_onchaind_init,self_funding_key,pubkey,
 msgdata,eltoo_onchaind_init,other_funding_key,pubkey,
 msgdata,eltoo_onchaind_init,self_settle_key,pubkey,
 msgdata,eltoo_onchaind_init,other_settle_key,pubkey,
+msgdata,eltoo_onchaind_init,complete_self_psig,partial_sig,
+msgdata,eltoo_onchaind_init,complete_other_psig,partial_sig,
+msgdata,eltoo_onchaind_init,complete_session,musig_session,
+
 
 # This says we're ready; give us htlcs and preimages.
 msgtype,eltoo_onchaind_init_reply,5161
