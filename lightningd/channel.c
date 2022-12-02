@@ -485,6 +485,7 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
         channel->eltoo_keyset.other_next_nonce = *their_next_nonce;
         channel->eltoo_keyset.self_next_nonce = *our_next_nonce;
     }
+    channel->onchain_invalidated_annex_hint = NULL;
 	channel->last_htlc_sigs = tal_steal(channel, last_htlc_sigs);
 	channel->channel_info = *channel_info;
 	channel->fee_states = dup_fee_states(channel, fee_states);

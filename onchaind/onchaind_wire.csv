@@ -82,8 +82,6 @@ msgdata,onchaind_spent,locktime,u32,
 msgdata,onchaind_spent,input_num,u32,
 msgdata,onchaind_spent,blockheight,u32,
 
-# FIXME make a onchaind_spent_reply to let node know about latest utxo ?
-
 # master->onchaind: We will receive more than one of these, as depth changes.
 msgtype,onchaind_depth,5005
 msgdata,onchaind_depth,txid,bitcoin_txid,
@@ -171,3 +169,13 @@ msgdata,eltoo_onchaind_init,complete_session,musig_session,
 
 # This says we're ready; give us htlcs and preimages.
 msgtype,eltoo_onchaind_init_reply,5161
+
+# onchaind->master: Notifier that a new state output has been created, used
+# for debugging purposes
+msgtype,eltoo_onchaind_new_state_output,5062
+msgdata,eltoo_onchaind_new_state_output,new_prevout,bitcoin_outpoint,
+msgdata,eltoo_onchaind_new_state_output,invalidated_update_num,u32,
+msgdata,eltoo_onchaind_new_state_output,annex_hint_len,u16,
+msgdata,eltoo_onchaind_new_state_output,invalidated_annex_hint,u8,annex_hint_len
+
+

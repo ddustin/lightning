@@ -154,6 +154,11 @@ struct channel {
     /* Stores "last" psigs, session */
     struct eltoo_keyset eltoo_keyset;
 
+    /* Cache of state output information */
+    struct bitcoin_outpoint onchain_state_outpoint;
+    u32 onchain_invalidated_update_num;
+    u8 *onchain_invalidated_annex_hint;
+
 	/* Keys for channel */
 	struct channel_info channel_info;
 

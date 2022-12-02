@@ -61,6 +61,18 @@ struct bitcoin_tx **bind_txs_to_funding_outpoint(const struct bitcoin_tx *update
                              const struct pubkey *funding_pubkey2 UNNEEDED,
                              const struct musig_session *session UNNEEDED)
 { fprintf(stderr, "bind_txs_to_funding_outpoint called!\n"); abort(); }
+/* Generated stub for bind_txs_to_update_outpoint */
+struct bitcoin_tx **bind_txs_to_update_outpoint(const struct bitcoin_tx *update_tx UNNEEDED,
+                             const struct bitcoin_outpoint *latest_outpoint UNNEEDED,
+                             const struct bitcoin_tx *settle_tx UNNEEDED,
+                             const u8 *invalidated_annex_hint UNNEEDED,
+                             u32 invalidated_update_num UNNEEDED,
+                             const struct partial_sig *psig1 UNNEEDED,
+                             const struct partial_sig *psig2 UNNEEDED,
+                             const struct pubkey *funding_pubkey1 UNNEEDED,
+                             const struct pubkey *funding_pubkey2 UNNEEDED,
+                             const struct musig_session *session UNNEEDED)
+{ fprintf(stderr, "bind_txs_to_update_outpoint called!\n"); abort(); }
 /* Generated stub for bitcoind_getutxout_ */
 void bitcoind_getutxout_(struct bitcoind *bitcoind UNNEEDED,
 			 const struct bitcoin_outpoint *outpoint UNNEEDED,

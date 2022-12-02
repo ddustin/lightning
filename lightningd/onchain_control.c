@@ -331,6 +331,23 @@ static void handle_onchain_log_coin_move(struct channel *channel, const u8 *msg)
 	tal_free(mvt);
 }
 
+static void handle_new_state_output(struct channel *channel, const u8 *msg)
+{
+    struct bitcoin_outpoint out;
+    u32 invalidated_update_num;
+    u8 *invalidated_annext_hint;
+
+    if (!fromwire_eltoo_onchaind_new_state_output(msg, msg, &out, &invalidated_update_num, &invalidated_annext_hint)) {
+		channel_internal_error(channel, "Invalid onchain new_state_output");
+    }
+
+    /* Populate state output hints for listpeers */
+    channel->onchain_state_outpoint = out;
+    channel->onchain_invalidated_update_num = invalidated_update_num;
+    tal_free(channel->onchain_invalidated_annex_hint);
+    channel->onchain_invalidated_annex_hint = tal_steal(channel, invalidated_annext_hint);
+}
+
 /** handle_onchain_broadcast_rbf_tx_cb
  *
  * @brief suppresses the rebroadcast of a
@@ -637,6 +654,7 @@ static unsigned int onchain_msg(struct subd *sd, const u8 *msg, const int *fds U
     /* These are illegal */
     case WIRE_ELTOO_ONCHAIND_INIT:
     case WIRE_ELTOO_ONCHAIND_INIT_REPLY:
+    case WIRE_ELTOO_ONCHAIND_NEW_STATE_OUTPUT:
         abort();
 	}
 
@@ -672,6 +690,9 @@ static unsigned int eltoo_onchain_msg(struct subd *sd, const u8 *msg, const int 
 	case WIRE_ONCHAIND_ANNOTATE_TXOUT:
 		onchain_annotate_txout(sd->channel, msg);
 		break;
+    case WIRE_ELTOO_ONCHAIND_NEW_STATE_OUTPUT:
+        handle_new_state_output(sd->channel, msg);
+        break;
 	case WIRE_ONCHAIND_HTLC_TIMEOUT:
         /* FIXME what needs to change for handling? */
 		handle_onchain_htlc_timeout(sd->channel, msg);
