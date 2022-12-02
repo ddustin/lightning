@@ -1027,7 +1027,6 @@ static void json_add_channel(struct lightningd *ld,
                              &channel->local_funding_pubkey,
                              &channel->channel_info.remote_fundingkey,
                              &channel->eltoo_keyset.last_complete_state.session);
-
         }
         json_add_tx(response, "last_update_tx", bound_update_and_settle_txs[0]);
         json_add_tx(response, "last_settle_tx", bound_update_and_settle_txs[1]);
@@ -1036,7 +1035,15 @@ static void json_add_channel(struct lightningd *ld,
         json_add_tx(response, "unbound_update_tx", channel->eltoo_keyset.complete_update_tx);
         json_add_tx(response, "unbound_settle_tx", channel->eltoo_keyset.complete_settle_tx);
 
-        /* FIXME we need to expose committed txs too for settlement purposes at least */
+        /* Committed settle tx exists, rebind it with latest hint then unbind right after (just prevout modification) */
+        if (channel->eltoo_keyset.committed_settle_tx) {
+            struct bitcoin_outpoint blank_out;
+            memset(blank_out.txid.shad.sha.u.u8, 0, sizeof(blank_out.txid));
+            blank_out.n = 0;
+            bind_settle_tx(channel->onchain_committed_hint.txid, channel->onchain_committed_hint.n, channel->eltoo_keyset.committed_settle_tx);
+            json_add_tx(response, "last_committed_settle_tx", channel->eltoo_keyset.committed_settle_tx);
+            bind_settle_tx(blank_out.txid, blank_out.n, channel->eltoo_keyset.committed_settle_tx);
+        }
     }
 
 	json_object_end(response);

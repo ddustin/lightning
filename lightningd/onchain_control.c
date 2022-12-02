@@ -342,10 +342,15 @@ static void handle_new_state_output(struct channel *channel, const u8 *msg)
     }
 
     /* Populate state output hints for listpeers */
-    channel->onchain_state_outpoint = out;
-    channel->onchain_invalidated_update_num = invalidated_update_num;
-    tal_free(channel->onchain_invalidated_annex_hint);
-    channel->onchain_invalidated_annex_hint = tal_steal(channel, invalidated_annext_hint);
+    if (tal_count(invalidated_annext_hint) > 0) {
+        channel->onchain_state_outpoint = out;
+        channel->onchain_invalidated_update_num = invalidated_update_num;
+        tal_free(channel->onchain_invalidated_annex_hint);
+        channel->onchain_invalidated_annex_hint = tal_steal(channel, invalidated_annext_hint);
+    } else {
+        /* No annex hint means this is a committed_settle_tx rebind hint only */
+        channel->onchain_committed_hint = out;
+    }
 }
 
 /** handle_onchain_broadcast_rbf_tx_cb

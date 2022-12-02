@@ -14,6 +14,11 @@ bool deprecated_apis = false;
 struct channel *any_channel_by_scid(struct lightningd *ld UNNEEDED,
 				    const struct short_channel_id *scid UNNEEDED)
 { fprintf(stderr, "any_channel_by_scid called!\n"); abort(); }
+/* Generated stub for bind_settle_tx */
+void bind_settle_tx(const struct bitcoin_txid update_txid UNNEEDED,
+                    int output_index UNNEEDED,
+                    struct bitcoin_tx *settle_tx UNNEEDED)
+{ fprintf(stderr, "bind_settle_tx called!\n"); abort(); }
 /* Generated stub for bind_txs_to_funding_outpoint */
 struct bitcoin_tx **bind_txs_to_funding_outpoint(const struct bitcoin_tx *update_tx UNNEEDED,
                              const struct bitcoin_outpoint *funding UNNEEDED,
