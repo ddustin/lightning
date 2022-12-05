@@ -177,5 +177,3 @@ msgdata,eltoo_onchaind_new_state_output,new_prevout,bitcoin_outpoint,
 msgdata,eltoo_onchaind_new_state_output,invalidated_update_num,u32,
 msgdata,eltoo_onchaind_new_state_output,annex_hint_len,u16,
 msgdata,eltoo_onchaind_new_state_output,invalidated_annex_hint,u8,annex_hint_len
-
-
