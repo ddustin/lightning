@@ -922,6 +922,7 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
 	struct lightningd *ld = channel->peer->ld;
 	int hsmfd;
 	enum state_change reason;
+    u32 htlc_feerate;
 
 	/* use REASON_ONCHAIN or closer's reason, if known */
 	reason = REASON_ONCHAIN;
@@ -962,6 +963,14 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
 		return KEEP_WATCHING;
 	}
 
+    htlc_feerate = htlc_resolution_feerate(ld->topology);
+    /* Unlike classic LN, we don't have any transactions sitting around to harvest feerates from */
+    if (htlc_feerate == 0) {
+        log_unusual(ld->log, "Could not retrieve valid htlc resolution feerate for eltoo_onchaind. Continuing.");
+        /* FIXME we should guess better, at least take mempool min fee into account? Or figure out better fix */
+        htlc_feerate = 250*5; /* default mempool min times 5 */
+    }
+
     /* Add HTLCs to init, since we know which HTLCs will be exposed */
 	msg = towire_eltoo_onchaind_init(channel,
         chainparams,
@@ -975,6 +984,7 @@ enum watch_result eltoo_onchaind_funding_spent(struct channel *channel,
         channel->eltoo_keyset.committed_settle_tx,
         blockheight,
         channel->our_msat,
+        htlc_feerate,
         channel->shutdown_scriptpubkey[LOCAL],
         channel->shutdown_scriptpubkey[REMOTE],
         &channel->local_funding_pubkey,
