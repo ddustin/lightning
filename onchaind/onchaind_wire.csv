@@ -155,6 +155,7 @@ msgdata,eltoo_onchaind_init,committed_settle_tx,?bitcoin_tx,
 msgdata,eltoo_onchaind_init,tx_blockheight,u32,
 msgdata,eltoo_onchaind_init,our_msat,amount_msat,
 msgdata,eltoo_onchaind_init,htlc_feerate,u32,
+msgdata,eltoo_onchaind_init,local_dust_limit_satoshi,amount_sat,
 msgdata,eltoo_onchaind_init,local_scriptpubkey_len,u16,
 msgdata,eltoo_onchaind_init,local_scriptpubkey,u8,local_scriptpubkey_len
 msgdata,eltoo_onchaind_init,remote_scriptpubkey_len,u16,
