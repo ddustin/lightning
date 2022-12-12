@@ -386,8 +386,14 @@ class BitcoinD(TailableProc):
             '-nolisten',
             '-txindex',
             '-nowallet',
-            '-addresstype=bech32'
+            '-addresstype=bech32',
         ]
+
+        # Only for eltoo testing
+        if os.environ.get('BITCOIND_ELTOO_ARGS'):
+            self.cmd_line.append("-trueoutputs=1")
+            self.cmd_line.append("-annexcarrier=1")
+
         # For up to and including 0.16.1, this needs to be in main section.
         BITCOIND_CONFIG['rpcport'] = rpcport
         # For after 0.16.1 (eg. 3f398d7a17f136cd4a67998406ca41a124ae2966), this
