@@ -148,6 +148,11 @@ impl From<&responses::ListpeersPeersChannels> for pb::ListpeersPeersChannels {
             out_payments_fulfilled: c.out_payments_fulfilled.clone(), // Rule #2 for type u64?
             out_fulfilled_msat: c.out_fulfilled_msat.map(|f| f.into()), // Rule #2 for type msat?
             htlcs: c.htlcs.as_ref().map(|arr| arr.iter().map(|i| i.into()).collect()).unwrap_or(vec![]), // Rule #3 
+            last_update_tx: c.last_update_tx.clone(), // Rule #2 for type string?
+            last_settle_tx: c.last_settle_tx.clone(), // Rule #2 for type string?
+            unbound_update_tx: c.unbound_update_tx.clone(), // Rule #2 for type string?
+            unbound_settle_tx: c.unbound_settle_tx.clone(), // Rule #2 for type string?
+            last_committed_settle_tx: c.last_committed_settle_tx.clone(), // Rule #2 for type string?
             close_to_addr: c.close_to_addr.clone(), // Rule #2 for type string?
         }
     }

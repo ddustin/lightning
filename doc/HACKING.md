@@ -220,6 +220,9 @@ There are four kinds of tests:
   `DEBUG_SUBD=<subdaemon>` and `TIMEOUT=<seconds>` can be useful for debugging
   subdaemons on individual tests.
 
+  You need `bitcoind` installed in your path, or must supply one as an environmental variable:
+  `BITCOIND_TEST_PATH=<path>`
+
 * **pylightning tests** - will check contrib pylightning for codestyle and run
   the tests in `contrib/pylightning/tests` afterwards:
 

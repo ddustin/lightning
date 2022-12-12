@@ -122,6 +122,11 @@ On success, an object containing **peers** is returned.  It is an array of objec
 
     If **direction** is "in":
       - **state** (string): Status of the HTLC (one of "RCVD_ADD_HTLC", "RCVD_ADD_COMMIT", "SENT_ADD_REVOCATION", "SENT_ADD_ACK_COMMIT", "RCVD_ADD_ACK_REVOCATION", "SENT_REMOVE_HTLC", "SENT_REMOVE_COMMIT", "RCVD_REMOVE_REVOCATION", "RCVD_REMOVE_ACK_COMMIT", "SENT_REMOVE_ACK_REVOCATION")
+  - **last_update_tx** (string, optional): latest signed and finalized update transaction bound to latest state output
+  - **last_settle_tx** (string, optional): latest signed and finalized settle transaction bound to last_update_tx state outpoint
+  - **unbound_update_tx** (string, optional): latest unfinalized update transaction
+  - **unbound_settle_tx** (string, optional): latest unfinalized settle transaction
+  - **last_committed_settle_tx** (string, optional): latest finalized settle transaction bound to a committed-but-not-complete update transaction
 
   If **close_to** is present:
     - **close_to_addr** (string, optional): The bitcoin address we will close to
@@ -380,4 +385,4 @@ Main web site: <https://github.com/ElementsProject/lightning> Lightning
 RFC site (BOLT \#9):
 <https://github.com/lightningnetwork/lightning-rfc/blob/master/09-features.md>
 
-[comment]: # ( SHA256STAMP:6b0ec5c899c8685487190209f594635030205a275e1dc6d61a7b057adbf66192)
+[comment]: # ( SHA256STAMP:ce4894e2a9dab0e3994bb88b6e3ba925ac80c0535236125bf544fb67d056ebf7)

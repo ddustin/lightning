@@ -210,6 +210,11 @@ message ListpeersPeersChannels {
 	optional uint64 out_payments_fulfilled = 44;
 	optional Amount out_fulfilled_msat = 45;
 	repeated ListpeersPeersChannelsHtlcs htlcs = 46;
+	optional string last_update_tx = 50;
+	optional string last_settle_tx = 51;
+	optional string unbound_update_tx = 52;
+	optional string unbound_settle_tx = 53;
+	optional string last_committed_settle_tx = 54;
 	optional string close_to_addr = 47;
 }
 

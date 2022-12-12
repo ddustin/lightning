@@ -1220,6 +1220,16 @@ pub mod responses {
 	    pub out_fulfilled_msat: Option<Amount>,
 	    #[serde(alias = "htlcs", skip_serializing_if = "Option::is_none")]
 	    pub htlcs: Option<Vec<ListpeersPeersChannelsHtlcs>>,
+	    #[serde(alias = "last_update_tx", skip_serializing_if = "Option::is_none")]
+	    pub last_update_tx: Option<String>,
+	    #[serde(alias = "last_settle_tx", skip_serializing_if = "Option::is_none")]
+	    pub last_settle_tx: Option<String>,
+	    #[serde(alias = "unbound_update_tx", skip_serializing_if = "Option::is_none")]
+	    pub unbound_update_tx: Option<String>,
+	    #[serde(alias = "unbound_settle_tx", skip_serializing_if = "Option::is_none")]
+	    pub unbound_settle_tx: Option<String>,
+	    #[serde(alias = "last_committed_settle_tx", skip_serializing_if = "Option::is_none")]
+	    pub last_committed_settle_tx: Option<String>,
 	    #[serde(alias = "close_to_addr", skip_serializing_if = "Option::is_none")]
 	    pub close_to_addr: Option<String>,
 	}
