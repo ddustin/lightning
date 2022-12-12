@@ -738,6 +738,26 @@
                       }
                     ]
                   }
+                },
+                "last_update_tx": {
+                    "type": "string",
+                    "description": "latest signed and finalized update transaction bound to latest state output"
+                },
+                "last_settle_tx": {
+                    "type": "string",
+                    "description": "latest signed and finalized settle transaction bound to last_update_tx state outpoint"
+                },
+                "unbound_update_tx": {
+                    "type": "string",
+                    "description": "latest unfinalized update transaction"
+                },
+                "unbound_settle_tx": {
+                    "type": "string",
+                    "description": "latest unfinalized settle transaction"
+                },
+                "last_committed_settle_tx": {
+                    "type": "string",
+                    "description": "latest finalized settle transaction bound to a committed-but-not-complete update transaction"
                 }
               },
               "allOf": [
@@ -813,6 +833,11 @@
                       "out_fulfilled_msat": {},
                       "out_msatoshi_fulfilled": {},
                       "htlcs": {},
+                      "last_update_tx": {},
+                      "last_settle_tx": {},
+                      "unbound_update_tx": {},
+                      "unbound_settle_tx": {},
+                      "last_committed_settle_tx": {},
                       "initial_feerate": {},
                       "last_feerate": {},
                       "next_feerate": {},
@@ -902,6 +927,11 @@
                       "out_fulfilled_msat": {},
                       "out_msatoshi_fulfilled": {},
                       "htlcs": {},
+                      "last_update_tx": {},
+                      "last_settle_tx": {},
+                      "unbound_update_tx": {},
+                      "unbound_settle_tx": {},
+                      "last_committed_settle_tx": {},
                       "initial_feerate": {},
                       "last_feerate": {},
                       "next_feerate": {},
@@ -992,6 +1022,11 @@
                       "out_fulfilled_msat": {},
                       "out_msatoshi_fulfilled": {},
                       "htlcs": {},
+                      "last_update_tx": {},
+                      "last_settle_tx": {},
+                      "unbound_update_tx": {},
+                      "unbound_settle_tx": {},
+                      "last_committed_settle_tx": {},
                       "initial_feerate": {},
                       "last_feerate": {},
                       "next_feerate": {},
@@ -1081,6 +1116,11 @@
                       "out_fulfilled_msat": {},
                       "out_msatoshi_fulfilled": {},
                       "htlcs": {},
+                      "last_update_tx": {},
+                      "last_settle_tx": {},
+                      "unbound_update_tx": {},
+                      "unbound_settle_tx": {},
+                      "last_committed_settle_tx": {},
                       "inflight": {},
                       "last_tx_fee": {},
                       "close_to_addr": {},
