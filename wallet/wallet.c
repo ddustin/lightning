@@ -2943,6 +2943,41 @@ struct invoice_details *wallet_invoice_details(const tal_t *ctx,
 	return invoices_get_details(ctx, wallet->invoices, invoice);
 }
 
+struct htlc_stub *all_wallet_htlc_stubs(const tal_t *ctx, struct wallet *wallet,
+				    struct channel *chan)
+{
+	struct htlc_stub *stubs;
+	struct sha256 payment_hash;
+	struct db_stmt *stmt;
+
+	stmt = db_prepare_v2(wallet->db,
+			     SQL("SELECT channel_id, direction, cltv_expiry, "
+				 "channel_htlc_id, payment_hash "
+				 "FROM channel_htlcs WHERE channel_id = ?;"));
+
+	db_bind_u64(stmt, 0, chan->dbid);
+	db_query_prepared(stmt);
+
+	stubs = tal_arr(ctx, struct htlc_stub, 0);
+
+	while (db_step(stmt)) {
+		struct htlc_stub stub;
+
+		assert(db_col_u64(stmt, "channel_id") == chan->dbid);
+
+		/* FIXME: merge these two enums */
+		stub.owner = db_col_int(stmt, "direction")==DIRECTION_INCOMING?REMOTE:LOCAL;
+		stub.cltv_expiry = db_col_int(stmt, "cltv_expiry");
+		stub.id = db_col_u64(stmt, "channel_htlc_id");
+
+		db_col_sha256(stmt, "payment_hash", &payment_hash);
+		ripemd160(&stub.ripemd, payment_hash.u.u8, sizeof(payment_hash.u));
+		tal_arr_expand(&stubs, stub);
+	}
+	tal_free(stmt);
+	return stubs;
+}
+
 struct htlc_stub *wallet_htlc_stubs(const tal_t *ctx, struct wallet *wallet,
 				    struct channel *chan, u64 commit_num)
 {

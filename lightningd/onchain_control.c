@@ -142,9 +142,6 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 {
 	struct htlc_stub *stubs;
 	bool *tell, *tell_immediate;
-    /* We are only interested in latest HTLCs, the ones we will recall */
-	u64 complete_update_num = channel->eltoo_keyset.complete_update_tx->wtx->locktime;
-    // u64 committed_update_num = complete_update_num + 1; /* May not exist, that's ok */
 
     /* Signaling ready, send more data */
 	if (!fromwire_eltoo_onchaind_init_reply(msg)) {
@@ -160,9 +157,8 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 			  REASON_UNKNOWN,
 			  "Onchain init reply");
 
-	/* Tell it about any relevant HTLCs */
-	stubs = wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel,
-				  complete_update_num);
+	/* Tell it about any relevant HTLCs. Future Work: Delete stale HTLCS from db */
+	stubs = all_wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel);
 	tell = tal_arr(stubs, bool, tal_count(stubs));
 	tell_immediate = tal_arr(stubs, bool, tal_count(stubs));
 
@@ -172,23 +168,10 @@ static void handle_eltoo_onchain_init_reply(struct channel *channel, const u8 *m
 	}
 	msg = towire_onchaind_htlcs(channel, stubs, tell, tell_immediate);
 
+	log_info(channel->log, "Telling eltoo_onchaind about %lu HTLCs", tal_count(stubs));
 	subd_send_msg(channel->owner, take(msg));
 
-    /* FIXME Do the same steps again for committed htlcs, if they exist
-	stubs = wallet_htlc_stubs(tmpctx, channel->peer->ld->wallet, channel,
-				  committed_update_num);
-	tell = tal_arr(stubs, bool, tal_count(stubs));
-	tell_immediate = tal_arr(stubs, bool, tal_count(stubs));
-
-	for (size_t i = 0; i < tal_count(stubs); i++) {
-		tell[i] = tell_if_missing(channel, &stubs[i],
-					  &tell_immediate[i]);
-	}
-	msg = towire_onchaind_htlcs(channel, stubs, tell, tell_immediate);
-
-	subd_send_msg(channel->owner, take(msg)); */
-
-	/* Finally, ell it about any preimages we know. */
+	/* Finally, tell it about any preimages we know. */
 	onchaind_tell_fulfill(channel);
 }
 
