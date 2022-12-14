@@ -1264,7 +1264,7 @@ u8 *make_eltoo_funding_update_script(const tal_t *ctx)
     return script;
 }
 
-u8 *make_eltoo_htlc_success_script(const tal_t *ctx, const struct pubkey *settlement_pubkey, const u8 *invoice_hash)
+u8 *make_eltoo_htlc_success_script(const tal_t *ctx, const struct pubkey *settlement_pubkey, const struct ripemd160 *invoice_hash)
 {
     /* where EXPR_SUCCESS =
      *
@@ -1278,7 +1278,7 @@ OP_EQUAL`
 	add_number(&script, 32);
 	add_op(&script, OP_EQUALVERIFY);
 	add_op(&script, OP_HASH160);
-    script_push_bytes(&script, invoice_hash, 20);
+    script_push_bytes(&script, invoice_hash->u.u8, sizeof(invoice_hash->u.u8));
 	add_op(&script, OP_EQUAL);
     return script;
 }
