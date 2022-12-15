@@ -387,6 +387,7 @@ class BitcoinD(TailableProc):
             '-txindex',
             '-nowallet',
             '-addresstype=bech32',
+            '-debug=1',
         ]
 
         # Only for eltoo testing
