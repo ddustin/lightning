@@ -88,7 +88,7 @@ def wait_for(success, timeout=TIMEOUT):
     while not success():
         time_left = start_time + timeout - time.time()
         if time_left <= 0:
-            raise ValueError("Timeout while waiting for {}", success)
+            raise ValueError("Timeout while waiting for {}".format(success))
         time.sleep(min(interval, time_left))
         interval *= 2
         if interval > 5:
@@ -1111,7 +1111,7 @@ class LightningNode(object):
         """Wait for onchaind to drop tx name to resolve (if any)"""
         if resolve:
             r = self.daemon.wait_for_log('Broadcasting {} .* to resolve {}'
-                                         .format(name, resolve))
+                                         .format(name, resolve, 1))
         else:
             r = self.daemon.wait_for_log('Broadcasting {} .* to resolve '
                                          .format(name))
