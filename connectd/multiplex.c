@@ -1047,7 +1047,7 @@ static struct io_plan *read_body_from_peer_done(struct io_conn *peer_conn,
        if (!subd) {
 	       enum peer_wire t = fromwire_peektype(decrypted);
 	       status_peer_debug(&peer->id, "Activating for message %s, channel %s",
-				 peer_wire_name(t), type_to_string(subd, struct channel_id, &channel_id));
+				 peer_wire_name(t), type_to_string(tmpctx, struct channel_id, &channel_id));
 	       subd = activate_subd(peer, &t, &channel_id);
 	       if (!subd)
 		       return io_close(peer_conn);
