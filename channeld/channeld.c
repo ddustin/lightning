@@ -1560,7 +1560,10 @@ static void send_commit(struct peer *peer)
 						&peer->remote_per_commit,
 						peer->next_index[REMOTE], REMOTE);
 
-		status_debug("SPLICE calc_commitsigs tx: %s", tal_hex(tmpctx, splice_txs[0]));
+		status_debug("SPLICE calc_commitsigs tx: %s",
+			     tal_hex(tmpctx,
+				     linearize_tx(tmpctx,
+						  splice_txs[0])));
 
 		/* Expand the larger commit's cs_tlv->splice_commitsigs array
 		 * as needed */
@@ -2058,7 +2061,10 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 						&splice_funding_wscript, peer->channel,
 						&peer->next_local_per_commit,
 						peer->next_index[LOCAL], LOCAL);
-		status_debug("SPLICE check_tx_sig tx: %s", tal_hex(tmpctx, splice_txs[0]));
+		status_debug("SPLICE check_tx_sig tx: %s", // SPLICE calc_commitsigs
+			     tal_hex(tmpctx,
+				     linearize_tx(tmpctx,
+						  splice_txs[0])));
 		/* check_tx_sig failing on on l2. dump splice_txs[0] here */
 		if (!check_tx_sig(splice_txs[0], 0, NULL, splice_funding_wscript,
 				  &peer->channel->funding_pubkey[REMOTE], &splice_commit_sig)) {
@@ -2662,7 +2668,10 @@ static void interactive_send_commitments(struct peer *peer,
 		if (type != WIRE_REVOKE_AND_ACK)
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					"Splicing got incorrect message from peer: %d "
-					"(should be WIRE_REVOKE_AND_ACK)", type);
+					"(should be WIRE_REVOKE_AND_ACK) [%s]",
+					type,
+					sanitize_error(tmpctx, msg,
+						       &peer->channel_id));
 
 		handle_peer_revoke_and_ack(peer, msg);
 	}
@@ -2689,6 +2698,29 @@ static void interactive_send_commitments(struct peer *peer,
 
 		handle_peer_revoke_and_ack(peer, msg);
 	}
+}
+
+static int find_channel_output(struct peer *peer, struct wally_psbt *psbt)
+{
+	const u8 *wit_script;
+	u8 *scriptpubkey;
+
+	wit_script = bitcoin_redeem_2of2(tmpctx,
+					 &peer->channel->funding_pubkey[0],
+					 &peer->channel->funding_pubkey[1]);
+
+	scriptpubkey = scriptpubkey_p2wsh(psbt, wit_script);
+
+	for (int i = 0; i < psbt->tx->num_outputs; i++)
+		if(memeq(psbt->tx->outputs[i].script,
+			 psbt->tx->outputs[i].script_len,
+			 scriptpubkey,
+			 tal_bytelen(scriptpubkey)))
+			return i;
+
+	status_failed(STATUS_FAIL_INTERNAL_ERROR,
+		      "Unable to find channel output");
+	return -1;
 }
 
 /* ACCEPTER side of the splice. Here we handle all the accepter's steps for the
@@ -2796,8 +2828,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		status_failed(STATUS_FAIL_INTERNAL_ERROR,
 			      "Unable to find splice funding tx");
 
-	chan_output_index = 0;
-	/* DTODO: Calculate chan_output_index for cases where it's not index 0 */
+	chan_output_index = find_channel_output(peer, ictx->current_psbt);
 
 	struct wally_tx_output *newChanOutpoint = &ictx->current_psbt->tx->outputs[chan_output_index];
 
@@ -2818,19 +2849,23 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	change_out = AMOUNT_SAT(0);
 
-	/* i = 1 to skip the first output (which is our new channel output!) */
+	for (int i = 0; i < ictx->current_psbt->tx->num_outputs; i++)
+		if(i != chan_output_index)
+			if(!amount_sat_add(&change_out, change_out,
+					   psbt_output_get_amount(ictx->current_psbt, i)))
+				peer_failed_warn(peer->pps, &peer->channel_id,
+						 "Unable to add output amounts");
 
-	/* DTODO: Find the index of our channel output explicitly. */
-	for (int i = 1; i < ictx->current_psbt->tx->num_outputs; i++)
-		if(!amount_sat_add(&change_out, change_out,
-				   psbt_output_get_amount(ictx->current_psbt, i)))
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Unable to add output amounts");
+	status_info("Splice accepter intiator amnt: %d", (int)intiator_amount.satoshis);
+	status_info("Splice accepter accepter amnt: %d", (int)accepter_amount.satoshis);
 
 	/* Calculate total channel output amount */
 	if(!amount_sat_add(&both_amount, intiator_amount, accepter_amount))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate channel amount");
+
+	status_info("Splice accepter both amnt: %d", (int)both_amount.satoshis);
+	status_info("Splice accepter change amnt: %d", (int)change_out.satoshis);
 
 	/* Calculate miner fee */
 	if(!amount_sat_sub(&miner_fee, total_in, change_out))
@@ -2850,6 +2885,10 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	outpoint.n = 0;
 	/* DTODO find output index using redeem script & validate there
 	 * is only one */
+
+	psbt_finalize(ictx->current_psbt);
+
+	status_debug("Splice accepter adding inflight: %s", psbt_to_b64(tmpctx, ictx->current_psbt));
 
 	/* DTODO add inflight to the local inflight cache when built */
 	wire_sync_write(MASTER_FD,
@@ -2877,6 +2916,8 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	splice_sig.sighash_type = SIGHASH_ALL;
 
 	bitcoin_tx = bitcoin_tx_with_psbt(tmpctx, ictx->current_psbt);
+
+	status_info("Splice[ACK] signing tx: %s", tal_hex(tmpctx, linearize_tx(tmpctx, bitcoin_tx)));
 
 	msg = towire_hsmd_sign_splice_tx(tmpctx, bitcoin_tx,
 					 &peer->channel->funding_pubkey[REMOTE],
@@ -3083,7 +3124,6 @@ static void splice_intiator(struct peer *peer, const u8 *inmsg)
 {
 	struct bitcoin_blkid genesis_blockhash;
 	struct channel_id channel_id;
-	struct amount_sat accepter_amount;
 	struct pubkey splice_remote_pubkey;
 	size_t input_index;
 	const u8 *wit_script;
@@ -3100,7 +3140,7 @@ static void splice_intiator(struct peer *peer, const u8 *inmsg)
 	if (!fromwire_splice_ack(inmsg,
 				 &channel_id,
 				 &genesis_blockhash,
-				 &accepter_amount,
+				 &peer->splice_accepter_funding,
 				 &splice_remote_pubkey))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Bad wire_splice_ack %s", tal_hex(tmpctx, inmsg));
@@ -3249,29 +3289,6 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 	wire_sync_write(MASTER_FD, take(outmsg));
 }
 
-static int find_channel_output(struct peer *peer, struct wally_psbt *psbt)
-{
-	const u8 *wit_script;
-	u8 *scriptpubkey;
-
-	wit_script = bitcoin_redeem_2of2(tmpctx,
-					 &peer->channel->funding_pubkey[0],
-					 &peer->channel->funding_pubkey[1]);
-
-	scriptpubkey = scriptpubkey_p2wsh(psbt, wit_script);
-
-	for (int i = 0; i < psbt->tx->num_outputs; i++)
-		if(memeq(psbt->tx->outputs[i].script,
-			 psbt->tx->outputs[i].script_len,
-			 scriptpubkey,
-			 tal_bytelen(scriptpubkey)))
-			return i;
-
-	status_failed(STATUS_FAIL_INTERNAL_ERROR,
-		      "Unable to find channel output");
-	return -1;
-}
-
 /* This occurs when the user has marked they are done making changes to the
  * PSBT. Now we continually send `tx_complete` and intake our peer's changes
  * inside `process_interactivetx_updates`. Once they are onboard indicated
@@ -3284,7 +3301,8 @@ static void splice_intiator_user_finalized(struct peer *peer, const u8 *inmsg)
 	char *error;
 	int chan_output_index;
 	struct wally_tx_output *newChanOutpoint;
-	struct amount_sat total_in, change_out, miner_fee, outpoint_sats;
+	struct amount_sat both_amount,
+			  total_in, change_out;
 
 	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
 					 peer->pps, peer->channel_id);
@@ -3336,16 +3354,20 @@ static void splice_intiator_user_finalized(struct peer *peer, const u8 *inmsg)
 				peer_failed_warn(peer->pps, &peer->channel_id,
 						 "Unable to amount_sat_add output amounts");
 
-	miner_fee.satoshis = 1000;
+	status_debug("Splice intiator amnt: %d", (int)peer->splice_opener_funding.satoshis);
+	status_debug("Splice accepter amnt: %d", (int)peer->splice_accepter_funding.satoshis);
 
-	if(!amount_sat_sub(&outpoint_sats, total_in, change_out))
+	/* Calculate total channel output amount */
+	if(!amount_sat_add(&both_amount,
+			   peer->splice_opener_funding,
+			   peer->splice_accepter_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to subtract change from total");
-	if(!amount_sat_sub(&outpoint_sats, outpoint_sats, miner_fee))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to subtract miner fee from output_sats");
+				 "Unable to calculate channel amount");
 
-	newChanOutpoint->satoshi = outpoint_sats.satoshis;
+	status_debug("Splice both amnt: %d", (int)both_amount.satoshis);
+	status_debug("Splice change amnt: %d", (int)change_out.satoshis);
+
+	newChanOutpoint->satoshi = both_amount.satoshis;
 
 	/* DTODO: audit if we need more checks at this point (check feerate,
 	 * copy dualopen checks, spec, etc) */
@@ -3420,6 +3442,8 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	/* DTODO: calculate our_funding_sats */
 	our_funding_sats = amount_sat(newChanOutpoint->satoshi);
 
+	status_debug("Splice adding inflight: %s", psbt_to_b64(tmpctx, signed_psbt));
+
 	wire_sync_write(MASTER_FD,
 			towire_channeld_add_inflight(tmpctx,
 						     &outpoint.txid,
@@ -3455,6 +3479,8 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	if (splice_funding_index == -1)
 		status_failed(STATUS_FAIL_INTERNAL_ERROR,
 			      "Unable to find splice funding tx");
+
+	status_debug("Splice signing tx: %s", tal_hex(tmpctx, linearize_tx(tmpctx, bitcoin_tx)));
 
 	/* Have HSMD sign over the funding tx -> splice tx */
 	msg = towire_hsmd_sign_splice_tx(tmpctx, bitcoin_tx,
@@ -3570,7 +3596,7 @@ static void handle_splice_stfu_success(struct peer *peer)
 {
 	u32 funding_feerate_perkw;
 
-	/* DTODO: calculate intiator_amount and funding_feerate_perkw */
+	/* DTODO: calculate funding_feerate_perkw */
 	funding_feerate_perkw = 0;
 
 	u8 *msg = towire_splice(tmpctx,
