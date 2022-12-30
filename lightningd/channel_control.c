@@ -1703,6 +1703,10 @@ static struct command_result *json_splice_init(struct command *cmd,
 	if(!initialpsbt)
 		initialpsbt = create_psbt(cmd, 0, 0, 0);
 
+	/* DTODO: For now we force locktime to 0 until spec issue is resolved
+	 * https://github.com/lightning/bolts/pull/863/files#r1059493624 */
+	initialpsbt->tx->locktime = 0;
+
 	channel = splice_load_channel(cmd, id, &error);
 	if (error)
 		return error;
