@@ -1691,21 +1691,19 @@ static struct command_result *json_splice_init(struct command *cmd,
 	struct command_result *error;
 	struct wally_psbt *initialpsbt;
 	struct amount_sat *amount;
+	u32 *feerate_per_kw;
 	u8 *msg;
 
 	if(!param(cmd, buffer, params,
 		  p_req("id", param_node_id, &id),
 		  p_req("amount", param_sat, &amount),
 		  p_opt("initialpsbt", param_psbt, &initialpsbt),
+		  p_opt("feerate_per_kw", param_feerate, &feerate_per_kw),
 		  NULL))
 		return command_param_failed();
 
 	if(!initialpsbt)
 		initialpsbt = create_psbt(cmd, 0, 0, 0);
-
-	/* DTODO: For now we force locktime to 0 until spec issue is resolved
-	 * https://github.com/lightning/bolts/pull/863/files#r1059493624 */
-	initialpsbt->tx->locktime = 0;
 
 	channel = splice_load_channel(cmd, id, &error);
 	if (error)
@@ -1718,7 +1716,8 @@ static struct command_result *json_splice_init(struct command *cmd,
 	cc->cmd = tal_steal(cc, cmd);
 	cc->channel = channel;
 
-	msg = towire_channeld_splice_init(NULL, initialpsbt, *amount);
+	msg = towire_channeld_splice_init(NULL, initialpsbt, *amount,
+					  feerate_per_kw);
 
 	subd_send_msg(channel->owner, take(msg));
 	return command_still_pending(cmd);

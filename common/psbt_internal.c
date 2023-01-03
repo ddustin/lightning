@@ -291,3 +291,29 @@ psbt_to_witness_stacks(const tal_t *ctx,
 	tal_resize(&stacks, stack_index);
 	return stacks;
 }
+
+size_t psbt_input_weight(struct wally_psbt *psbt,
+				size_t in)
+{
+	size_t weight;
+
+	/* txid + txout + sequence */
+	weight = (32 + 4 + 4) * 4;
+	weight +=
+		(psbt->inputs[in].redeem_script_len +
+			(varint_t) varint_size(psbt->inputs[in].redeem_script_len)) * 4;
+
+	/* BOLT-f53ca2301232db780843e894f55d95d512f297f9 #3:
+	 *
+	 * The minimum witness weight for an input is 110.
+	 */
+	weight += 110;
+	return weight;
+}
+
+size_t psbt_output_weight(struct wally_psbt *psbt,
+				 size_t outnum)
+{
+	return (8 + psbt->tx->outputs[outnum].script_len +
+		varint_size(psbt->tx->outputs[outnum].script_len)) * 4;
+}

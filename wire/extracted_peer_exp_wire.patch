@@ -1,6 +1,6 @@
 --- wire/peer_exp_wire.csv	2021-10-18 11:43:51.851963867 -0500
 +++ -	2021-10-18 11:43:56.623816578 -0500
-@@ -127,6 +85,19 @@
+@@ -127,6 +85,20 @@
  msgtype,stfu,2
  msgdata,stfu,channel_id,channel_id,
  msgdata,stfu,initiator,u8,
@@ -9,6 +9,7 @@
 +msgdata,splice,chain_hash,chain_hash,
 +msgdata,splice,funding_satoshis,u64,
 +msgdata,splice,funding_feerate_perkw,u32,
++msgdata,splice,locktime,u32,
 +msgdata,splice,funding_pubkey,point,
 +msgtype,splice_ack,76
 +msgdata,splice_ack,channel_id,channel_id,
