@@ -730,8 +730,19 @@ void channel_set_last_eltoo_txs(struct channel *channel,
 	tal_free(channel->eltoo_keyset.complete_settle_tx);
     channel->eltoo_keyset.complete_settle_tx = tal_steal(channel, settle_tx);
 
-    /* FIXME We also clear out committed */
+	/* We should never have committed txs since we are the one
+	 * receiving the committment from peer */
+	assert(!channel->eltoo_keyset.committed_update_tx);
+	assert(!channel->eltoo_keyset.committed_settle_tx);
 
+	/* In this case this data was not filled out yet, so we fill it
+	 * to allow for channel reestablishment based on these fields.
+	 */
+    channel->eltoo_keyset.last_committed_state.other_psig = *their_psig;
+    channel->eltoo_keyset.last_committed_state.self_psig = *our_psig;
+    channel->eltoo_keyset.last_committed_state.session = *session;
+
+	/* But it's also complete, will be used for on-chain */
     channel->eltoo_keyset.last_complete_state.other_psig = *their_psig;
     channel->eltoo_keyset.last_complete_state.self_psig = *our_psig;
     channel->eltoo_keyset.last_complete_state.session = *session;
