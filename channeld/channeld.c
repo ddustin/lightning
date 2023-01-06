@@ -154,12 +154,14 @@ struct peer {
 	bool stfu_sent[NUM_SIDES];
 	/* Updates master asked, which we've deferred while quiescing */
 	struct msg_queue *update_queue;
-	/* The amount the user told us to commit to for a splice */
+	/* The opener side's share of post splice channel balance */
 	struct amount_sat splice_opener_funding;
-	/* The amount the peer told us they were committing to for a splice */
+	/* The accepter side's share of post splice channel balance */
 	struct amount_sat splice_accepter_funding;
 	/* The feerate for the splice (on set for the initiator) */
 	u32 splice_feerate_per_kw;
+	/* If the feerate is higher than max, don't abort the splice */
+	bool splice_force_feerate;
 	/* Callback for when when stfu is negotiated successfully */
 	void (*on_stfu_success)(struct peer*);
 	/* The number of splices that have been signed & committed */
@@ -2702,7 +2704,9 @@ static void interactive_send_commitments(struct peer *peer,
 	}
 }
 
-static int find_channel_output(struct peer *peer, struct wally_psbt *psbt)
+static struct wally_tx_output *find_channel_output(struct peer *peer,
+						   struct wally_psbt *psbt,
+						   int *chan_output_index)
 {
 	const u8 *wit_script;
 	u8 *scriptpubkey;
@@ -2713,16 +2717,22 @@ static int find_channel_output(struct peer *peer, struct wally_psbt *psbt)
 
 	scriptpubkey = scriptpubkey_p2wsh(psbt, wit_script);
 
-	for (int i = 0; i < psbt->tx->num_outputs; i++)
+	for (int i = 0; i < psbt->tx->num_outputs; i++) {
 		if(memeq(psbt->tx->outputs[i].script,
 			 psbt->tx->outputs[i].script_len,
 			 scriptpubkey,
-			 tal_bytelen(scriptpubkey)))
-			return i;
+			 tal_bytelen(scriptpubkey))) {
+			if(chan_output_index)
+				*chan_output_index = i;
+			return &psbt->tx->outputs[i];
+		}
+	}
 
 	status_failed(STATUS_FAIL_INTERNAL_ERROR,
 		      "Unable to find channel output");
-	return -1;
+	if(chan_output_index)
+		*chan_output_index = -1;
+	return NULL;
 }
 
 static bool is_openers(const struct wally_map *unknowns)
@@ -2762,6 +2772,146 @@ static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
 	return weight;
 }
 
+/* Returns the total channel funding output amount if all checks pass */
+static struct amount_sat check_balances(struct peer *peer,
+					enum tx_role our_role,
+					struct wally_psbt *psbt,
+					int chan_output_index)
+{
+	struct amount_sat funding_amount, total_in, change_out,
+			  opener_in, opener_out,
+			  accepter_in, accepter_out,
+			  initiator_fee, accepter_fee,
+			  min_initiator_fee, min_accepter_fee,
+			  max_initiator_fee, max_accepter_fee;
+	bool opener = our_role == TX_INITIATOR;
+	u8 *msg;
+
+	total_in = AMOUNT_SAT(0);
+	opener_in = AMOUNT_SAT(0);
+	accepter_in = AMOUNT_SAT(0);
+
+	for (int i = 0; i < psbt->tx->num_inputs; i++) {
+		struct amount_sat amount = psbt_input_get_amount(psbt, i);
+		bool res;
+		if (!amount.satoshis)
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					 "Input %d of splice does not have an input amount",
+					 i);
+		if(!amount_sat_add(&total_in, total_in, amount))
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					 "Unable to amount_sat_add input amounts");
+		/* amount_sat_add would have failed above so no need to check */
+		if(is_openers(&psbt->inputs[i].unknowns))
+			res = amount_sat_add(&opener_in, opener_in, amount);
+		else
+			res = amount_sat_add(&accepter_in, accepter_in, amount);
+		assert(res);
+	}
+
+	change_out = AMOUNT_SAT(0);
+	opener_out = AMOUNT_SAT(0);
+	accepter_out = AMOUNT_SAT(0);
+
+	for (int i = 0; i < psbt->tx->num_outputs; i++) {
+		struct amount_sat amount = psbt_output_get_amount(psbt, i);
+		bool res;
+		if(i == chan_output_index)
+			continue;
+
+		if(!amount_sat_add(&change_out, change_out, amount))
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					 "Unable to amount_sat_add output amounts");
+		/* amount_sat_add would have already failed above */
+		if(is_openers(&psbt->outputs[i].unknowns))
+			res = amount_sat_add(&opener_out, opener_out, amount);
+		else
+			res = amount_sat_add(&accepter_out, accepter_out, amount);
+		assert(res);
+	}
+
+	/* Calculate total channel output amount */
+	if(!amount_sat_add(&funding_amount,
+			   peer->splice_opener_funding,
+			   peer->splice_accepter_funding))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Unable to calculate channel amount");
+
+	min_initiator_fee = amount_tx_fee(peer->splice_feerate_per_kw,
+					  calc_weight(TX_INITIATOR, psbt));
+	min_accepter_fee = amount_tx_fee(peer->splice_feerate_per_kw,
+					 calc_weight(TX_ACCEPTER, psbt));
+
+	/* As a safeguard max feerate is checked (only) locally, if it's
+	 * particularly high we fail and tell the user but allow them to
+	 * override with `splice_force_feerate` */
+	max_accepter_fee = amount_tx_fee(peer->feerate_max,
+					 calc_weight(TX_ACCEPTER, psbt));
+	max_initiator_fee = amount_tx_fee(peer->feerate_max,
+					  calc_weight(TX_INITIATOR, psbt));
+
+	/* Calculate intiator fee contribution */
+	if (!amount_sat_sub(&initiator_fee, opener_in, opener_out))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Unable to calculate intiator fee");
+	/* An extra check for cleaner log messages */
+	if(amount_sat_less(initiator_fee, peer->splice_opener_funding))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Intiator funding is less than commited amount");
+	if (!amount_sat_sub(&initiator_fee, initiator_fee,
+			    peer->splice_opener_funding))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Unable to calculate intiator fee.");
+
+	/* Calculate accepter fee contribution */
+	if (!amount_sat_sub(&accepter_fee, accepter_in, accepter_out))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Unable to calculate accepter fee");
+	/* An extra check for cleaner log messages */
+	if(amount_sat_less(accepter_fee, peer->splice_accepter_funding))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Accepter funding is less than commited amount");
+	if (!amount_sat_sub(&accepter_fee, accepter_fee,
+			    peer->splice_accepter_funding))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Unable to calculate accepter fee.");
+
+	/* Check intiator fee */
+	if (amount_sat_less(initiator_fee, min_initiator_fee)) {
+		msg = towire_channeld_splice_feerate_error(NULL, initiator_fee,
+							   false);
+		wire_sync_write(MASTER_FD, take(msg));
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "%s fee was too low", opener ? "Our" : "Your");
+	}
+	if (!peer->splice_force_feerate && opener
+		&& amount_sat_greater(initiator_fee, max_initiator_fee)) {
+		msg = towire_channeld_splice_feerate_error(NULL, initiator_fee,
+							   true);
+		wire_sync_write(MASTER_FD, take(msg));
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Our own fee was too high");
+	}
+	/* Check accepter fee */
+	if (amount_sat_less(accepter_fee, min_accepter_fee)) {
+		msg = towire_channeld_splice_feerate_error(NULL, accepter_fee,
+							   false);
+		wire_sync_write(MASTER_FD, take(msg));
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "%s fee was too low", opener ? "Your" : "Our");
+	}
+	if (!peer->splice_force_feerate && !opener
+		&& amount_sat_greater(accepter_fee, max_accepter_fee)) {
+		msg = towire_channeld_splice_feerate_error(NULL, accepter_fee,
+							   true);
+		wire_sync_write(MASTER_FD, take(msg));
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Our own fee was too high");
+	}
+
+	return funding_amount;
+}
+
 /* ACCEPTER side of the splice. Here we handle all the accepter's steps for the
  * splice. Since the channel must be in STFU mode we block the daemon here until
  * the splice is finished or aborted. */
@@ -2777,8 +2927,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	int splice_funding_index = -1;
 	struct bitcoin_blkid genesis_blockhash;
 	struct channel_id channel_id;
-	struct amount_sat intiator_amount, accepter_amount, both_amount,
-			  total_in, change_out, initiator_fee, accepter_fee;
+	struct amount_sat both_amount;
 	u32 funding_feerate_perkw;
 	u32 locktime;
 	struct pubkey splice_remote_pubkey;
@@ -2786,6 +2935,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	struct bitcoin_outpoint outpoint;
 	u32 theirFeerate = channel_feerate(peer->channel, REMOTE);
 	struct bitcoin_tx *bitcoin_tx;
+	struct wally_tx_output *new_chan_outpoint;
 	struct bitcoin_signature splice_sig;
 	u8 der[73], funding_der[73];
 	size_t der_len, funding_der_len;
@@ -2798,7 +2948,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	if (!fromwire_splice(inmsg,
 			     &channel_id,
 			     &genesis_blockhash,
-			     &intiator_amount,
+			     &peer->splice_opener_funding,
 			     &funding_feerate_perkw,
 			     &locktime,
 			     &splice_remote_pubkey))
@@ -2822,12 +2972,13 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Splice doesnt support changing pubkeys");
 
-	accepter_amount = amount_msat_to_sat_round(peer->channel->view->owed[LOCAL]);
+	/* TODO: Add plugin hook for user to adjust accepter amount */
+	peer->splice_accepter_funding = amount_msat_to_sat_round(peer->channel->view->owed[LOCAL]);
 
 	msg = towire_splice_ack(tmpctx,
 				&peer->channel_id,
 				&chainparams->genesis_blockhash,
-				accepter_amount,
+				peer->splice_accepter_funding,
 				&peer->channel->funding_pubkey[LOCAL]);
 
 	peer_write(peer->pps, take(msg));
@@ -2872,74 +3023,19 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		status_failed(STATUS_FAIL_INTERNAL_ERROR,
 			      "Unable to find splice funding tx");
 
-	chan_output_index = find_channel_output(peer, ictx->current_psbt);
+	new_chan_outpoint = find_channel_output(peer, ictx->current_psbt,
+						&chan_output_index);
 
-	struct wally_tx_output *newChanOutpoint = &ictx->current_psbt->tx->outputs[chan_output_index];
-
-	total_in = AMOUNT_SAT(0);
-
-	for (int i = 0; i < ictx->current_psbt->tx->num_inputs; i++) {
-		struct amount_sat amount = psbt_input_get_amount(ictx->current_psbt, i);
-
-		if (!amount.satoshis)
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Input %d of splice does not have an input amount",
-					 i);
-
-		if(!amount_sat_add(&total_in, total_in, amount))
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Unable to add input amounts");
-	}
-
-	change_out = AMOUNT_SAT(0);
-
-	for (int i = 0; i < ictx->current_psbt->tx->num_outputs; i++)
-		if(i != chan_output_index)
-			if(!amount_sat_add(&change_out, change_out,
-					   psbt_output_get_amount(ictx->current_psbt, i)))
-				peer_failed_warn(peer->pps, &peer->channel_id,
-						 "Unable to add output amounts");
-
-	status_info("Splice accepter intiator amnt: %d", (int)intiator_amount.satoshis);
-	status_info("Splice accepter accepter amnt: %d", (int)accepter_amount.satoshis);
-
-	/* Calculate total channel output amount */
-	if(!amount_sat_add(&both_amount, intiator_amount, accepter_amount))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to calculate channel amount");
-
-	status_info("Splice accepter both amnt: %d", (int)both_amount.satoshis);
-	status_info("Splice accepter change amnt: %d", (int)change_out.satoshis);
-
-	initiator_fee = amount_tx_fee(funding_feerate_perkw,
-				      calc_weight(TX_INITIATOR,
-				     		  ictx->current_psbt));
-	accepter_fee = amount_tx_fee(funding_feerate_perkw,
-				     calc_weight(TX_ACCEPTER,
-				      		 ictx->current_psbt));
-
-	status_info("Splice accepter calculated intiator fee: %d", (int)initiator_fee.satoshis);
-	status_info("Splice accepter calculated accepter fee: %d", (int)accepter_fee.satoshis);
-
-	if(!amount_sat_sub(&both_amount, both_amount, initiator_fee))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to subtract intiator fee");
-	if(!amount_sat_sub(&both_amount, both_amount, accepter_fee))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to subtract accepter fee");
-
-	status_info("Splice accepter calculated funding output amount: %d", (int)both_amount.satoshis);
-
-	newChanOutpoint->satoshi = both_amount.satoshis;
+	both_amount = check_balances(peer, TX_ACCEPTER, ictx->current_psbt,
+				     chan_output_index)
+	new_chan_outpoint->satoshi = both_amount.satoshis;
 
 	psbt_elements_normalize_fees(ictx->current_psbt);
 
 	/* DTODO adjust local/remote balances based on byte ownership * miner fees */
 	psbt_txid(tmpctx, ictx->current_psbt, &outpoint.txid, NULL);
 
-	outpoint.n = 0;
-	/* DTODO find output index using redeem script & validate there
-	 * is only one */
+	outpoint.n = chan_output_index;
 
 	psbt_finalize(ictx->current_psbt);
 
@@ -2952,7 +3048,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 						     outpoint.n,
 						     theirFeerate,
 						     both_amount,
-						     accepter_amount,
+						     peer->splice_accepter_funding,
 						     ictx->current_psbt));
 
 	/* DTODO: Need to wait for an ack back here from lightningd for saftey */
@@ -3355,9 +3451,7 @@ static void splice_intiator_user_finalized(struct peer *peer, const u8 *inmsg)
 	struct interactivetx_context *ictx;
 	char *error;
 	int chan_output_index;
-	struct wally_tx_output *newChanOutpoint;
-	struct amount_sat both_amount, total_in, change_out,
-			  initiator_fee, accepter_fee;
+	struct wally_tx_output *new_chan_outpoint;
 
 	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
 					 peer->pps, peer->channel_id);
@@ -3384,64 +3478,12 @@ static void splice_intiator_user_finalized(struct peer *peer, const u8 *inmsg)
 	psbt_add_serials(ictx->current_psbt, ictx->our_role);
 	psbt_sort_by_serial_id(ictx->current_psbt);
 
-	chan_output_index = find_channel_output(peer, ictx->current_psbt);
-	newChanOutpoint = &ictx->current_psbt->tx->outputs[chan_output_index];
+	new_chan_outpoint = find_channel_output(peer, ictx->current_psbt,
+						&chan_output_index);
 
-	total_in = AMOUNT_SAT(0);
-	change_out = AMOUNT_SAT(0);
-
-	for (int i = 0; i < ictx->current_psbt->tx->num_inputs; i++) {
-		struct amount_sat amount = psbt_input_get_amount(ictx->current_psbt, i);
-		if (!amount.satoshis)
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Input %d of splice does not have an input amount",
-					 i);
-		if(!amount_sat_add(&total_in, total_in, amount))
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Unable to amount_sat_add input amounts");
-	}
-
-	for (int i = 0; i < ictx->current_psbt->tx->num_outputs; i++)
-		if(i != chan_output_index)
-			if(!amount_sat_add(&change_out, change_out,
-					   psbt_output_get_amount(ictx->current_psbt,
-				       				  i)))
-				peer_failed_warn(peer->pps, &peer->channel_id,
-						 "Unable to amount_sat_add output amounts");
-
-	status_debug("Splice intiator amnt: %d", (int)peer->splice_opener_funding.satoshis);
-	status_debug("Splice accepter amnt: %d", (int)peer->splice_accepter_funding.satoshis);
-
-	/* Calculate total channel output amount */
-	if(!amount_sat_add(&both_amount,
-			   peer->splice_opener_funding,
-			   peer->splice_accepter_funding))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to calculate channel amount");
-
-	status_debug("Splice both amnt: %d", (int)both_amount.satoshis);
-	status_debug("Splice change amnt: %d", (int)change_out.satoshis);
-
-	initiator_fee = amount_tx_fee(peer->splice_feerate_per_kw,
-				      calc_weight(TX_INITIATOR,
-				     		  ictx->current_psbt));
-	accepter_fee = amount_tx_fee(peer->splice_feerate_per_kw,
-				     calc_weight(TX_ACCEPTER,
-				      		 ictx->current_psbt));
-
-	status_info("Splice calculated intiator fee: %d", (int)initiator_fee.satoshis);
-	status_info("Splice calculated accepter fee: %d", (int)accepter_fee.satoshis);
-
-	if(!amount_sat_sub(&both_amount, both_amount, initiator_fee))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to subtract intiator fee");
-	if(!amount_sat_sub(&both_amount, both_amount, accepter_fee))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to subtract accepter fee");
-
-	status_info("Splice calculated funding output amount: %d", (int)both_amount.satoshis);
-
-	newChanOutpoint->satoshi = both_amount.satoshis;
+	new_chan_outpoint->satoshi = check_balances(peer, TX_INITIATOR,
+						    ictx->current_psbt,
+						    chan_output_index).satoshis;
 
 	/* DTODO: audit if we need more checks at this point (check feerate,
 	 * copy dualopen checks, spec, etc) */
@@ -3466,9 +3508,9 @@ static void splice_intiator_user_finalized(struct peer *peer, const u8 *inmsg)
 static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 {
 	struct wally_psbt *signed_psbt;
-	struct wally_tx_output *newChanOutpoint;
+	struct wally_tx_output *new_chan_outpoint;
 	struct bitcoin_outpoint outpoint;
-	struct amount_sat funding_sats, our_funding_sats;
+	struct amount_sat funding_sats;
 	struct interactivetx_context *ictx;
 	struct bitcoin_tx *bitcoin_tx, *final_tx;
 	struct bitcoin_signature splice_sig;
@@ -3502,19 +3544,13 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 					 &peer->channel->funding_pubkey[REMOTE],
 					 &peer->channel->funding_pubkey[LOCAL]);
 
-	chan_output_index = find_channel_output(peer, signed_psbt);
-
-	newChanOutpoint = &signed_psbt->tx->outputs[chan_output_index];
+	new_chan_outpoint = find_channel_output(peer, signed_psbt,
+						&chan_output_index);
 
 	psbt_txid(tmpctx, signed_psbt, &outpoint.txid, NULL);
-	outpoint.n = 0;
-	/* DTODO: find output index using redeem script & validate there
-	 * is only one */
+	outpoint.n = chan_output_index;
 
-	funding_sats = amount_sat(newChanOutpoint->satoshi);
-
-	/* DTODO: calculate our_funding_sats */
-	our_funding_sats = amount_sat(newChanOutpoint->satoshi);
+	funding_sats = amount_sat(new_chan_outpoint->satoshi);
 
 	status_debug("Splice adding inflight: %s", psbt_to_b64(tmpctx, signed_psbt));
 
@@ -3524,7 +3560,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 						     outpoint.n,
 						     theirFeerate,
 						     funding_sats,
-						     our_funding_sats,
+						     peer->splice_opener_funding,
 						     signed_psbt));
 
 	peer->splice_count++;
@@ -3684,20 +3720,14 @@ static void handle_splice_stfu_success(struct peer *peer)
  * splice happens at that point in `splice_intiator()`. */
 static void handle_splice_init(struct peer *peer, const u8 *inmsg)
 {
-	u32 *feerate_per_kw;
-
 	peer->current_psbt = tal_free(peer->current_psbt);
 
 	if (!fromwire_channeld_splice_init(peer, inmsg, &peer->current_psbt,
 					   &peer->splice_opener_funding,
-					   &feerate_per_kw))
+					   &peer->splice_feerate_per_kw,
+					   &peer->splice_force_feerate))
 		master_badmsg(WIRE_CHANNELD_SPLICE_INIT, inmsg);
 
-	if(feerate_per_kw)
-		peer->splice_feerate_per_kw = *feerate_per_kw;
-	else
-		peer->splice_feerate_per_kw = channel_feerate(peer->channel,
-							      LOCAL);
 
 	if (peer->on_stfu_success)
 		peer_failed_err(peer->pps, &peer->channel_id,
@@ -5302,6 +5332,7 @@ static void req_in(struct peer *peer, const u8 *msg)
 	case WIRE_CHANNELD_SPLICE_LOOKUP_TX:
 	case WIRE_CHANNELD_SPLICE_LOOKUP_TX_RESULT:
 	case WIRE_CHANNELD_SPLICE_CONFIRMED_FINALIZE:
+	case WIRE_CHANNELD_SPLICE_FEERATE_ERROR:
 		break;
 #endif /* EXPERIMENTAL_FEATURES */
 #else
@@ -5589,6 +5620,8 @@ int main(int argc, char *argv[])
 	peer->update_queue = msg_queue_new(peer, false);
 	peer->splice_opener_funding = AMOUNT_SAT(0);
 	peer->splice_accepter_funding = AMOUNT_SAT(0);
+	peer->splice_feerate_per_kw = 0;
+	peer->splice_force_feerate = false;
 	peer->on_stfu_success = NULL;
 	peer->committed_splice_count = 0;
 	peer->splice_count = 0;

@@ -1,6 +1,7 @@
 #include "config.h"
 #include <ccan/cast/cast.h>
 #include <ccan/mem/mem.h>
+#include <ccan/tal/str/str.h>
 #include <channeld/channeld_wiregen.h>
 #include <common/json_command.h>
 #include <common/json_param.h>
@@ -137,6 +138,52 @@ void notify_feerate_change(struct lightningd *ld)
 
 	/* FIXME: We choose not to drop to chain if we can't contact
 	 * peer.  We *could* do so, however. */
+}
+
+static void handle_splice_feerate_error(struct lightningd *ld,
+					 struct channel *channel,
+					 const u8 *msg)
+{
+	struct splice_command *cc;
+	struct splice_command *n;
+	struct amount_sat fee;
+	bool too_high;
+
+	if(!fromwire_channeld_splice_feerate_error(msg, &fee, &too_high)) {
+		channel_internal_error(channel,
+				       "bad fromwire_channeld_splice_feerate_error %s",
+				       tal_hex(channel, msg));
+		return;
+	}
+
+	list_for_each_safe(&ld->splice_commands, cc, n, list) {
+		if(channel != cc->channel)
+			continue;
+
+		struct json_stream *response = json_stream_success(cc->cmd);
+		json_add_string(response, "message", "Splice feerate failed");
+
+		if(too_high)
+			json_add_string(response, "error",
+					tal_fmt(tmpctx, "Feerate too high. Do you "
+						"really want to spend %s on fees?",
+						fmt_amount_sat(tmpctx, fee)));
+		else
+			json_add_string(response, "error",
+					tal_fmt(tmpctx, "Feerate too low. Your "
+						"funding only provided %s in fees",
+						fmt_amount_sat(tmpctx, fee)));
+
+		was_pending(command_success(cc->cmd, response));
+
+		list_del(&cc->list);
+		tal_free(cc);
+		return;
+	}
+
+	log_peer_unusual(ld->log, &channel->peer->id, "Peer gave us a splice pkg"
+			 " with too low of feerate (fee was %s), we rejected it.",
+			 fmt_amount_sat(tmpctx, fee));
 }
 
 /* When channeld finishes processing the `splice_init` command, this is called */
@@ -1012,6 +1059,9 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 	case WIRE_CHANNELD_SPLICE_CONFIRMED_INIT:
 		handle_splice_confirmed_init(sd->ld, sd->channel, msg);
 		break;
+	case WIRE_CHANNELD_SPLICE_FEERATE_ERROR:
+		handle_splice_feerate_error(sd->ld, sd->channel, msg);
+		break;
 	case WIRE_CHANNELD_SPLICE_CONFIRMED_UPDATE:
 		handle_splice_confirmed_update(sd->ld, sd->channel, msg);
 		break;
@@ -1692,6 +1742,7 @@ static struct command_result *json_splice_init(struct command *cmd,
 	struct wally_psbt *initialpsbt;
 	struct amount_sat *amount;
 	u32 *feerate_per_kw;
+	bool *force_feerate;
 	u8 *msg;
 
 	if(!param(cmd, buffer, params,
@@ -1699,11 +1750,20 @@ static struct command_result *json_splice_init(struct command *cmd,
 		  p_req("amount", param_sat, &amount),
 		  p_opt("initialpsbt", param_psbt, &initialpsbt),
 		  p_opt("feerate_per_kw", param_feerate, &feerate_per_kw),
+		  p_opt("force_feerate", param_bool, &force_feerate),
 		  NULL))
 		return command_param_failed();
 
-	if(!initialpsbt)
+	if (!initialpsbt)
 		initialpsbt = create_psbt(cmd, 0, 0, 0);
+	if (!feerate_per_kw) {
+		feerate_per_kw = tal(tmpctx, u32);
+		*feerate_per_kw = opening_feerate(cmd->ld->topology);
+	}
+	if (!force_feerate) {
+		force_feerate = tal(tmpctx, bool);
+		*force_feerate = false;
+	}
 
 	channel = splice_load_channel(cmd, id, &error);
 	if (error)
@@ -1717,7 +1777,7 @@ static struct command_result *json_splice_init(struct command *cmd,
 	cc->channel = channel;
 
 	msg = towire_channeld_splice_init(NULL, initialpsbt, *amount,
-					  feerate_per_kw);
+					  *feerate_per_kw, *force_feerate);
 
 	subd_send_msg(channel->owner, take(msg));
 	return command_still_pending(cmd);
