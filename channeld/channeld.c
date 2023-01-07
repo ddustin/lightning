@@ -174,6 +174,8 @@ struct peer {
 	void (*on_stfu_success)(struct peer*);
 	/* The number of splices that have been signed & committed */
 	int committed_splice_count;
+	/* the number of splices that have been revoke_and_ack'ed */
+	int revoked_splice_count;
 	/* The number of splices that are active (awaiting confirmation) */
 	int splice_count;
 	/* Track how many of each tx collab msg we receive */
@@ -1853,7 +1855,7 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 
 	changed_htlcs = tal_arr(msg, const struct htlc *, 0);
 	if (!channel_rcvd_commit(peer->channel, &changed_htlcs)
-		&& !peer->splice_count) { // peer->splice_count != peer->committed_splice_count
+		&& peer->splice_count == peer->revoked_splice_count) {
 		/* BOLT #2:
 		 *
 		 * A sending node:
@@ -1869,6 +1871,8 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 					 "commit_sig with no changes (again!)");
 		peer->last_empty_commitment = peer->next_index[LOCAL];
 	}
+
+	peer->revoked_splice_count = peer->splice_count;
 
 	/* We were supposed to check this was affordable as we go. */
 	if (peer->channel->opener == REMOTE) {
@@ -5562,6 +5566,7 @@ static void init_channel(struct peer *peer)
 	peer->final_index = tal_dup(peer, u32, &final_index);
 	peer->final_ext_key = tal_dup(peer, struct ext_key, &final_ext_key);
 	peer->committed_splice_count = inflight_count;
+	peer->revoked_splice_count = inflight_count;
 	peer->splice_count = inflight_count;
 
 #if DEVELOPER
