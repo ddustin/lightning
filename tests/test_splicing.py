@@ -20,6 +20,9 @@ def test_splice(node_factory, bitcoind):
     l1.rpc.connect(l2.rpc.getinfo()['id'], 'localhost:%d' % l2.port)
     l1.openchannel(l2, chan_size)
 
+    l2.daemon.wait_for_log(r'to CHANNELD_NORMAL')
+    l1.daemon.wait_for_log(r'to CHANNELD_NORMAL')
+
     # add extra sats to pay fee
     funds_result = l1.rpc.fundpsbt("105000sat", "slow", 166, excess_as_change=True)
 
