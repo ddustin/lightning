@@ -2634,13 +2634,47 @@ static void handle_unexpected_reestablish(struct peer *peer, const u8 *msg)
 				       &channel_id));
 }
 
-static bool do_i_sign_first(struct peer *peer, struct interactivetx_context *ictx)
+static bool is_openers(const struct wally_map *unknowns)
 {
-	/* DTODO: Implement signing order checks as per spec rules when they
-	 * get settled upon. Also build test cases to confirm these.
+	/* BOLT-f53ca2301232db780843e894f55d95d512f297f9 #2:
+	 * The sending node: ...
+	 * - if is the *initiator*:
+	 *   - MUST send even `serial_id`s
+	 * - if is the *non-initiator*:
+	 *   - MUST send odd `serial_id`s
 	 */
+	u64 serial_id;
+	if (!psbt_get_serial_id(unknowns, &serial_id))
+		status_failed(STATUS_FAIL_INTERNAL_ERROR,
+			      "PSBTs must have serial_ids set");
 
-	return (ictx->our_role == TX_INITIATOR);
+	return serial_id % 2 == TX_INITIATOR;
+}
+
+static bool do_i_sign_first(struct peer *peer, struct wally_psbt *psbt,
+			    enum tx_role our_role)
+{
+	struct amount_sat opener_in = AMOUNT_SAT(0);
+	struct amount_sat accepter_in = AMOUNT_SAT(0);
+
+	for (int i = 0; i < psbt->tx->num_inputs; i++) {
+		struct amount_sat *in = is_openers(&psbt->inputs[i].unknowns) ?
+					&opener_in : &accepter_in;
+		if (!amount_sat_add(in, *in, psbt_input_get_amount(psbt, i)))
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					 "Unable to add input amounts for "
+					 "signing order");
+	}
+
+	if(amount_sat_less(accepter_in, opener_in))
+		return our_role == TX_ACCEPTER;
+
+	if(amount_sat_less(opener_in, accepter_in))
+		return our_role == TX_INITIATOR;
+	
+	/* Current tiebreaker is initiator goes first but may change as signing
+	 * order spec is finalized */
+	return our_role == TX_INITIATOR;
 }
 
 static struct wally_psbt *next_splice_step(const tal_t *ctx,
@@ -2658,12 +2692,13 @@ static struct wally_psbt *next_splice_step(const tal_t *ctx,
  * splice `tx_signature`s are. This function handles sending & receiving the
  * required commitments as part of the splicing process. */
 static void interactive_send_commitments(struct peer *peer,
-					 struct interactivetx_context *ictx)
+					 struct wally_psbt *psbt,
+					 enum tx_role our_role)
 {
 	const u8 *msg;
 	enum peer_wire type;
 
-	if (do_i_sign_first(peer, ictx)) {
+	if (do_i_sign_first(peer, psbt, our_role)) {
 
 		send_commit(peer);
 
@@ -2689,7 +2724,7 @@ static void interactive_send_commitments(struct peer *peer,
 
 	handle_peer_commit_sig(peer, msg);
 
-	if (!do_i_sign_first(peer, ictx)) {
+	if (!do_i_sign_first(peer, psbt, our_role)) {
 
 		send_commit(peer);
 
@@ -2733,23 +2768,6 @@ static struct wally_tx_output *find_channel_output(struct peer *peer,
 	if(chan_output_index)
 		*chan_output_index = -1;
 	return NULL;
-}
-
-static bool is_openers(const struct wally_map *unknowns)
-{
-	/* BOLT-f53ca2301232db780843e894f55d95d512f297f9 #2:
-	 * The sending node: ...
-	 * - if is the *initiator*:
-	 *   - MUST send even `serial_id`s
-	 * - if is the *non-initiator*:
-	 *   - MUST send odd `serial_id`s
-	 */
-	u64 serial_id;
-	if (!psbt_get_serial_id(unknowns, &serial_id))
-		status_failed(STATUS_FAIL_INTERNAL_ERROR,
-			      "PSBTs must have serial_ids set");
-
-	return serial_id % 2 == TX_INITIATOR;
 }
 
 static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
@@ -3027,7 +3045,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 						&chan_output_index);
 
 	both_amount = check_balances(peer, TX_ACCEPTER, ictx->current_psbt,
-				     chan_output_index)
+				     chan_output_index);
 	new_chan_outpoint->satoshi = both_amount.satoshis;
 
 	psbt_elements_normalize_fees(ictx->current_psbt);
@@ -3055,7 +3073,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	peer->splice_count++;
 
-	interactive_send_commitments(peer, ictx);
+	interactive_send_commitments(peer, ictx->current_psbt, TX_ACCEPTER);
 
 	psbt_sort_by_serial_id(ictx->current_psbt);
 
@@ -3117,7 +3135,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 				      (const struct witness_stack**)outws,
 				      our_txsigs_tlvs);
 
-	if (do_i_sign_first(peer, ictx)) {
+	if (do_i_sign_first(peer, ictx->current_psbt, TX_ACCEPTER)) {
 
 		/* DTODO: Add transaction to inflights even though its missing the other signature */
 		peer_write(peer->pps, sigmsg);
@@ -3214,7 +3232,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	/* DTODO: validate our peer's signatures are correct */
 
-	if (!do_i_sign_first(peer, ictx))
+	if (!do_i_sign_first(peer, ictx->current_psbt, TX_ACCEPTER))
 		peer_write(peer->pps, sigmsg);
 	else {
 
@@ -3511,7 +3529,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	struct wally_tx_output *new_chan_outpoint;
 	struct bitcoin_outpoint outpoint;
 	struct amount_sat funding_sats;
-	struct interactivetx_context *ictx;
 	struct bitcoin_tx *bitcoin_tx, *final_tx;
 	struct bitcoin_signature splice_sig;
 	struct bitcoin_signature their_sig;
@@ -3528,9 +3545,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	int splice_funding_index = -1;
 	int chan_output_index;
 	u32 theirFeerate;
-
-	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
-					 peer->pps, peer->channel_id);
 
 	if (!fromwire_channeld_splice_signed(tmpctx, inmsg, &signed_psbt))
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -3565,10 +3579,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	peer->splice_count++;
 
-	/* DTODO: ictx here is only used for signing order (intiator first
-	 * currently). When tx_sig ordering is spec finalzed ictx needs to be
-	 * removed here and placed with a correct ordering indicator object */
-	interactive_send_commitments(peer, ictx);
+	interactive_send_commitments(peer, signed_psbt, TX_INITIATOR);
 
 	splice_sig.sighash_type = SIGHASH_ALL;
 	bitcoin_tx = bitcoin_tx_with_psbt(tmpctx, signed_psbt);
@@ -3622,8 +3633,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	sigout_msg = towire_tx_signatures(tmpctx, &peer->channel_id,
 					  &outpoint.txid, ws, txsig_tlvs);
 
-	/* DTODO: Swap out ictx for correct thing when tx_sig spec is settled */
-	if(do_i_sign_first(peer, ictx))
+	if(do_i_sign_first(peer, signed_psbt, TX_INITIATOR))
 		peer_write(peer->pps, take(sigout_msg));
 
 	msg = peer_read(tmpctx, peer->pps);
@@ -3672,8 +3682,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	/* DTODO: validate our peer's signatures are correct */
 
-	/* DTODO: Swap out ictx for correct thing when tx_sig spec is settled */
-	if(!do_i_sign_first(peer, ictx))
+	if(!do_i_sign_first(peer, signed_psbt, TX_INITIATOR))
 		peer_write(peer->pps, take(sigout_msg));
 
 	/* Sending of TX_SIGNATURE implies the end of stfu mode */
