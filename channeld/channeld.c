@@ -55,6 +55,10 @@
 #define MASTER_FD STDIN_FILENO
 #define HSM_FD 4
 
+#define VALID_STFU_MESSAGE(msg) \
+	((msg) == WIRE_SPLICE || \
+	(msg) == WIRE_SPLICE_ACK)
+
 struct peer {
 	struct per_peer_state *pps;
 	bool channel_ready[NUM_SIDES];
@@ -152,6 +156,8 @@ struct peer {
 	enum side stfu_initiator;
 	/* Has stfu been sent by each side? */
 	bool stfu_sent[NUM_SIDES];
+	/* After STFU mode is enabled, wait for a signle message flag */
+	bool stfu_wait_single_msg;
 	/* Updates master asked, which we've deferred while quiescing */
 	struct msg_queue *update_queue;
 	/* The opener side's share of post splice channel balance */
@@ -162,6 +168,8 @@ struct peer {
 	u32 splice_feerate_per_kw;
 	/* If the feerate is higher than max, don't abort the splice */
 	bool splice_force_feerate;
+	/* Make our side sign first */
+	bool splice_force_sign_first;
 	/* Callback for when when stfu is negotiated successfully */
 	void (*on_stfu_success)(struct peer*);
 	/* The number of splices that have been signed & committed */
@@ -267,6 +275,7 @@ static void end_stfu_mode(struct peer *peer)
 {
 	peer->stfu = false;
 	peer->stfu_sent[LOCAL] = peer->stfu_sent[REMOTE] = false;
+	peer->stfu_wait_single_msg = false;
 	peer->on_stfu_success = NULL;
 
 	status_debug("Left STFU mode.");
@@ -297,6 +306,8 @@ static void maybe_send_stfu(struct peer *peer)
 	if (peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE]) {
 		wire_sync_write(MASTER_FD,
 				towire_channeld_dev_quiesce_reply(tmpctx));
+
+		peer->stfu_wait_single_msg = true;
 
 		if (peer->on_stfu_success) {
 
@@ -2654,6 +2665,9 @@ static bool is_openers(const struct wally_map *unknowns)
 static bool do_i_sign_first(struct peer *peer, struct wally_psbt *psbt,
 			    enum tx_role our_role)
 {
+	if(peer->splice_force_sign_first)
+		return true;
+
 	struct amount_sat opener_in = AMOUNT_SAT(0);
 	struct amount_sat accepter_in = AMOUNT_SAT(0);
 
@@ -2697,34 +2711,50 @@ static void interactive_send_commitments(struct peer *peer,
 {
 	const u8 *msg;
 	enum peer_wire type;
+	bool got_commit = false;
 
 	if (do_i_sign_first(peer, psbt, our_role)) {
 
+		status_debug("Splice %s: we commit first",
+			     our_role == TX_INITIATOR ? "initiator" : "accepter");
+
 		send_commit(peer);
 
 		msg = peer_read(tmpctx, peer->pps);
 		type = fromwire_peektype(msg);
+		/* If both sides commit simultaneously, that's fine. */
+		if (type == WIRE_COMMITMENT_SIGNED) {
+			got_commit = true;
+			handle_peer_commit_sig(peer, msg);
+			msg = peer_read(tmpctx, peer->pps);
+			type = fromwire_peektype(msg);
+		}
 		if (type != WIRE_REVOKE_AND_ACK)
 			peer_failed_warn(peer->pps, &peer->channel_id,
-					"Splicing got incorrect message from peer: %d "
+					"Splicing got incorrect message from peer: %s "
 					"(should be WIRE_REVOKE_AND_ACK) [%s]",
-					type,
+					peer_wire_name(type),
 					sanitize_error(tmpctx, msg,
 						       &peer->channel_id));
-
 		handle_peer_revoke_and_ack(peer, msg);
 	}
 
-	msg = peer_read(tmpctx, peer->pps);
-	type = fromwire_peektype(msg);
-	if (type != WIRE_COMMITMENT_SIGNED)
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				"Splicing got incorrect message from peer: %d "
-				"(should be WIRE_COMMITMENT_SIGNED)", type);
-
-	handle_peer_commit_sig(peer, msg);
+	if (!got_commit) {
+		msg = peer_read(tmpctx, peer->pps);
+		type = fromwire_peektype(msg);
+		if (type != WIRE_COMMITMENT_SIGNED)
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					"Splicing got incorrect message from "
+					"peer: %s (should be "
+					"WIRE_COMMITMENT_SIGNED)",
+					peer_wire_name(type));
+		handle_peer_commit_sig(peer, msg);
+	}
 
 	if (!do_i_sign_first(peer, psbt, our_role)) {
+
+		status_debug("Splice %s: we commit second",
+			     our_role == TX_INITIATOR ? "initiator" : "accepter");
 
 		send_commit(peer);
 
@@ -2732,8 +2762,9 @@ static void interactive_send_commitments(struct peer *peer,
 		type = fromwire_peektype(msg);
 		if (type != WIRE_REVOKE_AND_ACK)
 			peer_failed_warn(peer->pps, &peer->channel_id,
-					"Splicing got incorrect message from peer: %d "
-					"(should be WIRE_REVOKE_AND_ACK)", type);
+					"Splicing got incorrect message from peer: %s "
+					"(should be WIRE_REVOKE_AND_ACK)",
+					peer_wire_name(type));
 
 		handle_peer_revoke_and_ack(peer, msg);
 	}
@@ -2928,6 +2959,23 @@ static struct amount_sat check_balances(struct peer *peer,
 	}
 
 	return funding_amount;
+}
+
+static void reset_splice(struct peer *peer)
+{
+	peer->splice_opener_funding = AMOUNT_SAT(0);
+	peer->splice_accepter_funding = AMOUNT_SAT(0);
+	peer->splice_feerate_per_kw = 0;
+	peer->splice_force_feerate = false;
+	peer->splice_force_sign_first = false;
+	peer->on_stfu_success = NULL;
+	peer->committed_splice_count = 0;
+	peer->revoked_splice_count = 0;
+	peer->splice_count = 0;
+	peer->tx_add_input_count = 0;
+	peer->tx_add_output_count = 0;
+	peer->current_psbt = NULL;
+	peer->received_tx_complete = false;
 }
 
 /* ACCEPTER side of the splice. Here we handle all the accepter's steps for the
@@ -3136,8 +3184,9 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 				      our_txsigs_tlvs);
 
 	if (do_i_sign_first(peer, ictx->current_psbt, TX_ACCEPTER)) {
-
-		/* DTODO: Add transaction to inflights even though its missing the other signature */
+		status_debug("Splice accepter: we sign first");
+		msg = towire_channeld_update_inflight(NULL, ictx->current_psbt);
+		wire_sync_write(MASTER_FD, take(msg));
 		peer_write(peer->pps, sigmsg);
 	}
 
@@ -3150,8 +3199,9 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	if (type != WIRE_TX_SIGNATURES)
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				"Splicing got incorrect message from peer: %d "
-				"(should be WIRE_TX_SIGNATURES)", type);
+				"Splicing got incorrect message from peer: %s "
+				"(should be WIRE_TX_SIGNATURES)",
+				peer_wire_name(type));
 
 	their_txsigs_tlvs = tlv_txsigs_tlvs_new(tmpctx);
 	if (!fromwire_tx_signatures(tmpctx, msg, &cid, &txid,
@@ -3232,11 +3282,12 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	/* DTODO: validate our peer's signatures are correct */
 
-	if (!do_i_sign_first(peer, ictx->current_psbt, TX_ACCEPTER))
-		peer_write(peer->pps, sigmsg);
-	else {
+	msg = towire_channeld_update_inflight(NULL, ictx->current_psbt);
+	wire_sync_write(MASTER_FD, take(msg));
 
-		/* DTODO Update the inflight transaction to have their sigs in it */
+	if (!do_i_sign_first(peer, ictx->current_psbt, TX_ACCEPTER)) {
+		status_debug("Splice accepter: we sign second");
+		peer_write(peer->pps, sigmsg);
 	}
 
 	struct bitcoin_tx *final_tx = bitcoin_tx_with_psbt(tmpctx,
@@ -3249,6 +3300,8 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	wire_sync_write(MASTER_FD, take(msg));
 
 	send_channel_update(peer, 0);
+
+	reset_splice(peer);
 }
 
 static struct bitcoin_tx *bitcoin_tx_from_txid(struct peer *peer,
@@ -3275,8 +3328,9 @@ static struct bitcoin_tx *bitcoin_tx_from_txid(struct peer *peer,
 
 	if (type != WIRE_CHANNELD_SPLICE_LOOKUP_TX_RESULT)
 		peer_failed_err(peer->pps, &peer->channel_id,
-				"Splicing got incorrect message from lightningd: %d "
-				"(should be WIRE_CHANNELD_SPLICE_LOOKUP_TX_RESULT)", type);
+				"Splicing got incorrect message from lightningd: %s "
+				"(should be WIRE_CHANNELD_SPLICE_LOOKUP_TX_RESULT)",
+				peer_wire_name(type));
 	else if (!fromwire_channeld_splice_lookup_tx_result(tmpctx, msg, &tx))
 		peer_failed_err(peer->pps,
 				&peer->channel_id,
@@ -3546,7 +3600,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	int chan_output_index;
 	u32 theirFeerate;
 
-	if (!fromwire_channeld_splice_signed(tmpctx, inmsg, &signed_psbt))
+	if (!fromwire_channeld_splice_signed(tmpctx, inmsg, &signed_psbt, &peer->splice_force_sign_first))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Invalid splice signed message: %s",
 				 tal_hex(tmpctx, inmsg));
@@ -3633,8 +3687,12 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	sigout_msg = towire_tx_signatures(tmpctx, &peer->channel_id,
 					  &outpoint.txid, ws, txsig_tlvs);
 
-	if(do_i_sign_first(peer, signed_psbt, TX_INITIATOR))
+	if (do_i_sign_first(peer, signed_psbt, TX_INITIATOR)) {
+		status_debug("Splice initiator: we sign first");
+		outmsg = towire_channeld_update_inflight(NULL, signed_psbt);
+		wire_sync_write(MASTER_FD, take(outmsg));
 		peer_write(peer->pps, take(sigout_msg));
+	}
 
 	msg = peer_read(tmpctx, peer->pps);
 	if (handle_peer_error(peer->pps, &peer->channel_id, msg))
@@ -3642,9 +3700,9 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	if (fromwire_peektype(msg) != WIRE_TX_SIGNATURES)
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				"Splicing got incorrect message from peer: %d "
+				"Splicing got incorrect message from peer: %s "
 				"(should be WIRE_TX_SIGNATURES)",
-				fromwire_peektype(msg));
+				peer_wire_name(fromwire_peektype(msg)));
 
 	if (!fromwire_tx_signatures(tmpctx, msg, &cid, &txid,
 				    cast_const3(struct witness_stack ***, &ws),
@@ -3682,8 +3740,13 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	/* DTODO: validate our peer's signatures are correct */
 
-	if(!do_i_sign_first(peer, signed_psbt, TX_INITIATOR))
+	outmsg = towire_channeld_update_inflight(NULL, signed_psbt);
+	wire_sync_write(MASTER_FD, take(outmsg));
+
+	if(!do_i_sign_first(peer, signed_psbt, TX_INITIATOR)) {
+		status_debug("Splice accepter: we sign first");
 		peer_write(peer->pps, take(sigout_msg));
+	}
 
 	/* Sending of TX_SIGNATURE implies the end of stfu mode */
 	end_stfu_mode(peer);
@@ -3699,6 +3762,9 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	psbt_finalize_multisig_signatures(signed_psbt,
 					  &signed_psbt->inputs[splice_funding_index]);
 
+	outmsg = towire_channeld_update_inflight(NULL, signed_psbt);
+	wire_sync_write(MASTER_FD, take(outmsg));
+
 	if (!psbt_finalize(signed_psbt))
 		status_failed(STATUS_FAIL_INTERNAL_ERROR,
 			      "Splice psbt_finalize failed");
@@ -3708,6 +3774,8 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 							 chan_output_index);
 	wire_sync_write(MASTER_FD, take(outmsg));
 	send_channel_update(peer, 0);
+
+	reset_splice(peer);
 }
 
 /* This occurs once our 'stfu' transition was successful. */
@@ -3736,7 +3804,6 @@ static void handle_splice_init(struct peer *peer, const u8 *inmsg)
 					   &peer->splice_feerate_per_kw,
 					   &peer->splice_force_feerate))
 		master_badmsg(WIRE_CHANNELD_SPLICE_INIT, inmsg);
-
 
 	if (peer->on_stfu_success)
 		peer_failed_err(peer->pps, &peer->channel_id,
@@ -3773,6 +3840,16 @@ static void peer_in(struct peer *peer, const u8 *msg)
 					 peer_wire_name(type), type);
 		}
 	}
+
+	/* For cleaner errors, we check message is valid during STFU mode */
+	if (peer->stfu_wait_single_msg)
+		if (!VALID_STFU_MESSAGE(type))
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					 "Got invalid message during STFU "
+					 "mode: %s",
+					 peer_wire_name(type));
+
+	peer->stfu_wait_single_msg = false;
 
 	switch (type) {
 	case WIRE_CHANNEL_READY:
@@ -5373,6 +5450,7 @@ static void req_in(struct peer *peer, const u8 *msg)
 	case WIRE_CHANNELD_LOCAL_CHANNEL_ANNOUNCEMENT:
 	case WIRE_CHANNELD_LOCAL_PRIVATE_CHANNEL:
 	case WIRE_CHANNELD_ADD_INFLIGHT:
+	case WIRE_CHANNELD_UPDATE_INFLIGHT:
 	case WIRE_CHANNELD_GET_INFLIGHT:
 	case WIRE_CHANNELD_GOT_INFLIGHT:
 		break;
@@ -5626,18 +5704,9 @@ int main(int argc, char *argv[])
 #if EXPERIMENTAL_FEATURES
 	peer->stfu = false;
 	peer->stfu_sent[LOCAL] = peer->stfu_sent[REMOTE] = false;
+	peer->stfu_wait_single_msg = false;
 	peer->update_queue = msg_queue_new(peer, false);
-	peer->splice_opener_funding = AMOUNT_SAT(0);
-	peer->splice_accepter_funding = AMOUNT_SAT(0);
-	peer->splice_feerate_per_kw = 0;
-	peer->splice_force_feerate = false;
-	peer->on_stfu_success = NULL;
-	peer->committed_splice_count = 0;
-	peer->splice_count = 0;
-	peer->tx_add_input_count = 0;
-	peer->tx_add_output_count = 0;
-	peer->current_psbt = NULL;
-	peer->received_tx_complete = false;
+	reset_splice(peer);
 	peer->splice_locked_ready[LOCAL] = false;
 	peer->splice_locked_ready[REMOTE] = false;
 #endif
@@ -5701,6 +5770,12 @@ int main(int argc, char *argv[])
 				timemono_between(first, now).ts);
 			tptr = &timeout;
 		}
+
+		/* If we're in STFU mode and aren't waiting for a STFU mode
+		 * specific message, don't read from the peer. */
+		if (!peer->stfu_wait_single_msg &&
+			peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE])
+			FD_CLR(peer->pps->peer_fd, &rfds);
 
 		if (select(nfds, &rfds, NULL, NULL, tptr) < 0) {
 			/* Signals OK, eg. SIGUSR1 */

@@ -523,6 +523,43 @@ static void handle_add_inflight(struct lightningd *ld,
 	channel_watch_inflight(ld, channel, inflight);
 }
 
+static void handle_update_inflight(struct lightningd *ld,
+				   struct channel *channel,
+				   const u8 *msg)
+{
+	struct channel_inflight *inflight;
+	struct wally_psbt *psbt;
+	struct bitcoin_txid txid;
+
+	if (!fromwire_channeld_update_inflight(tmpctx, msg, &psbt)) {
+		channel_internal_error(channel,
+				       "bad channel_add_inflight %s",
+				       tal_hex(channel, msg));
+		return;
+	}
+
+	psbt_txid(tmpctx, psbt, &txid, NULL);
+	inflight = channel_inflight_find(channel, &txid);
+
+	tal_wally_start();
+	if (wally_psbt_combine(inflight->funding_psbt, psbt) != WALLY_OK) {
+		channel_internal_error(channel,
+				       "Unable to combine PSBTs: %s, %s",
+				       type_to_string(tmpctx,
+						      struct wally_psbt,
+						      inflight->funding_psbt),
+				       type_to_string(tmpctx,
+						      struct wally_psbt,
+						      psbt));
+		tal_wally_end(inflight->funding_psbt);
+		return;
+	}
+	tal_wally_end(inflight->funding_psbt);
+
+	psbt_finalize(cast_const(struct wally_psbt *, inflight->funding_psbt));
+	wallet_inflight_save(ld->wallet, inflight);
+}
+
 void channel_record_open(struct channel *channel, u32 blockheight, bool record_push)
 {
 	struct chain_coin_mvt *mvt;
@@ -1076,6 +1113,9 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 		break;
 	case WIRE_CHANNELD_ADD_INFLIGHT:
 		handle_add_inflight(sd->ld, sd->channel, msg);
+		break;
+	case WIRE_CHANNELD_UPDATE_INFLIGHT:
+		handle_update_inflight(sd->ld, sd->channel, msg);
 		break;
 	case WIRE_CHANNELD_GOT_SPLICE_LOCKED:
 		handle_peer_splice_locked(sd->channel, msg);
@@ -1858,10 +1898,12 @@ static struct command_result *json_splice_signed(struct command *cmd,
 	struct splice_command *cc;
 	struct wally_psbt *psbt;
 	struct command_result *error;
+	bool *sign_first;
 
 	if(!param(cmd, buffer, params,
 		  p_req("id", param_node_id, &id),
 		  p_req("psbt", param_psbt, &psbt),
+		  p_opt_def("sign_first", param_bool, &sign_first, false),
 		  NULL))
 		return command_param_failed();
 
@@ -1879,7 +1921,7 @@ static struct command_result *json_splice_signed(struct command *cmd,
 	assert(channel);
 	assert(channel->owner);
 
-	msg = towire_channeld_splice_signed(tmpctx, psbt);
+	msg = towire_channeld_splice_signed(tmpctx, psbt, *sign_first);
 	subd_send_msg(channel->owner, take(msg));
 	return command_still_pending(cmd);
 }

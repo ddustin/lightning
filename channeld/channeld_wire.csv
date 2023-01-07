@@ -227,6 +227,7 @@ msgdata,channeld_splice_confirmed_finalize,psbt,wally_psbt,
 # master->channeld: User has signed psbt and it's ready to complete
 msgtype,channeld_splice_signed,7212
 msgdata,channeld_splice_signed,psbt,wally_psbt,
+msgdata,channeld_splice_signed,force_sign_first,bool,
 
 # channeld->master: Signed psbt is completed
 msgtype,channeld_splice_confirmed_signed,7213
@@ -265,6 +266,10 @@ msgdata,channeld_got_inflight,feerate,u32,
 msgdata,channeld_got_inflight,satoshis,amount_sat,
 msgdata,channeld_got_inflight,our_funding_satoshis,amount_sat,
 msgdata,channeld_got_inflight,psbt,?wally_psbt,
+
+# channeld->master: Update inflight with sigs
+msgtype,channeld_update_inflight,7219
+msgdata,channeld_update_inflight,psbt,wally_psbt,
 
 # Tell peer to shut down channel.
 msgtype,channeld_send_shutdown,1023
