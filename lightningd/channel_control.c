@@ -140,6 +140,52 @@ void notify_feerate_change(struct lightningd *ld)
 	 * peer.  We *could* do so, however. */
 }
 
+static void handle_splice_funding_error(struct lightningd *ld,
+					 struct channel *channel,
+					 const u8 *msg)
+{
+	struct splice_command *cc;
+	struct splice_command *n;
+	struct amount_sat funding, req_funding;
+	bool opener_error;
+
+	if(!fromwire_channeld_splice_funding_error(msg, &funding,
+						   &req_funding,
+						   &opener_error)) {
+		channel_internal_error(channel,
+				       "bad fromwire_channeld_splice_feerate_error %s",
+				       tal_hex(channel, msg));
+		return;
+	}
+
+	list_for_each_safe(&ld->splice_commands, cc, n, list) {
+		if(channel != cc->channel)
+			continue;
+
+		struct json_stream *response = json_stream_success(cc->cmd);
+		json_add_string(response, "message", "Splice funding too low");
+		json_add_string(response, "error",
+				tal_fmt(tmpctx,
+					"%s provided %s but committed to %s.",
+					opener_error ? "You" : "Peer",
+					fmt_amount_sat(tmpctx, funding),
+					fmt_amount_sat(tmpctx, req_funding)));
+
+		was_pending(command_success(cc->cmd, response));
+
+		list_del(&cc->list);
+		tal_free(cc);
+		return;
+	}
+
+	log_peer_unusual(ld->log, &channel->peer->id,
+			 "Splice funding too low. %s provided but %s commited "
+			 "to %s",
+			 opener_error ? "peer" : "you",
+			fmt_amount_sat(tmpctx, funding),
+			fmt_amount_sat(tmpctx, req_funding));
+}
+
 static void handle_splice_feerate_error(struct lightningd *ld,
 					 struct channel *channel,
 					 const u8 *msg)
@@ -1098,6 +1144,9 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 		break;
 	case WIRE_CHANNELD_SPLICE_FEERATE_ERROR:
 		handle_splice_feerate_error(sd->ld, sd->channel, msg);
+		break;
+	case WIRE_CHANNELD_SPLICE_FUNDING_ERROR:
+		handle_splice_funding_error(sd->ld, sd->channel, msg);
 		break;
 	case WIRE_CHANNELD_SPLICE_CONFIRMED_UPDATE:
 		handle_splice_confirmed_update(sd->ld, sd->channel, msg);

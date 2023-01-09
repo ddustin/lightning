@@ -271,6 +271,12 @@ msgdata,channeld_got_inflight,psbt,?wally_psbt,
 msgtype,channeld_update_inflight,7219
 msgdata,channeld_update_inflight,psbt,wally_psbt,
 
+# channeld->master: A funding error has occured
+msgtype,channeld_splice_funding_error,7220
+msgdata,channeld_splice_funding_error,funding,amount_sat,
+msgdata,channeld_splice_funding_error,req_funding,amount_sat,
+msgdata,channeld_splice_funding_error,opener_error,bool,
+
 # Tell peer to shut down channel.
 msgtype,channeld_send_shutdown,1023
 msgdata,channeld_send_shutdown,final_index,?u32,

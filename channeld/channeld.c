@@ -2908,9 +2908,14 @@ static struct amount_sat check_balances(struct peer *peer,
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate intiator fee");
 	/* An extra check for cleaner log messages */
-	if(amount_sat_less(initiator_fee, peer->splice_opener_funding))
+	if(amount_sat_less(initiator_fee, peer->splice_opener_funding)) {
+		msg = towire_channeld_splice_funding_error(NULL, initiator_fee,
+							   peer->splice_opener_funding,
+							   true);
+		wire_sync_write(MASTER_FD, take(msg));
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Intiator funding is less than commited amount");
+				 "Initiator funding is less than commited amount");
+	}
 	if (!amount_sat_sub(&initiator_fee, initiator_fee,
 			    peer->splice_opener_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -2921,9 +2926,14 @@ static struct amount_sat check_balances(struct peer *peer,
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate accepter fee");
 	/* An extra check for cleaner log messages */
-	if(amount_sat_less(accepter_fee, peer->splice_accepter_funding))
+	if(amount_sat_less(accepter_fee, peer->splice_accepter_funding)) {
+		msg = towire_channeld_splice_funding_error(NULL, accepter_fee,
+							   peer->splice_accepter_funding,
+							   false);
+		wire_sync_write(MASTER_FD, take(msg));
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Accepter funding is less than commited amount");
+	}
 	if (!amount_sat_sub(&accepter_fee, accepter_fee,
 			    peer->splice_accepter_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -5423,6 +5433,7 @@ static void req_in(struct peer *peer, const u8 *msg)
 	case WIRE_CHANNELD_SPLICE_LOOKUP_TX_RESULT:
 	case WIRE_CHANNELD_SPLICE_CONFIRMED_FINALIZE:
 	case WIRE_CHANNELD_SPLICE_FEERATE_ERROR:
+	case WIRE_CHANNELD_SPLICE_FUNDING_ERROR:
 		break;
 #endif /* EXPERIMENTAL_FEATURES */
 #else
