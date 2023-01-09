@@ -1949,7 +1949,7 @@ static bool peer_save_updatesig_sent(struct channel *channel,
 		channel_internal_error(channel,
 			   "channel_sent_updatesig: expected update_num %"PRIu64
 			   " got %"PRIu64,
-			   channel->next_index[REMOTE], update_num);
+			   channel->next_index[LOCAL], update_num);
 		return false;
 	}
 
@@ -1959,6 +1959,29 @@ static bool peer_save_updatesig_sent(struct channel *channel,
     channel->eltoo_keyset.last_committed_state.session = *session;
     channel->eltoo_keyset.committed_update_tx = tal_steal(channel, committed_update_tx);
     channel->eltoo_keyset.committed_settle_tx = tal_steal(channel, committed_settle_tx);
+
+	wallet_channel_save(ld->wallet, channel);
+	return true;
+}
+
+static bool peer_save_updatesig_resent(struct channel *channel,
+                                     u64 update_num,
+                                     struct partial_sig *our_psig,
+                                     struct musig_session *session)
+{
+	struct lightningd *ld = channel->peer->ld;
+
+	/* Should be a repeat */
+	if (update_num != channel->next_index[LOCAL] - 1) {
+		channel_internal_error(channel,
+			   "channel_resent_updatesig: expected update_num %"PRIu64
+			   " got %"PRIu64,
+			   channel->next_index[LOCAL] - 1, update_num);
+		return false;
+	}
+
+    channel->eltoo_keyset.last_committed_state.self_psig = *our_psig;
+    channel->eltoo_keyset.last_committed_state.session = *session;
 
 	wallet_channel_save(ld->wallet, channel);
 	return true;
@@ -2020,6 +2043,31 @@ void peer_got_ack(struct channel *channel, const u8 *msg)
 	subd_send_msg(channel->owner,
 		      take(towire_channeld_got_ack_reply(msg)));
 
+}
+
+void peer_resending_updatesig(struct channel *channel, const u8 *msg)
+{
+	u64 update_num;
+	struct partial_sig our_update_psig;
+    struct musig_session session;
+
+	if (!fromwire_channeld_resending_updatesig(msg,
+						&update_num,
+						&our_update_psig,
+                        &session)) {
+		channel_internal_error(channel, "bad channel_resending_updatesig %s",
+				       tal_hex(channel, msg));
+		return;
+	}
+
+
+    /* Add newest state to channel, then save to db */
+	if (!peer_save_updatesig_resent(channel, update_num, &our_update_psig, &session))
+		return;
+
+	/* Tell it we've got it, and to go ahead. */
+	subd_send_msg(channel->owner,
+		      take(towire_channeld_resending_updatesig_reply(msg)));
 }
 
 void peer_sending_updatesig(struct channel *channel, const u8 *msg)

@@ -600,6 +600,9 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
     case WIRE_CHANNELD_SENDING_UPDATESIG:
 		peer_sending_updatesig(sd->channel, msg);
         break;
+    case WIRE_CHANNELD_RESENDING_UPDATESIG:
+		peer_resending_updatesig(sd->channel, msg);
+        break;
     case WIRE_CHANNELD_GOT_ACK:
 		peer_got_ack(sd->channel, msg);
         break;
@@ -608,6 +611,7 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
     case WIRE_CHANNELD_GOT_ACK_REPLY:
     case WIRE_CHANNELD_GOT_SHUTDOWN_ELTOO:
     case WIRE_CHANNELD_SENDING_UPDATESIG_REPLY:
+    case WIRE_CHANNELD_RESENDING_UPDATESIG_REPLY:
 #if EXPERIMENTAL_FEATURES
 	case WIRE_CHANNELD_UPGRADED:
 		handle_channel_upgrade(sd->channel, msg);

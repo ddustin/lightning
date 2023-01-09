@@ -351,6 +351,32 @@ bool bipmusig_partial_sigs_combine_verify(const secp256k1_musig_partial_sig * co
     return secp256k1_schnorrsig_verify(secp256k1_ctx, sig->u8, hash->sha.u.u8, sizeof(hash->sha.u.u8), &xonly_inner_pubkey);
 }
 
+bool bipmusig_partial_sig_verify(const struct partial_sig *p_sig,
+								const struct nonce *signer_nonce,
+								const struct pubkey *signer_pk,
+								const struct musig_keyagg_cache *keyagg_cache,
+								struct musig_session *session)
+{
+    int ret;
+    secp256k1_xonly_pubkey xonly_inner_pubkey;
+
+    ret = secp256k1_xonly_pubkey_from_pubkey(secp256k1_ctx,
+        &xonly_inner_pubkey,
+        NULL /* pk_parity */,
+        &signer_pk->pubkey);
+
+    if (!ret) {
+        return false;
+    }
+
+	return secp256k1_musig_partial_sig_verify(secp256k1_ctx,
+												&p_sig->p_sig,
+												&signer_nonce->nonce,
+												&xonly_inner_pubkey,
+												&keyagg_cache->cache,
+												&session->session);
+}
+
 bool bipmusig_partial_sigs_combine(const secp256k1_musig_partial_sig * const *p_sigs,
            size_t num_signers,
            const secp256k1_musig_session *session,
@@ -763,6 +789,19 @@ char *fmt_musig_session(const tal_t *ctx, const struct musig_session *musig_sess
 }
 
 REGISTER_TYPE_TO_HEXSTR(musig_session);
+
+void towire_musig_keyagg_cache(u8 **pptr, const struct musig_keyagg_cache *cache)
+{
+    /* No proper serialization/parsing supplied, we're just copying bytes */
+    towire_u8_array(pptr, cache->cache.data, sizeof(cache->cache.data));
+}
+
+void fromwire_musig_keyagg_cache(const u8 **cursor, size_t *max,
+            struct musig_keyagg_cache *cache){
+    /* No proper serialization/parsing supplied, we're just copying bytes */
+    if (!fromwire(cursor, max, cache->cache.data, sizeof(cache->cache.data)))
+        return;
+}
 
 /* BIP-340:
  *
