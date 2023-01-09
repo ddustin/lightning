@@ -1,5 +1,6 @@
 #include <bitcoin/psbt.h>
 #include <bitcoin/tx.h>
+#include <channeld/inflight.h>
 #include <common/bip32.h>
 #include <common/blockheight_states.h>
 #include <common/cryptomsg.h>
@@ -83,6 +84,7 @@ msgdata,channeld_init,reestablish_only,bool,
 msgdata,channeld_init,channel_update_len,u16,
 msgdata,channeld_init,channel_update,u8,channel_update_len
 msgdata,channeld_init,inflight_count,u32,
+msgdata,channeld_init,inflights,inflight,inflight_count
 
 # master->channeld funding hit new depth(funding locked if >= lock depth)
 # alias != NULL if zeroconf and short_channel_id == NULL
@@ -253,19 +255,8 @@ msgdata,channeld_add_inflight,satoshis,amount_sat,
 msgdata,channeld_add_inflight,our_funding_satoshis,amount_sat,
 msgdata,channeld_add_inflight,psbt,wally_psbt,
 
-# channeld->master: Give me inflight index #n
-msgtype,channeld_get_inflight,7217
-msgdata,channeld_get_inflight,index,u32,
-
-# master->channeld:Here is inflight index #n. is_found=false last / index not found
-msgtype,channeld_got_inflight,7218
-msgdata,channeld_got_inflight,is_found,bool,
-msgdata,channeld_got_inflight,tx_id,bitcoin_txid,
-msgdata,channeld_got_inflight,tx_outnum,u32,
-msgdata,channeld_got_inflight,feerate,u32,
-msgdata,channeld_got_inflight,satoshis,amount_sat,
-msgdata,channeld_got_inflight,our_funding_satoshis,amount_sat,
-msgdata,channeld_got_inflight,psbt,?wally_psbt,
+# master->channeld: Inflight saved successfully
+msgtype,channeld_got_inflight,7217
 
 # channeld->master: Update inflight with sigs
 msgtype,channeld_update_inflight,7219

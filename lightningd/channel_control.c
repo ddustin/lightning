@@ -567,6 +567,8 @@ static void handle_add_inflight(struct lightningd *ld,
 
 	wallet_inflight_add(ld->wallet, inflight);
 	channel_watch_inflight(ld, channel, inflight);
+
+	subd_send_msg(channel->owner, take(towire_channeld_got_inflight(NULL)));
 }
 
 static void handle_update_inflight(struct lightningd *ld,
@@ -1031,63 +1033,6 @@ static bool get_inflight_outpoint_index(struct channel *channel,
 	return false;
 }
 
-/* DTODO: this method will go away and be replaced with channeld getting
- * inflights on start, storing that cache, and updating it with it's own inflights */
-static void handle_channel_get_inflight(struct channel *channel,
-					const u8 *msg)
-{
-	u8 *outMsg;
-	struct channel_inflight *inflight;
-	u32 index;
-	u32 i = 0;
-	struct bitcoin_outpoint outpoint;
-	u32 theirFeerate = 0;
-	struct amount_sat funding_sats;
-	struct amount_sat our_funding_sats;
-	struct wally_psbt *psbt = create_psbt(tmpctx, 0, 0, 0);
-
-	if (!fromwire_channeld_get_inflight(msg, &index)) {
-		channel_internal_error(channel, "bad handle_channel_get_inflight: %s",
-				       tal_hex(tmpctx, msg));
-		return;
-	}
-
-	assert(streq(channel->owner->name, "channeld"));
-
-	list_for_each(&channel->inflights, inflight, list) {
-		if(i == index) {
-			outMsg = towire_channeld_got_inflight(NULL,
-							      true,
-							      &inflight->funding->outpoint.txid,
-							      inflight->funding->outpoint.n,
-							      inflight->funding->feerate,
-							      inflight->funding->total_funds,
-							      inflight->funding->our_funds,
-							      inflight->funding_psbt);
-
-			subd_send_msg(channel->owner, take(outMsg));
-			return;
-		}
-	}
-
-	/* Send 'NULL' result to indicate end of list */
-	funding_sats.satoshis = 0;
-	our_funding_sats.satoshis = 0;
-
-	memset(&outpoint.txid, 0, sizeof(outpoint.txid));
-	outpoint.n = 0;
-
-	outMsg = towire_channeld_got_inflight(NULL,
-					      false,
-					      &outpoint.txid,
-					      outpoint.n,
-					      theirFeerate,
-					      funding_sats,
-					      our_funding_sats,
-					      psbt);
-
-	subd_send_msg(channel->owner, take(outMsg));
-}
 #endif /* EXPERIMENTAL_FEATURES */
 
 static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
@@ -1172,9 +1117,6 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 	case WIRE_CHANNELD_UPGRADED:
 		handle_channel_upgrade(sd->channel, msg);
 		break;
-	case WIRE_CHANNELD_GET_INFLIGHT:
-		handle_channel_get_inflight(sd->channel, msg);
-		break;
 	case WIRE_CHANNELD_INFLIGHT_MINDEPTH:
 #else
 	case WIRE_CHANNELD_GET_INFLIGHT:
@@ -1225,6 +1167,7 @@ bool peer_start_channeld(struct channel *channel,
 {
 	u8 *initmsg;
 	int hsmfd;
+	u32 i;
 	const struct existing_htlc **htlcs;
 	struct short_channel_id scid;
 	u64 num_revocations;
@@ -1234,8 +1177,8 @@ bool peer_start_channeld(struct channel *channel,
 	struct secret last_remote_per_commit_secret;
 	secp256k1_ecdsa_signature *remote_ann_node_sig, *remote_ann_bitcoin_sig;
 	struct penalty_base *pbases;
-	u32 inflight_count = 0;
 	struct channel_inflight *inflight;
+	struct inflight *inflights;
 
 	hsmfd = hsm_get_client_fd(ld, &channel->peer->id,
 				  channel->dbid,
@@ -1335,8 +1278,13 @@ bool peer_start_channeld(struct channel *channel,
 		return false;
 	}
 
+	i = 0;
+	inflights = tal_arr(tmpctx, struct inflight, 0);
 	list_for_each(&channel->inflights, inflight, list) {
-		inflight_count++;
+		tal_resize(&inflights, i + 1);
+		inflights[i].outpoint = inflight->funding->outpoint;
+		inflights[i].amnt = inflight->funding->total_funds;
+		i++;
 	}
 
 	initmsg = towire_channeld_init(tmpctx,
@@ -1409,7 +1357,7 @@ bool peer_start_channeld(struct channel *channel,
 				       pbases,
 				       reestablish_only,
 				       channel->channel_update,
-				       inflight_count);
+				       inflights);
 
 	/* We don't expect a response: we are triggered by funding_depth_cb. */
 	subd_send_msg(channel->owner, take(initmsg));

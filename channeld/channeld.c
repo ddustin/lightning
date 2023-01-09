@@ -19,6 +19,7 @@
 #include <channeld/channeld.h>
 #include <channeld/channeld_wiregen.h>
 #include <channeld/full_channel.h>
+#include <channeld/inflight.h>
 #include <channeld/watchtower.h>
 #include <common/billboard.h>
 #include <common/ecdh_hsmd.h>
@@ -186,6 +187,8 @@ struct peer {
 	bool received_tx_complete;
 	/* Tally of which sides are locked, or not */
 	bool splice_locked_ready[NUM_SIDES];
+	/* The active inflights */
+	struct inflight *inflights;
 
 	/* DTODO: instead of querying all inflights with
 	 * channeld_get_inflight / channeld_got_inflight, add the individual
@@ -717,6 +720,8 @@ static void check_mutual_splice_locked(struct peer *peer)
 	channel_announcement_negotiate(peer);
 	billboard_update(peer);
 	send_channel_update(peer, 0);
+
+	peer->inflights = tal_free(peer->inflights);
 }
 
 /* Our peer told us they saw our splice confirm on chain with `splice_locked`.
@@ -1527,49 +1532,14 @@ static void send_commit(struct peer *peer)
 	 * They should be based on how they're stored in the Database but we
 	 * should verify.
 	 */
-	for (u32 i = 0; peer->splice_count; i++) {
-		enum channeld_wire type;
-		bool is_found;
-		struct bitcoin_outpoint outpoint;
-		u32 theirFeerate;
-		struct amount_sat funding_sats, our_funding_sats;
-		struct wally_psbt *psbt;
+	for (u32 i = 0; i < tal_count(peer->inflights); i++) {
+		struct bitcoin_outpoint outpoint = peer->inflights[i].outpoint;
+		struct amount_sat funding_sats = peer->inflights[i].amnt;
 		struct bitcoin_tx **splice_txs;
 		struct bitcoin_signature splice_commit_sig, *splice_htlc_sigs;
 		const struct htlc **splice_htlc_map;
 		struct wally_tx_output *splice_direct_outputs[NUM_SIDES];
 		int old_size;
-
-		msg = towire_channeld_get_inflight(NULL, i);
-		msg = master_wait_sync_reply(tmpctx, peer, take(msg),
-					     WIRE_CHANNELD_GOT_INFLIGHT);
-		type = fromwire_peektype(msg);
-		if (type != WIRE_CHANNELD_GOT_INFLIGHT) {
-
-			peer_failed_err(peer->pps, &peer->channel_id,
-					"Channeld got incorrect message from "
-					"lightningd: %d "
-					"(should be WIRE_CHANNELD_GOT_INFLIGHT) "
-					"attempt #%i", type, (int)i);
-
-			break;
-		}
-
-		if (!fromwire_channeld_got_inflight(tmpctx,
-						    msg,
-						    &is_found,
-						    &outpoint.txid,
-						    &outpoint.n,
-						    &theirFeerate,
-						    &funding_sats,
-						    &our_funding_sats,
-						    &psbt))
-			peer_failed_err(peer->pps,
-					&peer->channel_id,
-					"Invalid 'got_inflight' mesage from daemon");
-
-		if (!is_found)
-			break;
 
 		splice_txs = channel_splice_txs(tmpctx, &outpoint, funding_sats,
 						&splice_htlc_map, splice_direct_outputs,
@@ -2017,14 +1987,9 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 
 	/* Validate the commitment sigs for all splcies awaiting confimration.
 	 * Since we're looping anyway, we'll check splice HTLC sigs as well. */
-	for (i = 0; peer->splice_count; i++) {
-		u8 *master_msg;
-		enum channeld_wire type;
-		bool is_found;
-		struct bitcoin_outpoint outpoint;
-		u32 theirFeerate;
-		struct amount_sat funding_sats, our_funding_sats;
-		struct wally_psbt *psbt;
+	for (i = 0; i < tal_count(peer->inflights); i++) {
+		struct bitcoin_outpoint outpoint = peer->inflights[i].outpoint;
+		struct amount_sat funding_sats = peer->inflights[i].amnt;
 		struct bitcoin_tx **splice_txs;
 		const struct htlc **splice_htlc_map;
 		struct wally_tx_output *splice_direct_outputs[NUM_SIDES];
@@ -2032,36 +1997,6 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 	        secp256k1_ecdsa_signature *raw_htlc_sig;
 	        struct bitcoin_signature *splice_htlc_sig;
 		const u8 *splice_funding_wscript;
-
-		master_msg = towire_channeld_get_inflight(NULL, i);
-		master_msg = master_wait_sync_reply(tmpctx, peer, take(master_msg),
-						    WIRE_CHANNELD_GOT_INFLIGHT);
-
-		type = fromwire_peektype(master_msg);
-		if (type != WIRE_CHANNELD_GOT_INFLIGHT) {
-			peer_failed_err(peer->pps, &peer->channel_id,
-					"Channeld got incorrect message from "
-					"lightningd: %d "
-					"(should be WIRE_CHANNELD_GOT_INFLIGHT)",
-					type);
-			break;
-		}
-
-		if (!fromwire_channeld_got_inflight(tmpctx,
-						    master_msg,
-						    &is_found,
-						    &outpoint.txid,
-						    &outpoint.n,
-						    &theirFeerate,
-						    &funding_sats,
-						    &our_funding_sats,
-						    &psbt))
-			peer_failed_err(peer->pps,
-					&peer->channel_id,
-					"Invalid 'got_inflight' mesage from daemon");
-
-		if (!is_found)
-			break;
 
 	        splice_commit_sig.sighash_type = SIGHASH_ALL;
 
@@ -3121,17 +3056,24 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	status_debug("Splice accepter adding inflight: %s", psbt_to_b64(tmpctx, ictx->current_psbt));
 
-	/* DTODO add inflight to the local inflight cache when built */
-	wire_sync_write(MASTER_FD,
-			towire_channeld_add_inflight(tmpctx,
-						     &outpoint.txid,
-						     outpoint.n,
-						     theirFeerate,
-						     both_amount,
-						     peer->splice_accepter_funding,
-						     ictx->current_psbt));
+	msg = towire_channeld_add_inflight(NULL,
+					   &outpoint.txid,
+					   outpoint.n,
+					   theirFeerate,
+					   both_amount,
+					   peer->splice_accepter_funding,
+					   ictx->current_psbt);
 
-	/* DTODO: Need to wait for an ack back here from lightningd for saftey */
+	master_wait_sync_reply(tmpctx, peer, take(msg),
+			       WIRE_CHANNELD_GOT_INFLIGHT);
+
+	if(peer->inflights)
+		tal_resize(&peer->inflights, tal_count(peer->inflights) + 1);
+	else
+		peer->inflights = tal_arr(peer, struct inflight, 1);
+
+	peer->inflights[tal_count(peer->inflights) - 1].outpoint = outpoint;
+	peer->inflights[tal_count(peer->inflights) - 1].amnt = both_amount;
 
 	peer->splice_count++;
 
@@ -3636,14 +3578,24 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	status_debug("Splice adding inflight: %s", psbt_to_b64(tmpctx, signed_psbt));
 
-	wire_sync_write(MASTER_FD,
-			towire_channeld_add_inflight(tmpctx,
-						     &outpoint.txid,
-						     outpoint.n,
-						     theirFeerate,
-						     funding_sats,
-						     peer->splice_opener_funding,
-						     signed_psbt));
+	msg = towire_channeld_add_inflight(tmpctx,
+					   &outpoint.txid,
+					   outpoint.n,
+					   theirFeerate,
+					   funding_sats,
+					   peer->splice_opener_funding,
+					   signed_psbt);
+
+	master_wait_sync_reply(tmpctx, peer, take(msg),
+			       WIRE_CHANNELD_GOT_INFLIGHT);
+
+	if(peer->inflights)
+		tal_resize(&peer->inflights, tal_count(peer->inflights) + 1);
+	else
+		peer->inflights = tal_arr(peer, struct inflight, 1);
+
+	peer->inflights[tal_count(peer->inflights) - 1].outpoint = outpoint;
+	peer->inflights[tal_count(peer->inflights) - 1].amnt = funding_sats;
 
 	peer->splice_count++;
 
@@ -5466,7 +5418,6 @@ static void req_in(struct peer *peer, const u8 *msg)
 	case WIRE_CHANNELD_LOCAL_PRIVATE_CHANNEL:
 	case WIRE_CHANNELD_ADD_INFLIGHT:
 	case WIRE_CHANNELD_UPDATE_INFLIGHT:
-	case WIRE_CHANNELD_GET_INFLIGHT:
 	case WIRE_CHANNELD_GOT_INFLIGHT:
 		break;
 	}
@@ -5500,7 +5451,6 @@ static void init_channel(struct peer *peer)
 	struct channel_type *channel_type;
 	u32 *dev_disable_commit; /* Always NULL */
 	bool dev_fast_gossip;
-	u32 inflight_count;
 #if !DEVELOPER
 	bool dev_fail_process_onionpacket; /* Ignored */
 #endif
@@ -5570,15 +5520,15 @@ static void init_channel(struct peer *peer)
 				    &pbases,
 				    &reestablish_only,
 				    &peer->channel_update,
-				    &inflight_count)) {
+				    &peer->inflights)) {
 		master_badmsg(WIRE_CHANNELD_INIT, msg);
 	}
 
 	peer->final_index = tal_dup(peer, u32, &final_index);
 	peer->final_ext_key = tal_dup(peer, struct ext_key, &final_ext_key);
-	peer->committed_splice_count = inflight_count;
-	peer->revoked_splice_count = inflight_count;
-	peer->splice_count = inflight_count;
+	peer->committed_splice_count = tal_count(peer->inflights);
+	peer->revoked_splice_count = tal_count(peer->inflights);
+	peer->splice_count = tal_count(peer->inflights);
 
 #if DEVELOPER
 	peer->dev_disable_commit = dev_disable_commit;
@@ -5725,6 +5675,7 @@ int main(int argc, char *argv[])
 	reset_splice(peer);
 	peer->splice_locked_ready[LOCAL] = false;
 	peer->splice_locked_ready[REMOTE] = false;
+	peer->inflights = NULL;
 #endif
 
 	/* We send these to HSM to get real signatures; don't have valgrind
