@@ -1718,30 +1718,25 @@ void channel_replace_update(struct channel *channel, u8 *update TAKES)
 }
 
 static struct channel *splice_load_channel(struct command *cmd,
-					   struct node_id *id,
+					   struct channel_id *cid,
 					   struct command_result **error)
 {
 	struct channel *channel;
-	struct peer *peer;
 
 	*error = NULL;
 
-	peer = peer_by_id(cmd->ld, id);
-	if (!peer) {
-		*error = command_fail(cmd, FUNDING_UNKNOWN_PEER, "Unknown peer");
-		return NULL;
-	}
-
-	/* DTODO: Swap peer_id for channel_id */
-	channel = peer_any_active_channel(peer, NULL);
+	channel = channel_by_cid(cmd->ld, cid);
 	if (!channel) {
-		*error = command_fail(cmd, LIGHTNINGD, "Peer does not have channel");
+		*error = command_fail(cmd, SPLICE_UNKNOWN_CHANNEL,
+				    "Unknown channel %s",
+				    type_to_string(tmpctx, struct channel_id,
+						   cid));
 		return NULL;
 	}
 
 	/* DTODO: Register splicing feature bits and change check below */
 	if (!feature_negotiated(cmd->ld->our_features,
-			        peer->their_features,
+			        channel->peer->their_features,
 				OPT_DUAL_FUND)) {
 		*error = command_fail(cmd, FUNDING_V2_NOT_SUPPORTED,
 				    "v2 openchannel not supported "
@@ -1772,10 +1767,10 @@ static struct command_result *json_splice_init(struct command *cmd,
 					       const jsmntok_t *obj UNNEEDED,
 					       const jsmntok_t *params)
 {
-	struct node_id *id;
+	struct channel_id *cid;
 	struct channel *channel;
-	struct splice_command *cc;
 	struct command_result *error;
+	struct splice_command *cc;
 	struct wally_psbt *initialpsbt;
 	struct amount_sat *amount;
 	u32 *feerate_per_kw;
@@ -1783,13 +1778,17 @@ static struct command_result *json_splice_init(struct command *cmd,
 	u8 *msg;
 
 	if(!param(cmd, buffer, params,
-		  p_req("id", param_node_id, &id),
+		  p_req("channel_id", param_channel_id, &cid),
 		  p_req("amount", param_sat, &amount),
 		  p_opt("initialpsbt", param_psbt, &initialpsbt),
 		  p_opt("feerate_per_kw", param_feerate, &feerate_per_kw),
 		  p_opt("force_feerate", param_bool, &force_feerate),
 		  NULL))
 		return command_param_failed();
+
+	channel = splice_load_channel(cmd, cid, &error);
+	if (error)
+		return error;
 
 	if (!initialpsbt)
 		initialpsbt = create_psbt(cmd, 0, 0, 0);
@@ -1801,10 +1800,6 @@ static struct command_result *json_splice_init(struct command *cmd,
 		force_feerate = tal(tmpctx, bool);
 		*force_feerate = false;
 	}
-
-	channel = splice_load_channel(cmd, id, &error);
-	if (error)
-		return error;
 
 	cc = tal(NULL, struct splice_command);
 
@@ -1825,19 +1820,19 @@ static struct command_result *json_splice_update(struct command *cmd,
 						 const jsmntok_t *obj UNNEEDED,
 						 const jsmntok_t *params)
 {
-	struct node_id *id;
+	struct channel_id *cid;
 	struct channel *channel;
 	struct splice_command *cc;
 	struct wally_psbt *psbt;
 	struct command_result *error;
 
 	if(!param(cmd, buffer, params,
-		  p_req("id", param_node_id, &id),
+		  p_req("channel_id", param_channel_id, &cid),
 		  p_req("psbt", param_psbt, &psbt),
 		  NULL))
 		return command_param_failed();
 
-	channel = splice_load_channel(cmd, id, &error);
+	channel = splice_load_channel(cmd, cid, &error);
 	if (error)
 		return error;
 
@@ -1858,17 +1853,17 @@ static struct command_result *json_splice_finalize(struct command *cmd,
 						 const jsmntok_t *obj UNNEEDED,
 						 const jsmntok_t *params)
 {
-	struct node_id *id;
+	struct channel_id *cid;
 	struct channel *channel;
 	struct splice_command *cc;
 	struct command_result *error;
 
 	if(!param(cmd, buffer, params,
-		  p_req("id", param_node_id, &id),
+		  p_req("channel_id", param_channel_id, &cid),
 		  NULL))
 		return command_param_failed();
 
-	channel = splice_load_channel(cmd, id, &error);
+	channel = splice_load_channel(cmd, cid, &error);
 	if (error)
 		return error;
 
@@ -1889,7 +1884,7 @@ static struct command_result *json_splice_signed(struct command *cmd,
 						 const jsmntok_t *obj UNNEEDED,
 						 const jsmntok_t *params)
 {
-	struct node_id *id;
+	struct channel_id *cid;
 	u8 *msg;
 	struct channel *channel;
 	struct splice_command *cc;
@@ -1898,13 +1893,13 @@ static struct command_result *json_splice_signed(struct command *cmd,
 	bool *sign_first;
 
 	if(!param(cmd, buffer, params,
-		  p_req("id", param_node_id, &id),
+		  p_req("channel_id", param_channel_id, &cid),
 		  p_req("psbt", param_psbt, &psbt),
 		  p_opt_def("sign_first", param_bool, &sign_first, false),
 		  NULL))
 		return command_param_failed();
 
-	channel = splice_load_channel(cmd, id, &error);
+	channel = splice_load_channel(cmd, cid, &error);
 	if (error)
 		return error;
 
@@ -1927,7 +1922,7 @@ static const struct json_command splice_init_command = {
 	"splice_init",
 	"channels",
 	json_splice_init,
-	"Init a channel splice to {id} for {amount} satoshis with {initialpsbt}. "
+	"Init a channel splice to {channel_id} for {amount} satoshis with {initialpsbt}. "
 	"Returns updated {psbt} with (partial) contributions from peer"
 };
 AUTODATA(json_command, &splice_init_command);
@@ -1951,7 +1946,7 @@ static const struct json_command splice_finalize_command = {
 	"splice_finalize",
 	"channels",
 	json_splice_finalize,
-	"Finalize a {id} splice by filling in channel output amount. "
+	"Finalize a {channel_id} splice by filling in channel output amount. "
 	"Resulting PSBT is returned for signing."
 };
 AUTODATA(json_command, &splice_finalize_command);
