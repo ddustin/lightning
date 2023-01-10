@@ -4,7 +4,7 @@ lightning-invoice -- Command for accepting payments
 SYNOPSIS
 --------
 
-**invoice** *amount_msat* *label* *description* [*expiry*]
+**invoice** *amount\_msat* *label* *description* [*expiry*]
 [*fallbacks*] [*preimage*] [*exposeprivatechannels*] [*cltv*] [*deschashonly*]
 
 DESCRIPTION
@@ -16,7 +16,7 @@ lightning daemon can use to pay this invoice. This token includes a
 *route hint* description of an incoming channel with capacity to pay the
 invoice, if any exists.
 
-The *amount_msat* parameter can be the string "any", which creates an
+The *amount\_msat* parameter can be the string "any", which creates an
 invoice that can be paid with any amount. Otherwise it is a positive value in
 millisatoshi precision; it can be a whole number, or a whole number
 ending in *msat* or *sat*, or a number with three decimal places ending
@@ -58,13 +58,13 @@ as a route hint candidate; if *false*, never.  If it is a short channel id
 will be considered candidates, even if they are public or dead-ends.
 
 The route hint is selected from the set of incoming channels of which:
-peer's balance minus their reserves is at least *msatoshi*, state is
+peer's balance minus their reserves is at least *amount\_msat*, state is
 normal, the peer is connected and not a dead end (i.e. has at least one
 other public channel). The selection uses some randomness to prevent
 probing, but favors channels that become more balanced after the
 payment.
 
-If specified, *cltv* sets the *min_final_cltv_expiry* for the invoice.
+If specified, *cltv* sets the *min\_final\_cltv\_expiry* for the invoice.
 Otherwise, it's set to the parameter **cltv-final**.
 
 If *deschashonly* is true (default false), then the bolt11 returned
@@ -79,8 +79,8 @@ RETURN VALUE
 On success, an object is returned, containing:
 
 - **bolt11** (string): the bolt11 string
-- **payment\_hash** (hash): the hash of the *payment_preimage* which will prove payment (always 64 characters)
-- **payment\_secret** (secret): the *payment_secret* to place in the onion (always 64 characters)
+- **payment\_hash** (hash): the hash of the *payment\_preimage* which will prove payment (always 64 characters)
+- **payment\_secret** (secret): the *payment\_secret* to place in the onion (always 64 characters)
 - **expires\_at** (u64): UNIX timestamp of when invoice expires
 
 The following warnings may also be returned:
@@ -119,4 +119,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:4dd2b9d74116f77ad09ad4162ba8438db79e79d1aa99b23e2c993d754327649d)
+[comment]: # ( SHA256STAMP:e3b07ce2a4cbe9198d5a65df1e49b628a8a7e857770e004a1d84c41c67601712)

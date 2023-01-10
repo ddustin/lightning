@@ -4,7 +4,7 @@ lightning-multifundchannel -- Command for establishing many lightning channels
 SYNOPSIS
 --------
 
-**multifundchannel** *destinations* [*feerate*] [*minconf*] [*utxos*] [*minchannels*] [*commitment_feerate*]
+**multifundchannel** *destinations* [*feerate*] [*minconf*] [*utxos*] [*minchannels*] [*commitment\_feerate*]
 
 DESCRIPTION
 -----------
@@ -47,22 +47,26 @@ Readiness is indicated by **listpeers** reporting a *state* of
   node.
   This is a gift to the peer, and you do not get a proof-of-payment
   out of this.
-* *close_to* is a Bitcoin address to which the channel funds should be sent to
+* *close\_to* is a Bitcoin address to which the channel funds should be sent to
   on close. Only valid if both peers have negotiated
   `option_upfront_shutdown_script`.  Returns `close_to` set to
   closing script iff is negotiated.
-* *request_amt* is the amount of liquidity you'd like to lease from peer.
+* *request\_amt* is the amount of liquidity you'd like to lease from peer.
   If peer supports `option_will_fund`, indicates to them to include this
-  much liquidity into the channel. Must also pass in *compact_lease*.
-* *compact_lease* is a compact represenation of the peer's expected
+  much liquidity into the channel. Must also pass in *compact\_lease*.
+* *compact\_lease* is a compact represenation of the peer's expected
   channel lease terms. If the peer's terms don't match this set, we will
   fail to open the channel to this destination.
+* *reserve* is the amount we want the peer to maintain on its side of the
+  channel. Default is 1% of the funding amount. It can be a whole number, a
+  whole number ending in *sat*, a whole number ending in *000msat*, or a number
+  with 1 to 8 decimal places ending in *btc*.
 
 There must be at least one entry in *destinations*;
 it cannot be an empty array.
 
 *feerate* is an optional feerate used for the opening transaction and, if
-*commitment_feerate* is not set, as the initial feerate for
+*commitment\_feerate* is not set, as the initial feerate for
 commitment and HTLC transactions. It can be one of
 the strings *urgent* (aim for next block), *normal* (next 4 blocks or
 so) or *slow* (next 100 blocks or so) to use lightningd's internal
@@ -84,7 +88,7 @@ this many peers remain (must not be zero).
 The **multifundchannel** command will only fail if too many peers fail
 the funding process.
 
-*commitment_feerate* is the initial feerate for commitment and HTLC
+*commitment\_feerate* is the initial feerate for commitment and HTLC
 transactions. See *feerate* for valid values.
 
 RETURN VALUE
@@ -105,11 +109,11 @@ On success, an object is returned, containing:
 - **channel\_ids** (array of objects):
   - **id** (pubkey): The peer we opened the channel with
   - **outnum** (u32): The 0-based output index showing which output funded the channel
-  - **channel\_id** (hex): The channel_id of the resulting channel (always 64 characters)
-  - **close\_to** (hex, optional): The raw scriptPubkey which mutual close will go to; only present if *close_to* parameter was specified and peer supports `option_upfront_shutdown_script`
+  - **channel\_id** (hex): The channel\_id of the resulting channel (always 64 characters)
+  - **close\_to** (hex, optional): The raw scriptPubkey which mutual close will go to; only present if *close\_to* parameter was specified and peer supports `option_upfront_shutdown_script`
 - **failed** (array of objects, optional): any peers we failed to open with (if *minchannels* was specified less than the number of destinations):
   - **id** (pubkey): The peer we failed to open the channel with
-  - **method** (string): What stage we failed at (one of "connect", "openchannel_init", "fundchannel_start", "fundchannel_complete")
+  - **method** (string): What stage we failed at (one of "connect", "openchannel\_init", "fundchannel\_start", "fundchannel\_complete")
   - **error** (object):
     - **code** (integer): JSON error code from failing stage
     - **message** (string): Message from stage
@@ -159,4 +163,5 @@ RESOURCES
 ---------
 
 Main web site: <https://github.com/ElementsProject/lightning>
-[comment]: # ( SHA256STAMP:a507d57bbf36455924497c8354f41e225bc16f63f12fe01b4f7c4af37f0c6960)
+
+[comment]: # ( SHA256STAMP:0dc2b563ed6995f65388a52b01e8882a167ead3c1d3b3dc985486cd8b4dfe157)

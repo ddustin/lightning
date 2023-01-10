@@ -4,7 +4,7 @@ lightning-keysend -- Send funds to a node without an invoice
 SYNOPSIS
 --------
 
-**keysend** *destination* *msatoshi* [*label*] [*maxfeepercent*] [*retry\_for*] [*maxdelay*] [*exemptfee*] [*extratlvs*]
+**keysend** *destination* *amount\_msat* [*label*] [*maxfeepercent*] [*retry\_for*] [*maxdelay*] [*exemptfee*] [*extratlvs*]
 
 DESCRIPTION
 -----------
@@ -23,7 +23,7 @@ sending a payment. Please ensure that this matches your use-case when using
 `keysend`.
 
 `destination` is the 33 byte, hex-encoded, node ID of the node that the payment should go to.
-`msatoshi` is in millisatoshi precision; it can be a whole number, or a whole number with suffix `msat` or `sat`, or a three decimal point number with suffix `sat`, or an 1 to 11 decimal point number suffixed by `btc`.
+`amount\_msat` is in millisatoshi precision; it can be a whole number, or a whole number with suffix `msat` or `sat`, or a three decimal point number with suffix `sat`, or an 1 to 11 decimal point number suffixed by `btc`.
 
 The `label` field is used to attach a label to payments, and is returned in lightning-listpays(7) and lightning-listsendpays(7).
 The `maxfeepercent` limits the money paid in fees as percentage of the total amount that is to be transferred, and defaults to *0.5*.
@@ -33,7 +33,7 @@ Setting `exemptfee` allows the `maxfeepercent` check to be skipped on fees that 
 The response will occur when the payment fails or succeeds.
 Unlike lightning-pay(7), issuing the same `keysend` commands multiple times will result in multiple payments being sent.
 
-Until *retry_for* seconds passes (default: 60), the command will keep finding routes and retrying the payment.
+Until *retry\_for* seconds passes (default: 60), the command will keep finding routes and retrying the payment.
 However, a payment may be delayed for up to `maxdelay` blocks by another node; clients should be prepared for this worst case.
 
 *extratlvs* is an optional dictionary of additional fields to insert into the final tlv.  The format is 'fieldnumber': 'hexstring'.
@@ -70,8 +70,8 @@ RETURN VALUE
 [comment]: # (GENERATE-FROM-SCHEMA-START)
 On success, an object is returned, containing:
 
-- **payment\_preimage** (secret): the proof of payment: SHA256 of this **payment_hash** (always 64 characters)
-- **payment\_hash** (hash): the hash of the *payment_preimage* which will prove payment (always 64 characters)
+- **payment\_preimage** (secret): the proof of payment: SHA256 of this **payment\_hash** (always 64 characters)
+- **payment\_hash** (hash): the hash of the *payment\_preimage* which will prove payment (always 64 characters)
 - **created\_at** (number): the UNIX timestamp showing when this payment was initiated
 - **parts** (u32): how many attempts this took
 - **amount\_msat** (msat): Amount the recipient received
@@ -99,7 +99,7 @@ A routing failure object has the fields below:
 - `erring_node`: The hex string of the pubkey id of the node that reported the error.
 - `erring_channel`: The short channel ID of the channel that has the error, or *0:0:0* if the destination node raised the error.
 - `failcode`: The failure code, as per BOLT \#4.
-- `channel_update`. The hex string of the *channel_update* message received from the remote node. Only present if error is from the remote node and the *failcode* has the `UPDATE` bit set, as per BOLT \#4.
+- `channel_update`. The hex string of the *channel\_update* message received from the remote node. Only present if error is from the remote node and the *failcode* has the `UPDATE` bit set, as per BOLT \#4.
 
 
 AUTHOR
@@ -118,4 +118,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:d208bd6f3e78b039a4790b8de599ffd819aa169c59430ac487fd7030cd3fe640)
+[comment]: # ( SHA256STAMP:b6a047c09d40be10ed9027ca0f38332a57bfe7a232fa66fa5a669cf76e2731cd)

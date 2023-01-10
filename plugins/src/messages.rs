@@ -58,12 +58,12 @@ pub(crate) enum Notification {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct GetManifestCall {}
+pub(crate) struct GetManifestCall {}
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct InitCall {
     pub(crate) options: HashMap<String, Value>,
-    pub(crate) configuration: Configuration,
+    pub configuration: Configuration,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -93,7 +93,7 @@ pub struct ProxyInfo {
 }
 
 #[derive(Debug)]
-pub enum JsonRpc<N, R> {
+pub(crate) enum JsonRpc<N, R> {
     Request(serde_json::Value, R),
     Notification(N),
     CustomRequest(serde_json::Value, Value),
@@ -157,6 +157,7 @@ pub(crate) struct GetManifestResponse {
     pub(crate) subscriptions: Vec<String>,
     pub(crate) hooks: Vec<String>,
     pub(crate) dynamic: bool,
+    pub(crate) nonnumericids: bool,
 }
 
 #[derive(Serialize, Default, Debug)]

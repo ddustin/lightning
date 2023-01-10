@@ -1364,7 +1364,7 @@ static void handle_peer_wants_to_close(struct subd *dualopend,
 	 *  - if the `scriptpubkey` is not in one of the above forms:
 	 *    - SHOULD send a `warning`
 	 */
-	if (!valid_shutdown_scriptpubkey(scriptpubkey, anysegwit, anchors)) {
+	if (!valid_shutdown_scriptpubkey(scriptpubkey, anysegwit, !anchors)) {
 		u8 *warning = towire_warningfmt(NULL,
 						&channel->cid,
 						"Bad shutdown scriptpubkey %s",
@@ -1461,7 +1461,8 @@ static void handle_tx_broadcast(struct channel_send *cs)
 
 	/* This might have spent UTXOs from our wallet */
 	num_utxos = wallet_extract_owned_outputs(ld->wallet,
-						 wtx, NULL,
+						 /* FIXME: what txindex? */
+						 wtx, false, NULL,
 						 &unused);
 	if (num_utxos)
 		wallet_transaction_add(ld->wallet, wtx, 0, 0);

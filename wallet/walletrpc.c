@@ -240,6 +240,7 @@ static void json_add_utxo(struct json_stream *response,
 {
 	const char *out;
 	bool reserved;
+	u32 current_height = get_block_height(wallet->ld->topology);
 
 	json_object_start(response, fieldname);
 	json_add_txid(response, "txid", &utxo->outpoint.txid);
@@ -271,13 +272,16 @@ static void json_add_utxo(struct json_stream *response,
 	if (utxo->spendheight)
 		json_add_string(response, "status", "spent");
 	else if (utxo->blockheight) {
-		json_add_string(response, "status", "confirmed");
+		json_add_string(response, "status",
+				utxo_is_immature(utxo, current_height)
+				    ? "immature"
+				    : "confirmed");
+
 		json_add_num(response, "blockheight", *utxo->blockheight);
 	} else
 		json_add_string(response, "status", "unconfirmed");
 
-	reserved = utxo_is_reserved(utxo,
-				    get_block_height(wallet->ld->topology));
+	reserved = utxo_is_reserved(utxo, current_height);
 	json_add_bool(response, "reserved", reserved);
 	if (reserved)
 		json_add_num(response, "reserved_to_block",
@@ -884,7 +888,7 @@ static void sendpsbt_done(struct bitcoind *bitcoind UNUSED,
 	wallet_transaction_add(ld->wallet, sending->wtx, 0, 0);
 
 	/* Extract the change output and add it to the DB */
-	wallet_extract_owned_outputs(ld->wallet, sending->wtx, NULL, &change);
+	wallet_extract_owned_outputs(ld->wallet, sending->wtx, false, NULL, &change);
 	wally_txid(sending->wtx, &txid);
 
 	for (size_t i = 0; i < sending->psbt->num_outputs; i++)

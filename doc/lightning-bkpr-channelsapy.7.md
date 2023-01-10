@@ -4,7 +4,7 @@ lightning-bkpr-channelsapy -- Command to list stats on channel earnings
 SYNOPSIS
 --------
 
-**bkpr-channelsapy** \[*start_time*\] \[*end_time*\]
+**bkpr-channelsapy** \[*start\_time*\] \[*end\_time*\]
 
 DESCRIPTION
 -----------
@@ -12,9 +12,9 @@ DESCRIPTION
 The **bkpr-channelsapy** RPC command lists stats on routing income, leasing income,
 and various calculated APYs for channel routed funds.
 
-The **start_time** is a UNIX timestamp (in seconds) that filters events after the provided timestamp. Defaults to zero.
+The **start\_time** is a UNIX timestamp (in seconds) that filters events after the provided timestamp. Defaults to zero.
 
-The **end_time** is a UNIX timestamp (in seconds) that filters events up to and at the provided timestamp. Defaults to max-int.
+The **end\_time** is a UNIX timestamp (in seconds) that filters events up to and at the provided timestamp. Defaults to max-int.
 
 
 RETURN VALUE
@@ -23,14 +23,14 @@ RETURN VALUE
 [comment]: # (GENERATE-FROM-SCHEMA-START)
 On success, an object containing **channels\_apy** is returned.  It is an array of objects, where each object contains:
 
-- **account** (string): The account name. If the account is a channel, the channel_id. The 'net' entry is the rollup of all channel accounts
+- **account** (string): The account name. If the account is a channel, the channel\_id. The 'net' entry is the rollup of all channel accounts
 - **routed\_out\_msat** (msat): Sats routed (outbound)
 - **routed\_in\_msat** (msat): Sats routed (inbound)
 - **lease\_fee\_paid\_msat** (msat): Sats paid for leasing inbound (liquidity ads)
 - **lease\_fee\_earned\_msat** (msat): Sats earned for leasing outbound (liquidity ads)
 - **pushed\_out\_msat** (msat): Sats pushed to peer at open
 - **pushed\_in\_msat** (msat): Sats pushed in from peer at open
-- **our\_start\_balance\_msat** (msat): Starting balance in channel at funding. Note that if our start ballance is zero, any _initial field will be omitted (can't divide by zero)
+- **our\_start\_balance\_msat** (msat): Starting balance in channel at funding. Note that if our start balance is zero, any \_initial field will be omitted (can't divide by zero)
 - **channel\_start\_balance\_msat** (msat): Total starting balance at funding
 - **fees\_out\_msat** (msat): Fees earned on routed outbound
 - **utilization\_out** (string): Sats routed outbound / total start balance
@@ -65,4 +65,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:8ec833f8261ab8b559f0d645d6da45322b388905413ef262d95f5039d533fdc8)
+[comment]: # ( SHA256STAMP:05c9260f9ba49e3c3333ec7d4b0e671f81b8f8cd32cde87ea46c532b54ae7e54)

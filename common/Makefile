@@ -10,6 +10,7 @@ COMMON_SRC_NOGEN :=				\
 	common/billboard.c			\
 	common/bip32.c				\
 	common/blindedpath.c			\
+	common/blindedpay.c			\
 	common/blinding.c			\
 	common/blockheight_states.c		\
 	common/bolt11.c				\
@@ -46,7 +47,9 @@ COMMON_SRC_NOGEN :=				\
 	common/interactivetx.c			\
 	common/initial_channel.c		\
 	common/initial_commit_tx.c		\
+	common/invoice_path_id.c		\
 	common/iso4217.c			\
+	common/json_filter.c			\
 	common/json_param.c			\
 	common/json_parse.c			\
 	common/json_parse_simple.c		\
@@ -57,8 +60,10 @@ COMMON_SRC_NOGEN :=				\
 	common/memleak.c			\
 	common/msg_queue.c			\
 	common/node_id.c			\
-	common/onion.c				\
+	common/onion_decode.c			\
+	common/onion_encode.c			\
 	common/onionreply.c			\
+	common/onion_message_parse.c		\
 	common/peer_billboard.c			\
 	common/peer_failed.c			\
 	common/peer_io.c			\
@@ -99,6 +104,7 @@ COMMON_HEADERS_NOGEN := $(COMMON_SRC_NOGEN:.c=.h)	\
 	common/ecdh.h					\
 	common/errcode.h				\
 	common/gossip_constants.h			\
+	common/hsm_version.h				\
 	common/htlc.h					\
 	common/json_command.h				\
 	common/jsonrpc_errors.h				\

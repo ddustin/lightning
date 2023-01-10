@@ -7,7 +7,8 @@
 #include <ccan/tal/str/str.h>
 #include <common/ecdh.h>
 #include <common/json_parse.h>
-#include <common/onion.h>
+#include <common/onion_decode.h>
+#include <common/onion_encode.h>
 #include <common/sphinx.h>
 #include <common/version.h>
 #include <err.h>
@@ -79,15 +80,12 @@ static void do_generate(int argc, char **argv,
 				sphinx_add_hop_has_length(sp, &path[i],
 					       take(onion_final_hop(NULL,
 								    amt, i, amt,
-								    NULL, NULL,
 								    NULL, NULL)));
 			else
 				sphinx_add_hop_has_length(sp, &path[i],
 					       take(onion_nonfinal_hop(NULL,
 								       &scid,
-								       amt, i,
-								       NULL,
-								       NULL)));
+								       amt, i)));
 		}
 	}
 

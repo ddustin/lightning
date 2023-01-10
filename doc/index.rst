@@ -29,7 +29,9 @@ Core Lightning Documentation
    :maxdepth: 1
    :caption: Manpages
 
+ .. block_start manpages
    lightning-addgossip <lightning-addgossip.7.md>
+   lightning-autoclean-once <lightning-autoclean-once.7.md>
    lightning-autoclean-status <lightning-autoclean-status.7.md>
    lightning-batching <lightning-batching.7.md>
    lightning-bkpr-channelsapy <lightning-bkpr-channelsapy.7.md>
@@ -42,8 +44,8 @@ Core Lightning Documentation
    lightning-checkmessage <lightning-checkmessage.7.md>
    lightning-cli <lightning-cli.1.md>
    lightning-close <lightning-close.7.md>
-   lightning-commando <lightning-commando.7.md>
    lightning-commando-rune <lightning-commando-rune.7.md>
+   lightning-commando <lightning-commando.7.md>
    lightning-connect <lightning-connect.7.md>
    lightning-createinvoice <lightning-createinvoice.7.md>
    lightning-createonion <lightning-createonion.7.md>
@@ -111,7 +113,6 @@ Core Lightning Documentation
    lightning-sendpay <lightning-sendpay.7.md>
    lightning-sendpsbt <lightning-sendpsbt.7.md>
    lightning-setchannel <lightning-setchannel.7.md>
-   lightning-setchannelfee <lightning-setchannelfee.7.md>
    lightning-signmessage <lightning-signmessage.7.md>
    lightning-signpsbt <lightning-signpsbt.7.md>
    lightning-staticbackup <lightning-staticbackup.7.md>
@@ -126,5 +127,8 @@ Core Lightning Documentation
    lightning-waitinvoice <lightning-waitinvoice.7.md>
    lightning-waitsendpay <lightning-waitsendpay.7.md>
    lightning-withdraw <lightning-withdraw.7.md>
-   lightningd <lightningd.8.md>
    lightningd-config <lightningd-config.5.md>
+   lightningd-rpc <lightningd-rpc.7.md>
+   lightningd <lightningd.8.md>
+   reckless <reckless.7.md>
+.. block_end manpages

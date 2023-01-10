@@ -7,7 +7,7 @@ SYNOPSIS
 **(WARNING: experimental-offers only)**
 
 
-**offerout** *amount* *description* [*issuer*] [*label*] [*absolute_expiry*] [*refund_for*]
+**offerout** *amount* *description* [*issuer*] [*label*] [*absolute\_expiry*] [*refund\_for*]
 
 DESCRIPTION
 -----------
@@ -40,13 +40,13 @@ reflects who is issuing this offer (i.e. you) if appropriate.
 The *label* field is an internal-use name for the offer, which can
 be any UTF-8 string.
 
-The *absolute_expiry* is optionally the time the offer is valid until,
+The *absolute\_expiry* is optionally the time the offer is valid until,
 in seconds since the first day of 1970 UTC.  If not set, the offer
 remains valid (though it can be deactivated by the issuer of course).
 This is encoded in the offer.
 
-*refund_for* is a previous (paid) invoice of ours.  The
-payment_preimage of this is encoded in the offer, and redemption
+*refund\_for* is a previous (paid) invoice of ours.  The
+payment\_preimage of this is encoded in the offer, and redemption
 requires that the invoice we receive contains a valid signature using
 that previous `payer_key`.
 
@@ -60,7 +60,6 @@ On success, an object is returned, containing:
 - **active** (boolean): whether this will pay a matching incoming invoice (always *true*)
 - **single\_use** (boolean): whether this expires as soon as it's paid out (always *true*)
 - **bolt12** (string): the bolt12 encoding of the offer
-- **bolt12\_unsigned** (string): the bolt12 encoding of the offer, without a signature
 - **used** (boolean): True if an incoming invoice has been paid (always *false*)
 - **created** (boolean): false if the offer already existed
 - **label** (string, optional): the (optional) user-specified label
@@ -74,7 +73,7 @@ not.
 
 The following error codes may occur:
 - -1: Catchall nonspecific error.
-- 1000: Offer with this offer_id already exists.
+- 1000: Offer with this offer\_id already exists.
 
 NOTES
 -----
@@ -100,4 +99,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:7c0f75ca64bdcce2467f42d7671caccf5f7bf6eb97fb3edef1e39f2fdb87b4d8)
+[comment]: # ( SHA256STAMP:4f780ca32d486bd715eed86a130b87ff1515fce6f9e225cb13219267b82b33bb)

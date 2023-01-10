@@ -7,7 +7,9 @@ doc-wrongdir:
 MANPAGES := doc/lightning-cli.1 \
 	doc/lightningd.8 \
 	doc/lightningd-config.5 \
+	doc/lightningd-rpc.7 \
 	doc/lightning-addgossip.7 \
+	doc/lightning-autoclean-once.7 \
 	doc/lightning-autoclean-status.7 \
 	doc/lightning-batching.7 \
 	doc/lightning-bkpr-channelsapy.7 \
@@ -79,7 +81,6 @@ MANPAGES := doc/lightning-cli.1 \
 	doc/lightning-sendonionmessage.7 \
 	doc/lightning-sendpay.7 \
 	doc/lightning-setchannel.7 \
-	doc/lightning-setchannelfee.7 \
 	doc/lightning-sendcustommsg.7 \
 	doc/lightning-signmessage.7 \
 	doc/lightning-staticbackup.7 \
@@ -102,7 +103,8 @@ MANPAGES := doc/lightning-cli.1 \
 	doc/lightning-listnodes.7 \
 	doc/lightning-listconfigs.7 \
 	doc/lightning-help.7 \
-	doc/lightning-getlog.7
+	doc/lightning-getlog.7 \
+	doc/reckless.7
 
 doc-all: $(MANPAGES) doc/index.rst
 
@@ -181,6 +183,7 @@ check: check-manpages
 check-manpages: all-programs check-config-docs default-targets
 	@tools/check-manpage.sh cli/lightning-cli doc/lightning-cli.1.md
 	@tools/check-manpage.sh "lightningd/lightningd --lightning-dir=/tmp/" doc/lightningd-config.5.md
+	@awk '/^$$/ { do { getline } while ($$0 ~ /^( {4,}|\t)/) } /^\s*```/ { do { getline } while ($$0 !~ /^\s*```/) } /^([^`_\\]|`([^`\\]|\\.)*`|\b_|_\b|\\.)*\B_\B/ { print "" ; print "Unescaped underscore at " FILENAME ":" NR ":" ; print ; ret = 1 } ENDFILE { NR = 0 } END { exit ret }' doc/*.[0-9].md
 
 # Makes sure that fields mentioned in schema are in man page, and vice versa.
 check-config-docs:
@@ -194,4 +197,9 @@ doc-clean:
 	$(RM) doc/deployable-lightning.{aux,bbl,blg,dvi,log,out,tex}
 
 doc/index.rst: $(MANPAGES:=.md)
-	@$(call VERBOSE, "genidx $@",(grep -v "^   lightning.*\.[0-9]\.md>$$" $@; for m in $$(cd doc && ls lightningd*.[0-9].md lightning-*.[0-9].md); do echo "   $${m%.[0-9].md} <$$m>"; done |$(SORT)) > $@.tmp.$$$$ && mv $@.tmp.$$$$ $@)
+	@$(call VERBOSE, "genidx $@", \
+	  find doc -maxdepth 1 -name '*\.[0-9]\.md' | \
+	  cut -b 5- | LC_ALL=C sort | \
+	  sed 's/\(.*\)\.\(.*\).*\.md/\1 <\1.\2.md>/' | \
+	  python3 devtools/blockreplace.py doc/index.rst manpages --language=rst --indent "   " \
+	)

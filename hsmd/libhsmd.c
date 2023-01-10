@@ -28,7 +28,7 @@ struct secret *dev_force_bip32_seed;
 struct {
 	struct secret hsm_secret;
 	struct ext_key bip32;
-	secp256k1_keypair bolt12;
+	struct secret bolt12;
 	struct secret derived_secret;
 } secretstuff;
 
@@ -137,7 +137,8 @@ bool hsmd_check_client_capabilities(struct hsmd_client *client,
 	case WIRE_HSMD_NODE_ANNOUNCEMENT_SIG_REPLY:
 	case WIRE_HSMD_SIGN_WITHDRAWAL_REPLY:
 	case WIRE_HSMD_SIGN_INVOICE_REPLY:
-	case WIRE_HSMD_INIT_REPLY:
+	case WIRE_HSMD_INIT_REPLY_V1:
+	case WIRE_HSMD_INIT_REPLY_V2:
 	case WIRE_HSMSTATUS_CLIENT_BAD_REQUEST:
 	case WIRE_HSMD_SIGN_COMMITMENT_TX_REPLY:
 	case WIRE_HSMD_VALIDATE_COMMITMENT_TX_REPLY:
@@ -224,29 +225,16 @@ static void node_key(struct privkey *node_privkey, struct pubkey *node_id)
 #endif
 }
 
-/*~ This returns the secret and/or public x-only key for this node. */
-static void node_schnorrkey(secp256k1_keypair *node_keypair,
-			    struct point32 *node_id32)
+/*~ This returns the secret key for this node. */
+static void node_schnorrkey(secp256k1_keypair *node_keypair)
 {
-	secp256k1_keypair unused_kp;
 	struct privkey node_privkey;
-
-	if (!node_keypair)
-		node_keypair = &unused_kp;
 
 	node_key(&node_privkey, NULL);
 	if (secp256k1_keypair_create(secp256k1_ctx, node_keypair,
 				     node_privkey.secret.data) != 1)
 		hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
 				   "Failed to derive keypair");
-
-	if (node_id32) {
-		if (secp256k1_keypair_xonly_pub(secp256k1_ctx,
-						&node_id32->pubkey,
-						NULL, node_keypair) != 1)
-			hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
-					   "Failed to derive xonly pub");
-	}
 }
 
 /*~ This secret is the basis for all per-channel secrets: the per-channel seeds
@@ -635,29 +623,32 @@ static u8 *handle_sign_bolt12(struct hsmd_client *c, const u8 *msg_in)
 	sighash_from_merkle(messagename, fieldname, &merkle, &sha);
 
 	if (!publictweak) {
-		node_schnorrkey(&kp, NULL);
+		node_schnorrkey(&kp);
 	} else {
 		/* If we're tweaking key, we use bolt12 key */
-		struct point32 bolt12;
+		struct privkey tweakedkey;
+		struct pubkey bolt12;
 		struct sha256 tweak;
 
-		if (secp256k1_keypair_xonly_pub(secp256k1_ctx,
-						&bolt12.pubkey, NULL,
-						&secretstuff.bolt12) != 1)
-			hsmd_status_failed(
-			    STATUS_FAIL_INTERNAL_ERROR,
-			    "Could not derive bolt12 public key.");
+		if (secp256k1_ec_pubkey_create(secp256k1_ctx, &bolt12.pubkey,
+					       secretstuff.bolt12.data) != 1)
+			hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
+					   "Could derive bolt12 public key.");
+
 		payer_key_tweak(&bolt12, publictweak, tal_bytelen(publictweak),
 				&tweak);
 
-		kp = secretstuff.bolt12;
+		tweakedkey.secret = secretstuff.bolt12;
+		if (secp256k1_ec_seckey_tweak_add(secp256k1_ctx,
+						  tweakedkey.secret.data,
+						  tweak.u.u8) != 1)
+			hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
+					   "Could tweak bolt12 key.");
 
-		if (secp256k1_keypair_xonly_tweak_add(secp256k1_ctx,
-						      &kp,
-						      tweak.u.u8) != 1) {
-			return hsmd_status_bad_request_fmt(
-			    c, msg_in, "Failed to get tweak key");
-		}
+		if (secp256k1_keypair_create(secp256k1_ctx, &kp,
+					     tweakedkey.secret.data) != 1)
+			hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
+					   "Failed to derive bolt12 keypair");
 	}
 
 	if (!secp256k1_schnorrsig_sign32(secp256k1_ctx, sig.u8,
@@ -1668,7 +1659,8 @@ u8 *hsmd_handle_client_message(const tal_t *ctx, struct hsmd_client *client,
 	case WIRE_HSMD_NODE_ANNOUNCEMENT_SIG_REPLY:
 	case WIRE_HSMD_SIGN_WITHDRAWAL_REPLY:
 	case WIRE_HSMD_SIGN_INVOICE_REPLY:
-	case WIRE_HSMD_INIT_REPLY:
+	case WIRE_HSMD_INIT_REPLY_V1:
+	case WIRE_HSMD_INIT_REPLY_V2:
 	case WIRE_HSMSTATUS_CLIENT_BAD_REQUEST:
 	case WIRE_HSMD_SIGN_COMMITMENT_TX_REPLY:
 	case WIRE_HSMD_VALIDATE_COMMITMENT_TX_REPLY:
@@ -1691,12 +1683,10 @@ u8 *hsmd_init(struct secret hsm_secret,
 	      struct bip32_key_version bip32_key_version)
 {
 	u8 bip32_seed[BIP32_ENTROPY_LEN_256];
-	struct pubkey key;
-	struct point32 bolt12;
+	struct pubkey key, bolt12;
 	u32 salt = 0;
 	struct ext_key master_extkey, child_extkey;
 	struct node_id node_id;
-	struct secret onion_reply_secret;
 
 	/*~ Don't swap this. */
 	sodium_mlock(secretstuff.hsm_secret.data,
@@ -1797,10 +1787,8 @@ u8 *hsmd_init(struct secret hsm_secret,
 
 	/* libwally says: The private key with prefix byte 0; remove it
 	 * for libsecp256k1. */
-	if (secp256k1_keypair_create(secp256k1_ctx, &secretstuff.bolt12,
-				     child_extkey.priv_key+1) != 1)
-		hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
-				   "Can't derive bolt12 keypair");
+	memcpy(&secretstuff.bolt12, child_extkey.priv_key+1,
+	       sizeof(secretstuff.bolt12));
 
 	/* Now we can consider ourselves initialized, and we won't get
 	 * upset if we get a non-init message. */
@@ -1811,18 +1799,10 @@ u8 *hsmd_init(struct secret hsm_secret,
 	node_id_from_pubkey(&node_id, &key);
 
 	/* We also give it the base key for bolt12 payerids */
-	if (secp256k1_keypair_xonly_pub(secp256k1_ctx, &bolt12.pubkey, NULL,
-					&secretstuff.bolt12) != 1)
+	if (secp256k1_ec_pubkey_create(secp256k1_ctx, &bolt12.pubkey,
+				       secretstuff.bolt12.data) != 1)
 		hsmd_status_failed(STATUS_FAIL_INTERNAL_ERROR,
 				   "Could derive bolt12 public key.");
-
-	/*~ We derive a secret for onion_message's self_id so we can tell
-	 * if it used a path we created (i.e. do not leak our public id!) */
-	hkdf_sha256(&onion_reply_secret, sizeof(onion_reply_secret),
-		    NULL, 0,
-		    &secretstuff.hsm_secret,
-		    sizeof(secretstuff.hsm_secret),
-		    "onion reply secret", strlen("onion reply secret"));
 
 	/* We derive the derived_secret key for generating pseudorandom keys
 	 * by taking input string from the makesecret RPC */
@@ -1833,7 +1813,7 @@ u8 *hsmd_init(struct secret hsm_secret,
 	/*~ Note: marshalling a bip32 tree only marshals the public side,
 	 * not the secrets!  So we're not actually handing them out here!
 	 */
-	return take(towire_hsmd_init_reply(
+	return take(towire_hsmd_init_reply_v2(
 	    NULL, &node_id, &secretstuff.bip32,
-	    &bolt12, &onion_reply_secret));
+	    &bolt12));
 }

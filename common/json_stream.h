@@ -13,13 +13,13 @@
 #include <ccan/time/time.h>
 #include <common/amount.h>
 #include <common/jsonrpc_errors.h>
+#include <common/utils.h>
 
 struct command;
 struct io_conn;
 struct log;
 struct json_escape;
 struct pubkey;
-struct point32;
 struct bip340sig;
 struct secret;
 struct node_id;
@@ -48,6 +48,9 @@ struct json_stream {
 				     void *arg);
 	void *reader_arg;
 	size_t len_read;
+
+	/* If non-NULL, reflects the current filter position */
+	struct json_filter *filter;
 
 	/* Where to log I/O */
 	struct log *log;
@@ -78,6 +81,14 @@ struct json_stream *new_json_stream(const tal_t *ctx, struct command *writer,
 struct json_stream *json_stream_dup(const tal_t *ctx,
 				    struct json_stream *original,
 				    struct log *log);
+
+/* Attach a filter.  Usually this works at the result level: you don't
+ * want to filter out id, etc! */
+void json_stream_attach_filter(struct json_stream *js,
+			       struct json_filter *filter STEALS);
+
+/* Detach the filter: returns non-NULL string if it was misused. */
+const char *json_stream_detach_filter(const tal_t *ctx, struct json_stream *js);
 
 /**
  * json_stream_close - finished writing to a JSON stream.
@@ -270,11 +281,6 @@ void json_add_invstring(struct json_stream *result, const char *invstring);
 void json_add_pubkey(struct json_stream *response,
 		     const char *fieldname,
 		     const struct pubkey *key);
-
-/* '"fieldname" : "89abcdef..."' or "89abcdef..." if fieldname is NULL */
-void json_add_point32(struct json_stream *response,
-		       const char *fieldname,
-		       const struct point32 *key);
 
 /* '"fieldname" : "89abcdef..."' or "89abcdef..." if fieldname is NULL */
 void json_add_bip340sig(struct json_stream *response,

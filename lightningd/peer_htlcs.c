@@ -7,7 +7,7 @@
 #include <common/ecdh.h>
 #include <common/json_command.h>
 #include <common/json_param.h>
-#include <common/onion.h>
+#include <common/onion_decode.h>
 #include <common/onionreply.h>
 #include <common/timeout.h>
 #include <common/type_to_string.h>
@@ -98,6 +98,16 @@ static struct failed_htlc *mk_failed_htlc_badonion(const tal_t *ctx,
 {
 	struct failed_htlc *f = tal(ctx, struct failed_htlc);
 
+	/* BOLT-route-blinding #4:
+	 * - If `blinding_point` is set in the incoming `update_add_htlc`:
+	 *    - MUST return `invalid_onion_blinding` for any local error or
+	 *      other downstream errors.
+	 */
+	/* FIXME: That's not enough!  Don't leak information about forward
+	 * failures either! */
+	if (hin->blinding || (hin->payload && hin->payload->blinding))
+		badonion = WIRE_INVALID_ONION_BLINDING;
+
 	f->id = hin->key.id;
 	f->onion = NULL;
 	f->badonion = badonion;
@@ -112,6 +122,26 @@ static struct failed_htlc *mk_failed_htlc(const tal_t *ctx,
 					  const struct onionreply *failonion)
 {
 	struct failed_htlc *f = tal(ctx, struct failed_htlc);
+
+	/* BOLT-route-blinding #4:
+	 * - If `blinding_point` is set in the incoming `update_add_htlc`:
+	 *    - MUST return `invalid_onion_blinding` for any local error or
+	 *      other downstream errors.
+	 */
+	if (hin->blinding) {
+		return mk_failed_htlc_badonion(ctx, hin,
+					       WIRE_INVALID_ONION_BLINDING);
+	}
+
+	/* Also, at head of the blinded path, return "normal" invalid
+	 * onion blinding. */
+	if (hin->payload && hin->payload->blinding) {
+		struct sha256 sha;
+		sha256(&sha, hin->onion_routing_packet,
+		       sizeof(hin->onion_routing_packet));
+		failonion = create_onionreply(tmpctx, hin->shared_secret,
+					      towire_invalid_onion_blinding(tmpctx, &sha));
+	}
 
 	f->id = hin->key.id;
 	f->sha256_of_onion = NULL;
@@ -149,14 +179,7 @@ static void fail_in_htlc(struct htlc_in *hin,
 	htlc_in_update_state(hin->key.channel, hin, SENT_REMOVE_HTLC);
 	htlc_in_check(hin, __func__);
 
-#if EXPERIMENTAL_FEATURES
-	/* In a blinded path, all failures become invalid_onion_blinding */
-	if (hin->blinding) {
-		failed_htlc = mk_failed_htlc_badonion(tmpctx, hin,
-						      WIRE_INVALID_ONION_BLINDING);
-	} else
-#endif
-		failed_htlc = mk_failed_htlc(tmpctx, hin, hin->failonion);
+	failed_htlc = mk_failed_htlc(tmpctx, hin, hin->failonion);
 
 	bool we_filled = false;
 	wallet_htlc_update(hin->key.channel->peer->ld->wallet,
@@ -692,7 +715,7 @@ static void forward_htlc(struct htlc_in *hin,
 		/* Update this to where we're actually trying to send. */
 		if (next)
 			forward_scid = channel_scid_or_local_alias(next);
-	}else
+	} else
 		next = NULL;
 
 	/* Unknown peer, or peer not ready. */
@@ -905,7 +928,7 @@ static bool htlc_accepted_hook_deserialize(struct htlc_accepted_hook_payload *re
 	struct lightningd *ld = request->ld;
 	struct preimage payment_preimage;
 	const jsmntok_t *resulttok, *paykeytok, *payloadtok, *fwdtok;
-	u8 *payload, *failonion;
+	u8 *failonion;
 
 	if (!toks || !buffer)
 		return true;
@@ -921,7 +944,7 @@ static bool htlc_accepted_hook_deserialize(struct htlc_accepted_hook_payload *re
 
 	payloadtok = json_get_member(buffer, toks, "payload");
 	if (payloadtok) {
-		payload = json_tok_bin_from_hex(rs, buffer, payloadtok);
+		u8 *payload = json_tok_bin_from_hex(rs, buffer, payloadtok);
 		if (!payload)
 			fatal("Bad payload for htlc_accepted"
 			      " hook: %.*s",
@@ -931,13 +954,17 @@ static bool htlc_accepted_hook_deserialize(struct htlc_accepted_hook_payload *re
 		tal_free(rs->raw_payload);
 
 		rs->raw_payload = prepend_length(rs, take(payload));
-		request->payload = onion_decode(request, rs,
-						hin->blinding, &hin->blinding_ss,
+		request->payload = onion_decode(request,
+						feature_offered(ld->our_features->bits[INIT_FEATURE],
+								OPT_ROUTE_BLINDING),
+						rs,
+						hin->blinding,
 						ld->accept_extra_tlv_types,
+						hin->msat,
+						hin->cltv_expiry,
 						&request->failtlvtype,
 						&request->failtlvpos);
-	} else
-		payload = NULL;
+	}
 
 	fwdtok = json_get_member(buffer, toks, "forward_to");
 	if (fwdtok) {
@@ -1051,6 +1078,9 @@ static void htlc_accepted_hook_serialize(struct htlc_accepted_hook_payload *p,
 		if (p->payload->forward_channel)
 			json_add_short_channel_id(s, "short_channel_id",
 						  p->payload->forward_channel);
+		if (p->payload->forward_node_id)
+			json_add_pubkey(s, "next_node_id",
+					p->payload->forward_node_id);
 		if (deprecated_apis)
 			json_add_string(s, "forward_amount",
 					fmt_amount_msat(tmpctx,
@@ -1138,17 +1168,17 @@ htlc_accepted_hook_final(struct htlc_accepted_hook_payload *request STEALS)
 /* Apply tweak to ephemeral key if blinding is non-NULL, then do ECDH */
 static bool ecdh_maybe_blinding(const struct pubkey *ephemeral_key,
 				const struct pubkey *blinding,
-				const struct secret *blinding_ss,
 				struct secret *ss)
 {
 	struct pubkey point = *ephemeral_key;
 
-#if EXPERIMENTAL_FEATURES
 	if (blinding) {
 		struct secret hmac;
+		struct secret blinding_ss;
 
+		ecdh(blinding, &blinding_ss);
 		/* b(i) = HMAC256("blinded_node_id", ss(i)) * k(i) */
-		subkey_from_hmac("blinded_node_id", blinding_ss, &hmac);
+		subkey_from_hmac("blinded_node_id", &blinding_ss, &hmac);
 
 		/* We instead tweak the *ephemeral* key from the onion and use
 		 * our normal privkey: since hsmd knows only how to ECDH with
@@ -1159,7 +1189,6 @@ static bool ecdh_maybe_blinding(const struct pubkey *ephemeral_key,
 			return false;
 		}
 	}
-#endif /* EXPERIMENTAL_FEATURES */
 	ecdh(&point, ss);
 	return true;
 }
@@ -1177,20 +1206,42 @@ static struct channel_id *calc_forwarding_channel(struct lightningd *ld,
 						  const struct route_step *rs)
 {
 	const struct onion_payload *p = hp->payload;
+	struct peer *peer;
 	struct channel *c, *best;
 
 	if (rs->nextcase != ONION_FORWARD)
 		return NULL;
 
-	if (!p || !p->forward_channel)
+	if (!p)
 		return NULL;
 
-	c = any_channel_by_scid(ld, p->forward_channel, false);
-	if (!c)
-		return NULL;
+	if (p->forward_channel) {
+		c = any_channel_by_scid(ld, p->forward_channel, false);
+		if (!c)
+			return NULL;
+		peer = c->peer;
+	} else {
+		struct node_id id;
+		if (!p->forward_node_id)
+			return NULL;
+		node_id_from_pubkey(&id, p->forward_node_id);
+		peer = peer_by_id(ld, &id);
+		if (!peer)
+			return NULL;
+		c = NULL;
+	}
 
-	best = best_channel(ld, c->peer, p->amt_to_forward, c);
-	if (best != c) {
+	best = best_channel(ld, peer, p->amt_to_forward, c);
+	if (!c) {
+		if (!best)
+			return NULL;
+		log_debug(hp->channel->log,
+			  "Chose channel %s for peer %s",
+			  type_to_string(tmpctx, struct short_channel_id,
+					 channel_scid_or_local_alias(best)),
+			  type_to_string(tmpctx, struct node_id,
+					 &peer->id));
+	} else if (best != c) {
 		log_debug(hp->channel->log,
 			  "Chose a better channel than %s: %s",
 			  type_to_string(tmpctx, struct short_channel_id,
@@ -1226,6 +1277,10 @@ static bool peer_accepted_htlc(const tal_t *ctx,
 	struct onionpacket *op;
 	struct lightningd *ld = channel->peer->ld;
 	struct htlc_accepted_hook_payload *hook_payload;
+	const bool opt_blinding
+		= feature_offered(ld->our_features->bits[INIT_FEATURE],
+				  OPT_ROUTE_BLINDING);
+
 
 	*failmsg = NULL;
 	*badonion = 0;
@@ -1312,9 +1367,14 @@ static bool peer_accepted_htlc(const tal_t *ctx,
 	hook_payload = tal(NULL, struct htlc_accepted_hook_payload);
 
 	hook_payload->route_step = tal_steal(hook_payload, rs);
-	hook_payload->payload = onion_decode(hook_payload, rs,
-					     hin->blinding, &hin->blinding_ss,
+	hook_payload->payload = onion_decode(hook_payload,
+					     feature_offered(ld->our_features->bits[INIT_FEATURE],
+							     OPT_ROUTE_BLINDING),
+					     rs,
+					     hin->blinding,
 					     ld->accept_extra_tlv_types,
+					     hin->msat,
+					     hin->cltv_expiry,
 					     &hook_payload->failtlvtype,
 					     &hook_payload->failtlvpos);
 	hook_payload->ld = ld;
@@ -1322,9 +1382,9 @@ static bool peer_accepted_htlc(const tal_t *ctx,
 	hook_payload->channel = channel;
 	hook_payload->next_onion = serialize_onionpacket(hook_payload, rs->next);
 
-#if EXPERIMENTAL_FEATURES
 	/* We could have blinding from hin or from inside onion. */
-	if (hook_payload->payload && hook_payload->payload->blinding) {
+	if (opt_blinding
+	    && hook_payload->payload && hook_payload->payload->blinding) {
 		struct sha256 sha;
 		blinding_hash_e_and_ss(hook_payload->payload->blinding,
 				       &hook_payload->payload->blinding_ss,
@@ -1333,7 +1393,6 @@ static bool peer_accepted_htlc(const tal_t *ctx,
 		blinding_next_pubkey(hook_payload->payload->blinding, &sha,
 				     hook_payload->next_blinding);
 	} else
-#endif
 		hook_payload->next_blinding = NULL;
 
 	/* The scid is merely used to indicate the next peer, it is not
@@ -1352,13 +1411,11 @@ static bool peer_accepted_htlc(const tal_t *ctx,
 	return true;
 
 fail:
-#if EXPERIMENTAL_FEATURES
 	/* In a blinded path, *all* failures are "invalid_onion_blinding" */
 	if (hin->blinding) {
 		*failmsg = tal_free(*failmsg);
 		*badonion = WIRE_INVALID_ONION_BLINDING;
 	}
-#endif
 	return false;
 }
 
@@ -2073,7 +2130,7 @@ static bool channel_added_their_htlc(struct channel *channel,
 			       &failcode);
 	if (op) {
 		if (!ecdh_maybe_blinding(&op->ephemeralkey,
-					 added->blinding, &added->blinding_ss,
+					 added->blinding,
 					 &shared_secret)) {
 			log_debug(channel->log, "htlc %"PRIu64
 				  ": can't tweak pubkey", added->id);
@@ -2086,7 +2143,7 @@ static bool channel_added_their_htlc(struct channel *channel,
 	hin = new_htlc_in(channel, channel, added->id, added->amount,
 			  added->cltv_expiry, &added->payment_hash,
 			  op ? &shared_secret : NULL,
-			  added->blinding, &added->blinding_ss,
+			  added->blinding,
 			  added->onion_routing_packet,
 			  added->fail_immediate);
 

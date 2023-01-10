@@ -209,8 +209,8 @@ pub mod requests {
 	    pub payment_secret: Option<Secret>,
 	    #[serde(alias = "partid", skip_serializing_if = "Option::is_none")]
 	    pub partid: Option<u16>,
-	    #[serde(alias = "localofferid", skip_serializing_if = "Option::is_none")]
-	    pub localofferid: Option<String>,
+	    #[serde(alias = "localinvreqid", skip_serializing_if = "Option::is_none")]
+	    pub localinvreqid: Option<String>,
 	    #[serde(alias = "groupid", skip_serializing_if = "Option::is_none")]
 	    pub groupid: Option<u64>,
 	}
@@ -608,6 +608,8 @@ pub mod requests {
 	pub struct SendonionRequest {
 	    #[serde(alias = "onion")]
 	    pub onion: String,
+	    #[serde(alias = "first_hop")]
+	    pub first_hop: SendonionFirst_hop,
 	    #[serde(alias = "payment_hash")]
 	    pub payment_hash: Sha256,
 	    #[serde(alias = "label", skip_serializing_if = "Option::is_none")]
@@ -622,8 +624,8 @@ pub mod requests {
 	    pub amount_msat: Option<Amount>,
 	    #[serde(alias = "destination", skip_serializing_if = "Option::is_none")]
 	    pub destination: Option<PublicKey>,
-	    #[serde(alias = "localofferid", skip_serializing_if = "Option::is_none")]
-	    pub localofferid: Option<Sha256>,
+	    #[serde(alias = "localinvreqid", skip_serializing_if = "Option::is_none")]
+	    pub localinvreqid: Option<Sha256>,
 	    #[serde(alias = "groupid", skip_serializing_if = "Option::is_none")]
 	    pub groupid: Option<u64>,
 	}
@@ -711,8 +713,8 @@ pub mod requests {
 	    pub maxdelay: Option<u16>,
 	    #[serde(alias = "exemptfee", skip_serializing_if = "Option::is_none")]
 	    pub exemptfee: Option<Amount>,
-	    #[serde(alias = "localofferid", skip_serializing_if = "Option::is_none")]
-	    pub localofferid: Option<String>,
+	    #[serde(alias = "localinvreqid", skip_serializing_if = "Option::is_none")]
+	    pub localinvreqid: Option<String>,
 	    #[serde(alias = "exclude", skip_serializing_if = "crate::is_none_or_empty")]
 	    pub exclude: Option<Vec<String>>,
 	    #[serde(alias = "maxfee", skip_serializing_if = "Option::is_none")]
@@ -865,10 +867,6 @@ pub mod requests {
 	}
 
 	#[derive(Clone, Debug, Deserialize, Serialize)]
-	pub struct KeysendExtratlvs {
-	}
-
-	#[derive(Clone, Debug, Deserialize, Serialize)]
 	pub struct KeysendRequest {
 	    #[serde(alias = "destination")]
 	    pub destination: PublicKey,
@@ -886,6 +884,8 @@ pub mod requests {
 	    pub exemptfee: Option<Amount>,
 	    #[serde(alias = "routehints", skip_serializing_if = "Option::is_none")]
 	    pub routehints: Option<RoutehintList>,
+	    #[serde(alias = "extratlvs", skip_serializing_if = "Option::is_none")]
+	    pub extratlvs: Option<TlvStream>,
 	}
 
 	impl From<KeysendRequest> for Request {
@@ -1261,9 +1261,9 @@ pub mod requests {
 	    #[serde(alias = "id")]
 	    pub id: PublicKey,
 	    #[serde(alias = "len", skip_serializing_if = "Option::is_none")]
-	    pub len: Option<f64>,
+	    pub len: Option<u16>,
 	    #[serde(alias = "pongbytes", skip_serializing_if = "Option::is_none")]
-	    pub pongbytes: Option<f64>,
+	    pub pongbytes: Option<u16>,
 	}
 
 	impl From<PingRequest> for Request {
@@ -1457,6 +1457,8 @@ pub mod responses {
 	    pub version: String,
 	    #[serde(alias = "lightning-dir")]
 	    pub lightning_dir: String,
+	    #[serde(alias = "our_features", skip_serializing_if = "Option::is_none")]
+	    pub our_features: Option<GetinfoOur_features>,
 	    #[serde(alias = "blockheight")]
 	    pub blockheight: u32,
 	    #[serde(alias = "network")]
@@ -1697,6 +1699,8 @@ pub mod responses {
 	    pub state: ListpeersPeersChannelsState,
 	    #[serde(alias = "scratch_txid", skip_serializing_if = "Option::is_none")]
 	    pub scratch_txid: Option<String>,
+	    #[serde(alias = "feerate", skip_serializing_if = "Option::is_none")]
+	    pub feerate: Option<ListpeersPeersChannelsFeerate>,
 	    #[serde(alias = "owner", skip_serializing_if = "Option::is_none")]
 	    pub owner: Option<String>,
 	    #[serde(alias = "short_channel_id", skip_serializing_if = "Option::is_none")]
@@ -1728,6 +1732,8 @@ pub mod responses {
 	    pub closer: Option<ChannelSide>,
 	    #[serde(alias = "features")]
 	    pub features: Vec<String>,
+	    #[serde(alias = "funding", skip_serializing_if = "Option::is_none")]
+	    pub funding: Option<ListpeersPeersChannelsFunding>,
 	    #[serde(alias = "to_us_msat", skip_serializing_if = "Option::is_none")]
 	    pub to_us_msat: Option<Amount>,
 	    #[serde(alias = "min_to_us_msat", skip_serializing_if = "Option::is_none")]
@@ -1764,6 +1770,8 @@ pub mod responses {
 	    pub our_to_self_delay: Option<u32>,
 	    #[serde(alias = "max_accepted_htlcs", skip_serializing_if = "Option::is_none")]
 	    pub max_accepted_htlcs: Option<u32>,
+	    #[serde(alias = "alias", skip_serializing_if = "Option::is_none")]
+	    pub alias: Option<ListpeersPeersChannelsAlias>,
 	    #[serde(alias = "state_changes", skip_serializing_if = "crate::is_none_or_empty")]
 	    pub state_changes: Option<Vec<ListpeersPeersChannelsState_changes>>,
 	    #[serde(alias = "status", skip_serializing_if = "crate::is_none_or_empty")]
@@ -1833,6 +1841,8 @@ pub mod responses {
 	    CONFIRMED,
 	    #[serde(rename = "spent")]
 	    SPENT,
+	    #[serde(rename = "immature")]
+	    IMMATURE,
 	}
 
 	impl TryFrom<i32> for ListfundsOutputsStatus {
@@ -1842,6 +1852,7 @@ pub mod responses {
 	    0 => Ok(ListfundsOutputsStatus::UNCONFIRMED),
 	    1 => Ok(ListfundsOutputsStatus::CONFIRMED),
 	    2 => Ok(ListfundsOutputsStatus::SPENT),
+	    3 => Ok(ListfundsOutputsStatus::IMMATURE),
 	            o => Err(anyhow::anyhow!("Unknown variant {} for enum ListfundsOutputsStatus", o)),
 	        }
 	    }
@@ -2193,6 +2204,8 @@ pub mod responses {
 	    // Path `Connect.direction`
 	    #[serde(rename = "direction")]
 	    pub direction: ConnectDirection,
+	    #[serde(alias = "address")]
+	    pub address: ConnectAddress,
 	}
 
 	impl TryFrom<Response> for ConnectResponse {
@@ -2257,8 +2270,8 @@ pub mod responses {
 	    pub payment_preimage: Option<Secret>,
 	    #[serde(alias = "local_offer_id", skip_serializing_if = "Option::is_none")]
 	    pub local_offer_id: Option<String>,
-	    #[serde(alias = "payer_note", skip_serializing_if = "Option::is_none")]
-	    pub payer_note: Option<String>,
+	    #[serde(alias = "invreq_payer_note", skip_serializing_if = "Option::is_none")]
+	    pub invreq_payer_note: Option<String>,
 	}
 
 	impl TryFrom<Response> for CreateinvoiceResponse {
@@ -2395,8 +2408,8 @@ pub mod responses {
 	    pub expires_at: u64,
 	    #[serde(alias = "local_offer_id", skip_serializing_if = "Option::is_none")]
 	    pub local_offer_id: Option<String>,
-	    #[serde(alias = "payer_note", skip_serializing_if = "Option::is_none")]
-	    pub payer_note: Option<String>,
+	    #[serde(alias = "invreq_payer_note", skip_serializing_if = "Option::is_none")]
+	    pub invreq_payer_note: Option<String>,
 	}
 
 	impl TryFrom<Response> for DelinvoiceResponse {
@@ -2515,8 +2528,8 @@ pub mod responses {
 	    pub bolt12: Option<String>,
 	    #[serde(alias = "local_offer_id", skip_serializing_if = "Option::is_none")]
 	    pub local_offer_id: Option<String>,
-	    #[serde(alias = "payer_note", skip_serializing_if = "Option::is_none")]
-	    pub payer_note: Option<String>,
+	    #[serde(alias = "invreq_payer_note", skip_serializing_if = "Option::is_none")]
+	    pub invreq_payer_note: Option<String>,
 	    #[serde(alias = "pay_index", skip_serializing_if = "Option::is_none")]
 	    pub pay_index: Option<u64>,
 	    #[serde(alias = "amount_received_msat", skip_serializing_if = "Option::is_none")]
@@ -3487,6 +3500,12 @@ pub mod responses {
 	pub struct FeeratesResponse {
 	    #[serde(alias = "warning_missing_feerates", skip_serializing_if = "Option::is_none")]
 	    pub warning_missing_feerates: Option<String>,
+	    #[serde(alias = "perkb", skip_serializing_if = "Option::is_none")]
+	    pub perkb: Option<FeeratesPerkb>,
+	    #[serde(alias = "perkw", skip_serializing_if = "Option::is_none")]
+	    pub perkw: Option<FeeratesPerkw>,
+	    #[serde(alias = "onchain_fee_estimates", skip_serializing_if = "Option::is_none")]
+	    pub onchain_fee_estimates: Option<FeeratesOnchain_fee_estimates>,
 	}
 
 	impl TryFrom<Response> for FeeratesResponse {

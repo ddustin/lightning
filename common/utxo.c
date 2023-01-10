@@ -25,6 +25,8 @@ void towire_utxo(u8 **pptr, const struct utxo *utxo)
 		towire_bool(pptr, utxo->close_info->option_anchor_outputs);
 		towire_u32(pptr, utxo->close_info->csv);
 	}
+
+	towire_bool(pptr, utxo->is_in_coinbase);
 }
 
 struct utxo *fromwire_utxo(const tal_t *ctx, const u8 **ptr, size_t *max)
@@ -55,6 +57,8 @@ struct utxo *fromwire_utxo(const tal_t *ctx, const u8 **ptr, size_t *max)
 	} else {
 		utxo->close_info = NULL;
 	}
+
+	utxo->is_in_coinbase = fromwire_bool(ptr, max);
 	return utxo;
 }
 
@@ -68,4 +72,22 @@ size_t utxo_spend_weight(const struct utxo *utxo, size_t min_witness_weight)
 					       min_witness_weight);
 
 	return bitcoin_tx_input_weight(utxo->is_p2sh, wit_weight);
+}
+
+u32 utxo_is_immature(const struct utxo *utxo, u32 blockheight)
+{
+	if (utxo->is_in_coinbase) {
+		/* We got this from a block, it must have a known
+		 * blockheight. */
+		assert(utxo->blockheight);
+
+		if (blockheight < *utxo->blockheight + 100)
+			return *utxo->blockheight + 99 - blockheight;
+
+		else
+			return 0;
+	} else {
+		/* Non-coinbase outputs are always mature. */
+		return 0;
+	}
 }

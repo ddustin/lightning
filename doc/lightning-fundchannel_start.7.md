@@ -4,7 +4,7 @@ lightning-fundchannel\_start -- Command for initiating channel establishment for
 SYNOPSIS
 --------
 
-**fundchannel\_start** *id* *amount* [*feerate* *announce* *close_to* *push_msat*]
+**fundchannel\_start** *id* *amount* [*feerate* *announce* *close\_to* *push\_msat*]
 
 DESCRIPTION
 -----------
@@ -23,11 +23,11 @@ commitment transactions: see **fundchannel**.
 
 *announce* whether or not to announce this channel.
 
-*close_to* is a Bitcoin address to which the channel funds should be sent to
+*close\_to* is a Bitcoin address to which the channel funds should be sent to
 on close. Only valid if both peers have negotiated `option_upfront_shutdown_script`.
 Returns `close_to` set to closing script iff is negotiated.
 
-*push_msat* is the amount of millisatoshis to push to the channel peer at
+*push\_msat* is the amount of millisatoshis to push to the channel peer at
 open. Note that this is a gift to the peer -- these satoshis are
 added to the initial balance of the peer at channel start and are largely
 unrecoverable once pushed.
@@ -46,7 +46,7 @@ On success, an object is returned, containing:
 
 - **funding\_address** (string): The address to send funding to for the channel. DO NOT SEND COINS TO THIS ADDRESS YET.
 - **scriptpubkey** (hex): The raw scriptPubkey for the address
-- **close\_to** (hex, optional): The raw scriptPubkey which mutual close will go to; only present if *close_to* parameter was specified and peer supports `option_upfront_shutdown_script`
+- **close\_to** (hex, optional): The raw scriptPubkey which mutual close will go to; only present if *close\_to* parameter was specified and peer supports `option_upfront_shutdown_script`
 - **mindepth** (u32, optional): Number of confirmations before we consider the channel active.
 
 The following warnings may also be returned:
@@ -85,4 +85,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:b054bc55f69cc1f23f78f342974a8476eab84146bbcf57ab30095e8eba3ed849)
+[comment]: # ( SHA256STAMP:ca4ad15c25dc588980dea11be9d3f73c9da3688a5e81bfc13660eabe93cbec13)

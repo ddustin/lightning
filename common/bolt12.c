@@ -1,4 +1,5 @@
 #include "config.h"
+#include <assert.h>
 #include <bitcoin/chainparams.h>
 #include <ccan/tal/str/str.h>
 #include <common/bech32_util.h>
@@ -10,23 +11,25 @@
 #include <time.h>
 
 /* If chains is NULL, max_num_chains is ignored */
-static bool bolt12_chains_match(const struct bitcoin_blkid *chains,
-				size_t max_num_chains,
-				const struct chainparams *must_be_chain)
+bool bolt12_chains_match(const struct bitcoin_blkid *chains,
+			 size_t max_num_chains,
+			 const struct chainparams *must_be_chain)
 {
 	/* BOLT-offers #12:
 	 *   - if the chain for the invoice is not solely bitcoin:
-	 *     - MUST specify `chains` the offer is valid for.
+	 *     - MUST specify `offer_chains` the offer is valid for.
 	 *   - otherwise:
-	 *     - the bitcoin chain is implied as the first and only entry.
+	 *     - MAY omit `offer_chains`, implying that bitcoin is only chain.
 	 */
 	/* BOLT-offers #12:
-	 * The reader of an invoice_request:
+	 * A reader of an offer:
 	 *...
-	 *  - if `chain` is not present:
-	 *    - MUST fail the request if bitcoin is not a supported chain.
-	 *  - otherwise:
-	 *    - MUST fail the request if `chain` is not a supported chain.
+	 *  - if `offer_chains` is not set:
+	 *    - if the node does not accept bitcoin invoices:
+	 *      - MUST NOT respond to the offer
+	 *  - otherwise: (`offer_chains` is set):
+	 *    - if the node does not accept invoices for any of the `chains`:
+	 *      - MUST NOT respond to the offer
 	 */
 	if (!chains) {
 		max_num_chains = 1;
@@ -52,6 +55,7 @@ static char *check_features_and_chain(const tal_t *ctx,
 				      const struct feature_set *our_features,
 				      const struct chainparams *must_be_chain,
 				      const u8 *features,
+				      enum feature_place fplace,
 				      const struct bitcoin_blkid *chains,
 				      size_t num_chains)
 {
@@ -61,8 +65,7 @@ static char *check_features_and_chain(const tal_t *ctx,
 	}
 
 	if (our_features) {
-		int badf = features_unsupported(our_features, features,
-						BOLT11_FEATURE);
+		int badf = features_unsupported(our_features, features, fplace);
 		if (badf != -1)
 			return tal_fmt(ctx, "unknown feature bit %i", badf);
 	}
@@ -73,25 +76,22 @@ static char *check_features_and_chain(const tal_t *ctx,
 bool bolt12_check_signature(const struct tlv_field *fields,
 			    const char *messagename,
 			    const char *fieldname,
-			    const struct point32 *key,
+			    const struct pubkey *key,
 			    const struct bip340sig *sig)
 {
 	struct sha256 m, shash;
 
 	merkle_tlv(fields, &m);
 	sighash_from_merkle(messagename, fieldname, &m, &shash);
-	return secp256k1_schnorrsig_verify(secp256k1_ctx,
-					   sig->u8,
-					   shash.u.u8,
-					   sizeof(shash.u.u8),
-					   &key->pubkey) == 1;
+
+	return check_schnorr_sig(&shash, &key->pubkey, sig);
 }
 
 static char *check_signature(const tal_t *ctx,
 			     const struct tlv_field *fields,
 			     const char *messagename,
 			     const char *fieldname,
-			     const struct point32 *node_id,
+			     const struct pubkey *node_id,
 			     const struct bip340sig *sig)
 {
 	if (!node_id)
@@ -183,24 +183,12 @@ struct tlv_offer *offer_decode(const tal_t *ctx,
 
 	*fail = check_features_and_chain(ctx,
 					 our_features, must_be_chain,
-					 offer->features,
-					 offer->chains,
-					 tal_count(offer->chains));
+					 offer->offer_features,
+					 BOLT12_OFFER_FEATURE,
+					 offer->offer_chains,
+					 tal_count(offer->offer_chains));
 	if (*fail)
 		return tal_free(offer);
-
-	/* BOLT-offers #12:
-	 * - if `signature` is present, but is not a valid signature using
-	 *   `node_id` as described in [Signature Calculation](#signature-calculation):
-	 *   - MUST NOT respond to the offer.
-	 */
-	if (offer->signature) {
-		*fail = check_signature(ctx, offer->fields,
-					"offer", "signature",
-					offer->node_id, offer->signature);
-		if (*fail)
-			return tal_free(offer);
-	}
 
 	return offer;
 }
@@ -231,14 +219,15 @@ struct tlv_invoice_request *invrequest_decode(const tal_t *ctx,
 
 	invrequest = fromwire_tlv_invoice_request(ctx, &data, &dlen);
 	if (!invrequest) {
-		*fail = tal_fmt(ctx, "invalid invoice_request data");
+		*fail = tal_fmt(ctx, "invalid invreq data");
 		return NULL;
 	}
 
 	*fail = check_features_and_chain(ctx,
 					 our_features, must_be_chain,
-					 invrequest->features,
-					 invrequest->chain, 1);
+					 invrequest->invreq_features,
+					 BOLT12_INVREQ_FEATURE,
+					 invrequest->invreq_chain, 1);
 	if (*fail)
 		return tal_free(invrequest);
 
@@ -277,8 +266,9 @@ struct tlv_invoice *invoice_decode_nosig(const tal_t *ctx,
 
 	*fail = check_features_and_chain(ctx,
 					 our_features, must_be_chain,
-					 invoice->features,
-					 invoice->chain, 1);
+					 invoice->invoice_features,
+					 BOLT12_INVOICE_FEATURE,
+					 invoice->invreq_chain, 1);
 	if (*fail)
 		return tal_free(invoice);
 
@@ -327,7 +317,7 @@ static u64 time_change(u64 prevstart, u32 number,
 }
 
 u64 offer_period_start(u64 basetime, size_t n,
-		       const struct tlv_offer_recurrence *recur)
+		       const struct recurrence *recur)
 {
 	/* BOLT-offers-recurrence #12:
 	 * 1. A `time_unit` defining 0 (seconds), 1 (days), 2 (months),
@@ -348,9 +338,9 @@ u64 offer_period_start(u64 basetime, size_t n,
 	}
 }
 
-void offer_period_paywindow(const struct tlv_offer_recurrence *recurrence,
-			    const struct tlv_offer_recurrence_paywindow *recurrence_paywindow,
-			    const struct tlv_offer_recurrence_base *recurrence_base,
+void offer_period_paywindow(const struct recurrence *recurrence,
+			    const struct recurrence_paywindow *recurrence_paywindow,
+			    const struct recurrence_base *recurrence_base,
 			    u64 basetime, u64 period_idx,
 			    u64 *start, u64 *end)
 {
@@ -363,9 +353,9 @@ void offer_period_paywindow(const struct tlv_offer_recurrence *recurrence,
 		/* BOLT-offers-recurrence #12:
 		 * - if the offer has a `recurrence_basetime` or the
 		 *    `recurrence_counter` is non-zero:
-		 *   - SHOULD NOT send an `invoice_request` for a period prior to
+		 *   - SHOULD NOT send an `invreq` for a period prior to
 		 *     `seconds_before` seconds before that period start.
-		 *   - SHOULD NOT send an `invoice_request` for a period later
+		 *   - SHOULD NOT send an `invreq` for a period later
 		 *     than `seconds_after` seconds past that period start.
 		 */
 		*start = pstart - recurrence_paywindow->seconds_before;
@@ -380,7 +370,7 @@ void offer_period_paywindow(const struct tlv_offer_recurrence *recurrence,
 	} else {
 		/* BOLT-offers-recurrence #12:
 		 * - otherwise:
-		 *   - SHOULD NOT send an `invoice_request` with
+		 *   - SHOULD NOT send an `invreq` with
 		 *     `recurrence_counter` is non-zero for a period whose
 		 *     immediate predecessor has not yet begun.
 		 */
@@ -391,7 +381,7 @@ void offer_period_paywindow(const struct tlv_offer_recurrence *recurrence,
 						    recurrence);
 
 		/* BOLT-offers-recurrence #12:
-		 *     - SHOULD NOT send an `invoice_request` for a period which
+		 *     - SHOULD NOT send an `invreq` for a period which
 		 *       has already passed.
 		 */
 		*end = offer_period_start(basetime, period_idx+1,
@@ -412,7 +402,8 @@ struct tlv_invoice *invoice_decode(const tal_t *ctx,
 	if (invoice) {
 		*fail = check_signature(ctx, invoice->fields,
 					"invoice", "signature",
-					invoice->node_id, invoice->signature);
+					invoice->invoice_node_id,
+					invoice->signature);
 		if (*fail)
 			invoice = tal_free(invoice);
 	}
@@ -439,3 +430,141 @@ bool bolt12_has_prefix(const char *str)
 	return bolt12_has_invoice_prefix(str) || bolt12_has_offer_prefix(str) ||
 	       bolt12_has_request_prefix(str);
 }
+
+/* Inclusive span of tlv range >= minfield and <= maxfield */
+size_t tlv_span(const u8 *tlvstream, u64 minfield, u64 maxfield,
+		size_t *startp)
+{
+	const u8 *cursor = tlvstream;
+	size_t tlvlen = tal_bytelen(tlvstream);
+	const u8 *start, *end;
+
+	start = end = NULL;
+	while (tlvlen) {
+		const u8 *before = cursor;
+		bigsize_t type = fromwire_bigsize(&cursor, &tlvlen);
+		bigsize_t len = fromwire_bigsize(&cursor, &tlvlen);
+		if (type >= minfield && start == NULL)
+			start = before;
+		if (type > maxfield)
+			break;
+		fromwire_pad(&cursor, &tlvlen, len);
+		end = cursor;
+	}
+	if (!start)
+		start = end;
+
+	if (startp)
+		*startp = start - tlvstream;
+	return end - start;
+}
+
+static void calc_offer(const u8 *tlvstream, struct sha256 *id)
+{
+	size_t start, len;
+
+	/* BOLT-offers #12:
+	 * A writer of an offer:
+	 *  - MUST NOT set any tlv fields greater or equal to 80, or tlv field 0.
+	 */
+	len = tlv_span(tlvstream, 1, 79, &start);
+	sha256(id, tlvstream + start, len);
+}
+
+void offer_offer_id(const struct tlv_offer *offer, struct sha256 *id)
+{
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+
+	towire_tlv_offer(&wire, offer);
+	calc_offer(wire, id);
+}
+
+void invreq_offer_id(const struct tlv_invoice_request *invreq, struct sha256 *id)
+{
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+
+	towire_tlv_invoice_request(&wire, invreq);
+	calc_offer(wire, id);
+}
+
+void invoice_offer_id(const struct tlv_invoice *invoice, struct sha256 *id)
+{
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+
+	towire_tlv_invoice(&wire, invoice);
+	calc_offer(wire, id);
+}
+
+static void calc_invreq(const u8 *tlvstream, struct sha256 *id)
+{
+	size_t start, len;
+
+	/* BOLT-offers #12:
+	 *   - if the invoice is a response to an `invoice_request`:
+	 *     - MUST reject the invoice if all fields less than type 160
+	 *       do not exactly match the `invoice_request`.
+	 */
+	len = tlv_span(tlvstream, 0, 159, &start);
+	sha256(id, tlvstream + start, len);
+}
+
+void invreq_invreq_id(const struct tlv_invoice_request *invreq, struct sha256 *id)
+{
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+
+	towire_tlv_invoice_request(&wire, invreq);
+	calc_invreq(wire, id);
+}
+
+void invoice_invreq_id(const struct tlv_invoice *invoice, struct sha256 *id)
+{
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+
+	towire_tlv_invoice(&wire, invoice);
+	calc_invreq(wire, id);
+}
+
+
+/* BOLT-offers #12:
+ * ## Requirements for Invoice Requests
+ *
+ * The writer:
+ *   - if it is responding to an offer:
+ *     - MUST copy all fields from the offer (including unknown fields).
+ */
+struct tlv_invoice_request *invoice_request_for_offer(const tal_t *ctx,
+						      const struct tlv_offer *offer)
+{
+	const u8 *cursor;
+	size_t max;
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+	towire_tlv_offer(&wire, offer);
+
+	cursor = wire;
+	max = tal_bytelen(wire);
+	return fromwire_tlv_invoice_request(ctx, &cursor, &max);
+}
+
+/**
+ * Prepare a new invoice based on an invoice_request.
+ */
+struct tlv_invoice *invoice_for_invreq(const tal_t *ctx,
+				       const struct tlv_invoice_request *invreq)
+{
+	const u8 *cursor;
+	size_t start, len;
+	u8 *wire = tal_arr(tmpctx, u8, 0);
+	towire_tlv_invoice_request(&wire, invreq);
+
+	/* BOLT-offers #12:
+	 * A writer of an invoice:
+	 *...
+	 * - if the invoice is in response to an `invoice_request`:
+	 *   - MUST copy all non-signature fields from the `invoice_request` (including
+	 *     unknown fields).
+	 */
+	len = tlv_span(wire, 0, 159, &start);
+	cursor = wire + start;
+	return fromwire_tlv_invoice(ctx, &cursor, &len);
+}
+

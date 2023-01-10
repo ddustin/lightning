@@ -182,6 +182,15 @@ char *encode_scriptpubkey_to_addr(const tal_t *ctx UNNEEDED,
 				  const struct chainparams *chainparams UNNEEDED,
 				  const u8 *scriptPubkey UNNEEDED)
 { fprintf(stderr, "encode_scriptpubkey_to_addr called!\n"); abort(); }
+/* Generated stub for encrypt_tlv_encrypted_data */
+u8 *encrypt_tlv_encrypted_data(const tal_t *ctx UNNEEDED,
+			       const struct privkey *blinding UNNEEDED,
+			       const struct pubkey *node UNNEEDED,
+			       const struct tlv_encrypted_data_tlv *tlv UNNEEDED,
+			       struct privkey *next_blinding UNNEEDED,
+			       struct pubkey *node_alias)
+
+{ fprintf(stderr, "encrypt_tlv_encrypted_data called!\n"); abort(); }
 /* Generated stub for failmsg_incorrect_or_unknown_ */
 const u8 *failmsg_incorrect_or_unknown_(const tal_t *ctx UNNEEDED,
 					struct lightningd *ld UNNEEDED,
@@ -306,6 +315,14 @@ struct tlv_invoice *invoice_decode_nosig(const tal_t *ctx UNNEEDED,
 /* Generated stub for invoice_encode */
 char *invoice_encode(const tal_t *ctx UNNEEDED, const struct tlv_invoice *bolt12_tlv UNNEEDED)
 { fprintf(stderr, "invoice_encode called!\n"); abort(); }
+/* Generated stub for invoice_offer_id */
+void invoice_offer_id(const struct tlv_invoice *invoice UNNEEDED, struct sha256 *id UNNEEDED)
+{ fprintf(stderr, "invoice_offer_id called!\n"); abort(); }
+/* Generated stub for invoice_path_id */
+u8 *invoice_path_id(const tal_t *ctx UNNEEDED,
+		    const struct secret *base_secret UNNEEDED,
+		    const struct sha256 *payment_hash UNNEEDED)
+{ fprintf(stderr, "invoice_path_id called!\n"); abort(); }
 /* Generated stub for json_add_address */
 void json_add_address(struct json_stream *response UNNEEDED, const char *fieldname UNNEEDED,
 		      const struct wireaddr *addr UNNEEDED)
@@ -500,7 +517,9 @@ void jsonrpc_request_end(struct jsonrpc_request *request UNNEEDED)
 /* Generated stub for jsonrpc_request_start_ */
 struct jsonrpc_request *jsonrpc_request_start_(
     const tal_t *ctx UNNEEDED, const char *method UNNEEDED,
-    const char *id_prefix TAKES UNNEEDED, struct log *log UNNEEDED, bool add_header UNNEEDED,
+    const char *id_prefix TAKES UNNEEDED,
+    bool id_as_string UNNEEDED,
+    struct log *log UNNEEDED, bool add_header UNNEEDED,
     void (*notify_cb)(const char *buffer UNNEEDED,
 		      const jsmntok_t *idtok UNNEEDED,
 		      const jsmntok_t *methodtok UNNEEDED,
@@ -687,6 +706,9 @@ bool plugin_hook_call_(struct lightningd *ld UNNEEDED,
 void plugin_request_send(struct plugin *plugin UNNEEDED,
 			 struct jsonrpc_request *req TAKES UNNEEDED)
 { fprintf(stderr, "plugin_request_send called!\n"); abort(); }
+/* Generated stub for pubkey_from_node_id */
+bool pubkey_from_node_id(struct pubkey *key UNNEEDED, const struct node_id *id UNNEEDED)
+{ fprintf(stderr, "pubkey_from_node_id called!\n"); abort(); }
 /* Generated stub for report_subd_memleak */
 void report_subd_memleak(struct leak_detect *leak_detect UNNEEDED, struct subd *leaker UNNEEDED)
 { fprintf(stderr, "report_subd_memleak called!\n"); abort(); }

@@ -30,7 +30,7 @@ is listpeers", or "method is listpeers OR time is before 2023".  Alternatives us
 being run:
 
 * time: the current UNIX time, e.g. "time<1656759180".
-* id: the node_id of the peer, e.g. "id=024b9a1fa8e006f1e3937f65f66c408e6da8e1ca728ea43222a7381df1cc449605".
+* id: the node\_id of the peer, e.g. "id=024b9a1fa8e006f1e3937f65f66c408e6da8e1ca728ea43222a7381df1cc449605".
 * method: the command being run, e.g. "method=withdraw".
 * rate: the rate limit, per minute, e.g. "rate=60".
 * pnum: the number of parameters. e.g. "pnum<2".
@@ -218,4 +218,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:08ded3c93fea629f414a96f12ac02de1000743a487ec8989ba1510a59861ccc1)
+[comment]: # ( SHA256STAMP:5f4371a060861ca04019948242803f8b6254627f9993a866ec6e119d8a14cef6)

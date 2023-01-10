@@ -117,7 +117,8 @@ def test_announce_address(node_factory, bitcoind):
     """Make sure our announcements are well formed."""
 
     # We do not allow announcement of duplicates.
-    opts = {'disable-dns': None, 'announce-addr':
+    opts = {'announce-addr-dns': True,
+            'announce-addr':
             ['4acth47i6kxnvkewtm6q7ib2s3ufpo5sqbsnzjpbi7utijcltosqemad.onion',
              '1.2.3.4:1234',
              'example.com:1236',
@@ -158,6 +159,31 @@ def test_announce_address(node_factory, bitcoind):
     assert addresses_dns[0]['port'] == 1236
 
 
+def test_announce_dns_suppressed(node_factory, bitcoind):
+    """By default announce DNS names as IPs"""
+    opts = {'announce-addr': 'example.com:1236',
+            'start': False}
+    l1, l2 = node_factory.get_nodes(2, opts=[opts, {}])
+    # Remove unwanted disable-dns option!
+    del l1.daemon.opts['disable-dns']
+    l1.start()
+
+    # Need a channel so l1 will announce itself.
+    l1.rpc.connect(l2.info['id'], 'localhost', l2.port)
+    scid, _ = l1.fundchannel(l2, 10**6)
+    bitcoind.generate_block(5)
+
+    # Wait for l2 to see l1, with addresses.
+    wait_for(lambda: l2.rpc.listnodes(l1.info['id'])['nodes'] != [])
+    wait_for(lambda: 'addresses' in only_one(l2.rpc.listnodes(l1.info['id'])['nodes']))
+
+    addresses = only_one(l2.rpc.listnodes(l1.info['id'])['nodes'])['addresses']
+    assert len(addresses) == 1
+    assert addresses[0]['type'] == 'ipv4'
+    assert addresses[0]['address'] != 'example.com'
+    assert addresses[0]['port'] == 1236
+
+
 @pytest.mark.developer("gossip without DEVELOPER=1 is slow")
 def test_announce_and_connect_via_dns(node_factory, bitcoind):
     """ Test that DNS annoucements propagate and can be used when connecting.
@@ -176,6 +202,7 @@ def test_announce_and_connect_via_dns(node_factory, bitcoind):
         - 'dev-allow-localhost' must not be set, so it does not resolve localhost anyway.
     """
     opts1 = {'disable-dns': None,
+             'announce-addr-dns': True,
              'announce-addr': ['localhost.localdomain:12345'],  # announce dns
              'bind-addr': ['127.0.0.1:12345', '[::1]:12345']}   # and bind local IPs
     opts3 = {'may_reconnect': True}
@@ -225,7 +252,8 @@ def test_announce_and_connect_via_dns(node_factory, bitcoind):
 def test_only_announce_one_dns(node_factory, bitcoind):
     # and test that we can't announce more than one DNS address
     l1 = node_factory.get_node(expect_fail=True, start=False,
-                               options={'announce-addr': ['localhost.localdomain:12345', 'example.com:12345']})
+                               options={'announce-addr-dns': True,
+                                        'announce-addr': ['localhost.localdomain:12345', 'example.com:12345']})
     l1.daemon.start(wait_for_initialized=False, stderr_redir=True)
     wait_for(lambda: l1.daemon.is_in_stderr("Only one DNS can be announced"))
 
@@ -234,7 +262,7 @@ def test_announce_dns_without_port(node_factory, bitcoind):
     """ Checks that the port of a DNS announcement is set to the corresponding
         network port. In this case regtest 19846
     """
-    opts = {'announce-addr': ['example.com']}
+    opts = {'announce-addr-dns': True, 'announce-addr': ['example.com']}
     l1 = node_factory.get_node(options=opts)
 
     # 'address': [{'type': 'dns', 'address': 'example.com', 'port': 0}]
@@ -2165,3 +2193,33 @@ def test_close_12_block_delay(node_factory, bitcoind):
     # One more block, it's forgotten too.
     bitcoind.generate_block(1)
     wait_for(lambda: l4.rpc.listchannels(source=l2.info['id'])['channels'] == [])
+
+
+@pytest.mark.developer("needs --dev-fast-gossip")
+def test_gossip_private_updates(node_factory, bitcoind):
+    """Check that private channel updates are properly added and deleted from
+    the gossip store.
+
+    """
+    l1, l2 = node_factory.get_nodes(2)
+
+    l1.rpc.connect(l2.info['id'], 'localhost', l2.port)
+    scid, _ = l1.fundchannel(l2, 10**6, None, False)
+    bitcoind.generate_block(5)
+
+    l1.wait_channel_active(scid)
+    l2.wait_channel_active(scid)
+
+    l2.rpc.setchannel(l1.info['id'], feebase=11)
+    wait_for(lambda: sum([c['base_fee_millisatoshi'] for c in l1.rpc.listchannels()['channels']]) == 12)
+    l2.rpc.setchannel(l1.info['id'], feebase=12)
+    wait_for(lambda: sum([c['base_fee_millisatoshi'] for c in l1.rpc.listchannels()['channels']]) == 13)
+    l2.rpc.setchannel(l1.info['id'], feebase=13)
+    wait_for(lambda: sum([c['base_fee_millisatoshi'] for c in l1.rpc.listchannels()['channels']]) == 14)
+    l2.rpc.setchannel(l1.info['id'], feebase=14)
+    wait_for(lambda: sum([c['base_fee_millisatoshi'] for c in l1.rpc.listchannels()['channels']]) == 15)
+    l2.rpc.setchannel(l1.info['id'], feebase=15)
+    wait_for(lambda: sum([c['base_fee_millisatoshi'] for c in l1.rpc.listchannels()['channels']]) == 16)
+    l1.restart()
+
+    wait_for(lambda: l1.daemon.is_in_log(r'gossip_store_compact_offline: 5 deleted, 3 copied'))

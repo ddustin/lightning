@@ -4,9 +4,9 @@ lightning-sendpay -- Low-level command for sending a payment via a route
 SYNOPSIS
 --------
 
-**sendpay** *route* *payment\_hash* [*label*] [*msatoshi*]
-[*bolt11*] [*payment_secret*] [*partid*] [*localofferid*] [*groupid*]
-[*payment_metadata*] [*description*]
+**sendpay** *route* *payment\_hash* [*label*] [*amount\_msat*]
+[*bolt11*] [*payment\_secret*] [*partid*] [*localinvreqid*] [*groupid*]
+[*payment\_metadata*] [*description*]
 
 DESCRIPTION
 -----------
@@ -28,37 +28,36 @@ definite failure.
 The *label* and *bolt11* parameters, if provided, will be returned in
 *waitsendpay* and *listsendpays* results.
 
-The *msatoshi* amount must be provided if *partid* is non-zero, otherwise
+The *amount\_msat* amount must be provided if *partid* is non-zero, otherwise
 it must be equal to the final
 amount to the destination. By default it is in millisatoshi precision; it can be a whole number, or a whole number
 ending in *msat* or *sat*, or a number with three decimal places ending
 in *sat*, or a number with 1 to 11 decimal places ending in *btc*.
 
-The *payment_secret* is the value that the final recipient requires to
+The *payment\_secret* is the value that the final recipient requires to
 accept the payment, as defined by the `payment_data` field in BOLT 4
 and the `s` field in the BOLT 11 invoice format.  It is required if
 *partid* is non-zero.
 
 The *partid* value, if provided and non-zero, allows for multiple parallel
-partial payments with the same *payment_hash*.  The *msatoshi* amount
+partial payments with the same *payment\_hash*.  The *amount\_msat* amount
 (which must be provided) for each **sendpay** with matching
-*payment_hash* must be equal, and **sendpay** will fail if there are
-already *msatoshi* worth of payments pending.
+*payment\_hash* must be equal, and **sendpay** will fail if there are
 
-The *localofferid* value indicates that this payment is being made for a local
-send_invoice offer: this ensures that we only send a payment for a single-use
-offer once.
+The *localinvreqid* value indicates that this payment is being made for a local
+invoice\_request: this ensures that we only send a payment for a single-use
+invoice\_request once.
 
 *groupid* allows you to attach a number which appears in **listsendpays** so
 payments can be identified as part of a logical group.  The *pay* plugin uses
 this to identify one attempt at a MPP payment, for example.
 
-*payment_metadata* is placed in the final onion hop TLV.
+*payment\_metadata* is placed in the final onion hop TLV.
 
 Once a payment has succeeded, calls to **sendpay** with the same
-*payment\_hash* but a different *msatoshi* or destination will fail;
+*payment\_hash* but a different *amount\_msat* or destination will fail;
 this prevents accidental multiple payments. Calls to **sendpay** with
-the same *payment\_hash*, *msatoshi*, and destination as a previous
+the same *payment\_hash*, *amount\_msat*, and destination as a previous
 successful payment (even if a different route or *partid*) will return immediately
 with success.
 
@@ -69,11 +68,11 @@ RETURN VALUE
 On success, an object is returned, containing:
 
 - **id** (u64): unique ID for this payment attempt
-- **payment\_hash** (hash): the hash of the *payment_preimage* which will prove payment (always 64 characters)
+- **payment\_hash** (hash): the hash of the *payment\_preimage* which will prove payment (always 64 characters)
 - **status** (string): status of the payment (could be complete if already sent previously) (one of "pending", "complete")
 - **created\_at** (u64): the UNIX timestamp showing when this payment was initiated
 - **amount\_sent\_msat** (msat): The amount sent
-- **groupid** (u64, optional): Grouping key to disambiguate multiple attempts to pay an invoice or the same payment_hash
+- **groupid** (u64, optional): Grouping key to disambiguate multiple attempts to pay an invoice or the same payment\_hash
 - **amount\_msat** (msat, optional): The amount delivered to destination (if known)
 - **destination** (pubkey, optional): the final destination of the payment if known
 - **completed\_at** (u64, optional): the UNIX timestamp showing when this payment was completed
@@ -84,7 +83,7 @@ On success, an object is returned, containing:
 
 If **status** is "complete":
 
-  - **payment\_preimage** (secret): the proof of payment: SHA256 of this **payment_hash** (always 64 characters)
+  - **payment\_preimage** (secret): the proof of payment: SHA256 of this **payment\_hash** (always 64 characters)
 
 If **status** is "pending":
 
@@ -109,7 +108,7 @@ The following error codes may occur:
     will be routing failure object.
 -   204: Failure along route; retry a different route. The *data* field
     of the error will be routing failure object.
--   212: *localofferid* refers to an invalid, or used, local offer.
+-   212: *localinvreqid* refers to an invalid, or used, local invoice\_request.
 
 A routing failure object has the fields below:
 -   *erring\_index*. The index of the node along the route that reported
@@ -143,4 +142,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:c129f537b1af8a5dc767a25a72be419634cb21ebc26a9e6b9bb091db8db7e6ca)
+[comment]: # ( SHA256STAMP:b7f1a5efd80156722e5f9cca6f291306fcd22ab7b9b2754beac880f2ae5a7418)

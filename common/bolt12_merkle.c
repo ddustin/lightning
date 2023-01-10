@@ -1,4 +1,5 @@
 #include "config.h"
+#include <assert.h>
 #include <ccan/cast/cast.h>
 #include <ccan/ilog/ilog.h>
 #include <ccan/mem/mem.h>
@@ -9,7 +10,8 @@
 #endif
 
 /* BOLT-offers #12:
- * TLV types 240 through 1000 are considered signature elements.
+ * Each form is signed using one or more *signature TLV elements*: TLV
+ * types 240 through 1000 (inclusive).
  */
 static bool is_signature_field(const struct tlv_field *field)
 {
@@ -54,23 +56,21 @@ static void h_simpletag_ctx(struct sha256_ctx *sctx, const char *tag)
 
 /* BOLT-offers #12:
  * The Merkle tree's leaves are, in TLV-ascending order for each tlv:
- * 1. The H(`LnLeaf`,tlv).
- * 2. The H(`LnAll`||all-tlvs,tlv) where "all-tlvs" consists of all non-signature TLV entries appended in ascending order.
+ * 1. The H("LnLeaf",tlv).
+ * 2. The H("LnNonce"||first-tlv,tlv-type) where first-tlv is the numerically-first TLV entry in the stream, and tlv-type is the "type" field (1-9 bytes) of the current tlv.
  */
 
 /* Create a sha256_ctx which has the tag part done. */
-static void h_lnall_ctx(struct sha256_ctx *sctx, const struct tlv_field *fields)
+static void h_lnnonce_ctx(struct sha256_ctx *sctx, const struct tlv_field *fields)
 {
 	struct sha256_ctx inner_sctx;
 	struct sha256 sha;
 
 	sha256_init(&inner_sctx);
-	sha256_update(&inner_sctx, "LnAll", 5);
-	SUPERVERBOSE("tag=SHA256(%s", tal_hexstr(tmpctx, "LnAll", 5));
-	for (size_t i = 0; i < tal_count(fields); i++) {
-		if (!is_signature_field(&fields[i]))
-			sha256_update_tlvfield(&inner_sctx, &fields[i]);
-	}
+	sha256_update(&inner_sctx, "LnNonce", 7);
+	SUPERVERBOSE("tag=SHA256(%s", tal_hexstr(tmpctx, "LnNonce", 7));
+	assert(tal_count(fields));
+	sha256_update_tlvfield(&inner_sctx, &fields[0]);
 	sha256_done(&inner_sctx, &sha);
 	SUPERVERBOSE(") -> %s\n",
 		     type_to_string(tmpctx, struct sha256, &sha));
@@ -80,16 +80,16 @@ static void h_lnall_ctx(struct sha256_ctx *sctx, const struct tlv_field *fields)
 	sha256_update(sctx, &sha, sizeof(sha));
 }
 
-/* Use h_lnall_ctx to create nonce */
-static void calc_nonce(const struct sha256_ctx *lnall_ctx,
+/* Use h_lnnonce_ctx to create nonce */
+static void calc_nonce(const struct sha256_ctx *lnnonce_ctx,
 		       const struct tlv_field *field,
 		       struct sha256 *hash)
 {
 	/* Copy context, to add field */
-	struct sha256_ctx ctx = *lnall_ctx;
+	struct sha256_ctx ctx = *lnnonce_ctx;
 
 	SUPERVERBOSE("nonce: H(noncetag,");
-	sha256_update_tlvfield(&ctx, field);
+	sha256_update_bigsize(&ctx, field->numtype);
 
 	sha256_done(&ctx, hash);
 	SUPERVERBOSE(") = %s\n", type_to_string(tmpctx, struct sha256, hash));
@@ -108,7 +108,7 @@ static void calc_lnleaf(const struct tlv_field *field, struct sha256 *hash)
 }
 
 /* BOLT-offers #12:
- * The Merkle tree inner nodes are H(`LnBranch`, lesser-SHA256||greater-SHA256)
+ * The Merkle tree inner nodes are H("LnBranch", lesser-SHA256||greater-SHA256)
  */
 static struct sha256 *merkle_pair(const tal_t *ctx,
 				  const struct sha256 *a, const struct sha256 *b)
@@ -159,11 +159,11 @@ static const struct sha256 *merkle_recurse(const struct sha256 **base,
 void merkle_tlv(const struct tlv_field *fields, struct sha256 *merkle)
 {
 	struct sha256 **arr;
-	struct sha256_ctx lnall_ctx;
+	struct sha256_ctx lnnonce_ctx;
 	size_t n;
 
 	SUPERVERBOSE("nonce tag:");
-	h_lnall_ctx(&lnall_ctx, fields);
+	h_lnnonce_ctx(&lnnonce_ctx, fields);
 
 	/* We build an oversized power-of-2 symmentic tree, but with
 	 * NULL nodes at the end.  When we recurse, we pass through
@@ -178,7 +178,7 @@ void merkle_tlv(const struct tlv_field *fields, struct sha256 *merkle)
 		if (is_signature_field(&fields[i]))
 			continue;
 		calc_lnleaf(&fields[i], &leaf);
-		calc_nonce(&lnall_ctx, &fields[i], &nonce);
+		calc_nonce(&lnnonce_ctx, &fields[i], &nonce);
 		arr[n++] = merkle_pair(arr, &leaf, &nonce);
 	}
 
@@ -194,18 +194,17 @@ void merkle_tlv(const struct tlv_field *fields, struct sha256 *merkle)
 
 /* BOLT-offers #12:
  * All signatures are created as per
- * [BIP-340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki),
+ * [BIP-340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
  * and tagged as recommended there.  Thus we define H(`tag`,`msg`) as
  * SHA256(SHA256(`tag`) || SHA256(`tag`) || `msg`), and SIG(`tag`,`msg`,`key`)
  * as the signature of H(`tag`,`msg`) using `key`.
  *
- * Each form is signed using one or more TLV signature elements; TLV
- * types 240 through 1000 are considered signature elements.  For these
- * the tag is "lightning" || `messagename` || `fieldname`, and `msg` is the
- * Merkle-root; "lightning" is the literal 9-byte ASCII string,
- * `messagename` is the name of the TLV stream being signed (i.e. "offer",
- * "invoice_request" or "invoice") and the `fieldname` is the TLV field
- * containing the signature (e.g. "signature" or "refund_signature").
+ * Each form is signed using one or more *signature TLV elements*: TLV types
+ * 240 through 1000 (inclusive).  For these, the tag is "lightning" ||
+ * `messagename` || `fieldname`, and `msg` is the Merkle-root; "lightning" is
+ * the literal 9-byte ASCII string, `messagename` is the name of the TLV
+ * stream being signed (i.e. "invoice_request" or "invoice") and the
+ * `fieldname` is the TLV field containing the signature (e.g. "signature").
  */
 void sighash_from_merkle(const char *messagename,
 			 const char *fieldname,
@@ -220,15 +219,17 @@ void sighash_from_merkle(const char *messagename,
 }
 
 /* We use the SHA(pubkey | publictweak); so reader cannot figure out the
- * tweak and derive the base key */
-void payer_key_tweak(const struct point32 *bolt12,
+ * tweak and derive the base key.
+ */
+void payer_key_tweak(const struct pubkey *bolt12,
 		     const u8 *publictweak, size_t publictweaklen,
 		     struct sha256 *tweak)
 {
-	u8 rawkey[32];
+	u8 rawkey[PUBKEY_CMPR_LEN];
 	struct sha256_ctx sha;
 
-	secp256k1_xonly_pubkey_serialize(secp256k1_ctx, rawkey, &bolt12->pubkey);
+	pubkey_to_der(rawkey, bolt12);
+
 	sha256_init(&sha);
 	sha256_update(&sha, rawkey, sizeof(rawkey));
 	sha256_update(&sha,

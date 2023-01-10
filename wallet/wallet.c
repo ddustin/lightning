@@ -148,7 +148,8 @@ static bool wallet_add_utxo(struct wallet *w, struct utxo *utxo,
 		       ", confirmation_height"
 		       ", spend_height"
 		       ", scriptpubkey"
-		       ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"));
+		       ", is_in_coinbase"
+		       ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"));
 	db_bind_txid(stmt, 0, &utxo->outpoint.txid);
 	db_bind_int(stmt, 1, utxo->outpoint.n);
 	db_bind_amount_sat(stmt, 2, &utxo->amount);
@@ -183,6 +184,7 @@ static bool wallet_add_utxo(struct wallet *w, struct utxo *utxo,
 	db_bind_blob(stmt, 12, utxo->scriptPubkey,
 			  tal_bytelen(utxo->scriptPubkey));
 
+	db_bind_int(stmt, 13, utxo->is_in_coinbase);
 	db_exec_prepared_v2(take(stmt));
 	return true;
 }
@@ -200,6 +202,9 @@ static struct utxo *wallet_stmt2output(const tal_t *ctx, struct db_stmt *stmt)
 	utxo->is_p2sh = db_col_int(stmt, "type") == p2sh_wpkh;
 	utxo->status = db_col_int(stmt, "status");
 	utxo->keyindex = db_col_int(stmt, "keyindex");
+
+	utxo->is_in_coinbase = db_col_int(stmt, "is_in_coinbase") == 1;
+
 	if (!db_col_is_null(stmt, "channel_id")) {
 		utxo->close_info = tal(utxo, struct unilateral_close_info);
 		utxo->close_info->channel_id = db_col_u64(stmt, "channel_id");
@@ -277,7 +282,6 @@ bool wallet_update_output_status(struct wallet *w,
 struct utxo **wallet_get_utxos(const tal_t *ctx, struct wallet *w, const enum output_status state)
 {
 	struct utxo **results;
-	int i;
 	struct db_stmt *stmt;
 
 	if (state == OUTPUT_STATE_ANY) {
@@ -297,6 +301,7 @@ struct utxo **wallet_get_utxos(const tal_t *ctx, struct wallet *w, const enum ou
 						", scriptpubkey "
 						", reserved_til "
 						", csv_lock "
+						", is_in_coinbase "
 						"FROM outputs"));
 	} else {
 		stmt = db_prepare_v2(w->db, SQL("SELECT"
@@ -315,6 +320,7 @@ struct utxo **wallet_get_utxos(const tal_t *ctx, struct wallet *w, const enum ou
 						", scriptpubkey "
 						", reserved_til "
 						", csv_lock "
+						", is_in_coinbase "
 						"FROM outputs "
 						"WHERE status= ? "));
 		db_bind_int(stmt, 0, output_status_in_db(state));
@@ -322,7 +328,7 @@ struct utxo **wallet_get_utxos(const tal_t *ctx, struct wallet *w, const enum ou
 	db_query_prepared(stmt);
 
 	results = tal_arr(ctx, struct utxo*, 0);
-	for (i=0; db_step(stmt); i++) {
+	while (db_step(stmt)) {
 		struct utxo *u = wallet_stmt2output(results, stmt);
 		tal_arr_expand(&results, u);
 	}
@@ -336,7 +342,6 @@ struct utxo **wallet_get_unconfirmed_closeinfo_utxos(const tal_t *ctx,
 {
 	struct db_stmt *stmt;
 	struct utxo **results;
-	int i;
 
 	stmt = db_prepare_v2(w->db, SQL("SELECT"
 					"  prev_out_tx"
@@ -354,13 +359,14 @@ struct utxo **wallet_get_unconfirmed_closeinfo_utxos(const tal_t *ctx,
 					", scriptpubkey"
 					", reserved_til"
 					", csv_lock"
+					", is_in_coinbase"
 					" FROM outputs"
 					" WHERE channel_id IS NOT NULL AND "
 					"confirmation_height IS NULL"));
 	db_query_prepared(stmt);
 
 	results = tal_arr(ctx, struct utxo *, 0);
-	for (i = 0; db_step(stmt); i++) {
+	while (db_step(stmt)) {
 		struct utxo *u = wallet_stmt2output(results, stmt);
 		tal_arr_expand(&results, u);
 	}
@@ -391,6 +397,7 @@ struct utxo *wallet_utxo_get(const tal_t *ctx, struct wallet *w,
 					", scriptpubkey"
 					", reserved_til"
 					", csv_lock"
+					", is_in_coinbase"
 					" FROM outputs"
 					" WHERE prev_out_tx = ?"
 					" AND prev_out_index = ?"));
@@ -501,6 +508,11 @@ static bool deep_enough(u32 maxheight, const struct utxo *utxo,
 		if (csv_free > current_blockheight)
 			return false;
 	}
+
+	bool immature = utxo_is_immature(utxo, current_blockheight);
+	if (immature)
+		return false;
+
 	/* If we require confirmations check that we have a
 	 * confirmation height and that it is below the required
 	 * maxheight (current_height - minconf) */
@@ -539,6 +551,7 @@ struct utxo *wallet_find_utxo(const tal_t *ctx, struct wallet *w,
 					", scriptpubkey "
 					", reserved_til"
 					", csv_lock"
+					", is_in_coinbase"
 					" FROM outputs"
 					" WHERE status = ?"
 					" OR (status = ? AND reserved_til <= ?)"
@@ -2296,6 +2309,7 @@ void wallet_confirm_tx(struct wallet *w,
 }
 
 int wallet_extract_owned_outputs(struct wallet *w, const struct wally_tx *wtx,
+				 bool is_coinbase,
 				 const u32 *blockheight,
 				 struct amount_sat *total)
 {
@@ -2330,19 +2344,21 @@ int wallet_extract_owned_outputs(struct wallet *w, const struct wally_tx *wtx,
 		wally_txid(wtx, &utxo->outpoint.txid);
 		utxo->outpoint.n = output;
 		utxo->close_info = NULL;
+		utxo->is_in_coinbase = is_coinbase;
 
 		utxo->blockheight = blockheight ? blockheight : NULL;
 		utxo->spendheight = NULL;
 		utxo->scriptPubkey = tal_dup_talarr(utxo, u8, script);
 
-		log_debug(w->log, "Owning output %zu %s (%s) txid %s%s",
+		log_debug(w->log, "Owning output %zu %s (%s) txid %s%s%s",
 			  output,
 			  type_to_string(tmpctx, struct amount_sat,
 					 &utxo->amount),
 			  is_p2sh ? "P2SH" : "SEGWIT",
 			  type_to_string(tmpctx, struct bitcoin_txid,
 					 &utxo->outpoint.txid),
-			  blockheight ? " CONFIRMED" : "");
+			  blockheight ? " CONFIRMED" : "",
+			  is_coinbase ? " COINBASE" : "");
 
 		/* We only record final ledger movements */
 		if (blockheight) {
@@ -3076,7 +3092,7 @@ void wallet_payment_store(struct wallet *wallet,
 		    "  bolt11,"
 		    "  total_msat,"
 		    "  partid,"
-		    "  local_offer_id,"
+		    "  local_invreq_id,"
 		    "  groupid,"
 		    "  paydescription"
 		    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"));
@@ -3121,8 +3137,8 @@ void wallet_payment_store(struct wallet *wallet,
 	db_bind_amount_msat(stmt, 11, &payment->total_msat);
 	db_bind_u64(stmt, 12, payment->partid);
 
-	if (payment->local_offer_id != NULL)
-		db_bind_sha256(stmt, 13, payment->local_offer_id);
+	if (payment->local_invreq_id != NULL)
+		db_bind_sha256(stmt, 13, payment->local_invreq_id);
 	else
 		db_bind_null(stmt, 13);
 
@@ -3267,11 +3283,11 @@ static struct wallet_payment *wallet_stmt2payment(const tal_t *ctx,
 	else
 		payment->partid = 0;
 
-	if (!db_col_is_null(stmt, "local_offer_id")) {
-		payment->local_offer_id = tal(payment, struct sha256);
-		db_col_sha256(stmt, "local_offer_id", payment->local_offer_id);
+	if (!db_col_is_null(stmt, "local_invreq_id")) {
+		payment->local_invreq_id = tal(payment, struct sha256);
+		db_col_sha256(stmt, "local_invreq_id", payment->local_invreq_id);
 	} else
-		payment->local_offer_id = NULL;
+		payment->local_invreq_id = NULL;
 
 	if (!db_col_is_null(stmt, "completed_at")) {
 		payment->completed_at = tal(payment, u32);
@@ -3315,7 +3331,7 @@ wallet_payment_by_hash(const tal_t *ctx, struct wallet *wallet,
 					     ", failonionreply"
 					     ", total_msat"
 					     ", partid"
-					     ", local_offer_id"
+					     ", local_invreq_id"
 					     ", groupid"
 					     ", completed_at"
 					     " FROM payments"
@@ -3557,7 +3573,7 @@ wallet_payment_list(const tal_t *ctx,
 						     ", failonionreply"
 						     ", total_msat"
 						     ", partid"
-						     ", local_offer_id"
+						     ", local_invreq_id"
 						     ", groupid"
 						     ", completed_at"
 						     " FROM payments"
@@ -3584,7 +3600,7 @@ wallet_payment_list(const tal_t *ctx,
 						     ", failonionreply"
 						     ", total_msat"
 						     ", partid"
-						     ", local_offer_id"
+						     ", local_invreq_id"
 						     ", groupid"
 						     ", completed_at"
 						     " FROM payments"
@@ -3610,9 +3626,9 @@ wallet_payment_list(const tal_t *ctx,
 }
 
 const struct wallet_payment **
-wallet_payments_by_offer(const tal_t *ctx,
-			 struct wallet *wallet,
-			 const struct sha256 *local_offer_id)
+wallet_payments_by_invoice_request(const tal_t *ctx,
+				   struct wallet *wallet,
+				   const struct sha256 *local_invreq_id)
 {
 	const struct wallet_payment **payments;
 	struct db_stmt *stmt;
@@ -3638,12 +3654,12 @@ wallet_payments_by_offer(const tal_t *ctx,
 					     ", failonionreply"
 					     ", total_msat"
 					     ", partid"
-					     ", local_offer_id"
+					     ", local_invreq_id"
 					     ", groupid"
 					     ", completed_at"
 					     " FROM payments"
-					     " WHERE local_offer_id = ?;"));
-	db_bind_sha256(stmt, 0, local_offer_id);
+					     " WHERE local_invreq_id = ?;"));
+	db_bind_sha256(stmt, 0, local_invreq_id);
 	db_query_prepared(stmt);
 
 	for (i = 0; db_step(stmt); i++) {
@@ -3654,7 +3670,7 @@ wallet_payments_by_offer(const tal_t *ctx,
 
 	/* Now attach payments not yet in db. */
 	list_for_each(&wallet->unstored_payments, p, list) {
-		if (!p->local_offer_id || !sha256_eq(p->local_offer_id, local_offer_id))
+		if (!p->local_invreq_id || !sha256_eq(p->local_invreq_id, local_invreq_id))
 			continue;
 		tal_resize(&payments, i+1);
 		payments[i++] = p;
@@ -4765,7 +4781,6 @@ bool wallet_forward_delete(struct wallet *w,
 struct wallet_transaction *wallet_transactions_get(struct wallet *w, const tal_t *ctx)
 {
 	struct db_stmt *stmt;
-	size_t count;
 	struct wallet_transaction *cur = NULL, *txs = tal_arr(ctx, struct wallet_transaction, 0);
 	struct bitcoin_txid last;
 
@@ -4793,7 +4808,7 @@ struct wallet_transaction *wallet_transactions_get(struct wallet *w, const tal_t
 		"ORDER BY t.blockheight, t.txindex ASC"));
 	db_query_prepared(stmt);
 
-	for (count = 0; db_step(stmt); count++) {
+	while (db_step(stmt)) {
 		struct bitcoin_txid curtxid;
 		db_col_txid(stmt, "t.id", &curtxid);
 
@@ -5112,6 +5127,172 @@ void wallet_offer_mark_used(struct db *db, const struct sha256 *offer_id)
 	}
 }
 
+bool wallet_invoice_request_create(struct wallet *w,
+				   const struct sha256 *invreq_id,
+				   const char *bolt12,
+				   const struct json_escape *label,
+				   enum offer_status status)
+{
+	struct db_stmt *stmt;
+
+	assert(offer_status_active(status));
+
+	/* Test if already exists. */
+	stmt = db_prepare_v2(w->db, SQL("SELECT 1"
+					"  FROM invoicerequests"
+					" WHERE invreq_id = ?;"));
+	db_bind_sha256(stmt, 0, invreq_id);
+	db_query_prepared(stmt);
+
+	if (db_step(stmt)) {
+		db_col_ignore(stmt, "1");
+		tal_free(stmt);
+		return false;
+	}
+	tal_free(stmt);
+
+	stmt = db_prepare_v2(w->db,
+			     SQL("INSERT INTO invoicerequests ("
+				 "  invreq_id"
+				 ", bolt12"
+				 ", label"
+				 ", status"
+				 ") VALUES (?, ?, ?, ?);"));
+
+	db_bind_sha256(stmt, 0, invreq_id);
+	db_bind_text(stmt, 1, bolt12);
+	if (label)
+		db_bind_json_escape(stmt, 2, label);
+	else
+		db_bind_null(stmt, 2);
+	db_bind_int(stmt, 3, offer_status_in_db(status));
+	db_exec_prepared_v2(take(stmt));
+	return true;
+}
+
+char *wallet_invoice_request_find(const tal_t *ctx,
+			struct wallet *w,
+			const struct sha256 *invreq_id,
+			const struct json_escape **label,
+			enum offer_status *status)
+{
+	struct db_stmt *stmt;
+	char *bolt12;
+
+	stmt = db_prepare_v2(w->db, SQL("SELECT bolt12, label, status"
+					"  FROM invoicerequests"
+					" WHERE invreq_id = ?;"));
+	db_bind_sha256(stmt, 0, invreq_id);
+	db_query_prepared(stmt);
+
+	if (!db_step(stmt)) {
+		tal_free(stmt);
+		return NULL;
+	}
+
+	bolt12 = db_col_strdup(ctx, stmt, "bolt12");
+	if (label) {
+		if (db_col_is_null(stmt, "label"))
+			*label = NULL;
+		else
+			*label = db_col_json_escape(ctx, stmt, "label");
+	} else
+		db_col_ignore(stmt, "label");
+
+	if (status)
+		*status = offer_status_in_db(db_col_int(stmt, "status"));
+	else
+		db_col_ignore(stmt, "status");
+
+	tal_free(stmt);
+	return bolt12;
+}
+
+struct db_stmt *wallet_invreq_id_first(struct wallet *w, struct sha256 *invreq_id)
+{
+	struct db_stmt *stmt;
+
+	stmt = db_prepare_v2(w->db, SQL("SELECT invreq_id FROM invoicerequests;"));
+	db_query_prepared(stmt);
+
+	return wallet_invreq_id_next(w, stmt, invreq_id);
+}
+
+struct db_stmt *wallet_invreq_id_next(struct wallet *w,
+				     struct db_stmt *stmt,
+				     struct sha256 *invreq_id)
+{
+	if (!db_step(stmt))
+		return tal_free(stmt);
+
+	db_col_sha256(stmt, "invreq_id", invreq_id);
+	return stmt;
+}
+
+/* If we make an invoice_request inactive */
+static void invoice_request_status_update(struct db *db,
+					  const struct sha256 *invreq_id,
+					  enum offer_status oldstatus,
+					  enum offer_status newstatus)
+{
+	struct db_stmt *stmt;
+
+	stmt = db_prepare_v2(db, SQL("UPDATE invoicerequests"
+				     " SET status=?"
+				     " WHERE invreq_id = ?;"));
+	db_bind_int(stmt, 0, offer_status_in_db(newstatus));
+	db_bind_sha256(stmt, 1, invreq_id);
+	db_exec_prepared_v2(take(stmt));
+}
+
+enum offer_status wallet_invoice_request_disable(struct wallet *w,
+						 const struct sha256 *invreq_id,
+						 enum offer_status s)
+{
+	enum offer_status newstatus;
+
+	assert(offer_status_active(s));
+
+	newstatus = offer_status_in_db(s & ~OFFER_STATUS_ACTIVE_F);
+	invoice_request_status_update(w->db, invreq_id, s, newstatus);
+
+	return newstatus;
+}
+
+void wallet_invoice_request_mark_used(struct db *db, const struct sha256 *invreq_id)
+{
+	struct db_stmt *stmt;
+	enum offer_status status;
+
+	stmt = db_prepare_v2(db, SQL("SELECT status"
+				     "  FROM invoicerequests"
+				     " WHERE invreq_id = ?;"));
+	db_bind_sha256(stmt, 0, invreq_id);
+	db_query_prepared(stmt);
+	if (!db_step(stmt))
+		fatal("%s: unknown invreq_id %s",
+		      __func__,
+		      type_to_string(tmpctx, struct sha256, invreq_id));
+
+	status = offer_status_in_db(db_col_int(stmt, "status"));
+	tal_free(stmt);
+
+	if (!offer_status_active(status))
+		fatal("%s: invreq_id %s not active: status %i",
+		      __func__,
+		      type_to_string(tmpctx, struct sha256, invreq_id),
+		      status);
+
+	if (!offer_status_used(status)) {
+		enum offer_status newstatus;
+
+		if (offer_status_single(status))
+			newstatus = OFFER_SINGLE_USE_USED;
+		else
+			newstatus = OFFER_MULTIPLE_USE_USED;
+		invoice_request_status_update(db, invreq_id, status, newstatus);
+	}
+}
 
 /* We join key parts with nuls for now. */
 static void db_bind_datastore_key(struct db_stmt *stmt,
@@ -5279,7 +5460,8 @@ struct wallet_htlc_iter *wallet_htlcs_first(const tal_t *ctx,
 					    ", h.payment_hash"
 					    ", h.hstate"
 					    " FROM channel_htlcs h"
-					    " WHERE channel_id = ?"));
+					    " WHERE channel_id = ?"
+					    " ORDER BY id ASC"));
 		db_bind_u64(i->stmt, 0, chan->dbid);
 	} else {
 		i->scid.u64 = 0;
@@ -5293,7 +5475,8 @@ struct wallet_htlc_iter *wallet_htlcs_first(const tal_t *ctx,
 					    ", h.payment_hash"
 					    ", h.hstate"
 					    " FROM channel_htlcs h"
-					    " JOIN channels ON channels.id = h.channel_id"));
+					    " JOIN channels ON channels.id = h.channel_id"
+					    " ORDER BY h.id ASC"));
 	}
 	/* FIXME: db_prepare should take ctx! */
 	tal_steal(i, i->stmt);

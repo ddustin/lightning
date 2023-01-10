@@ -305,6 +305,7 @@ static struct node_map *local_connected(const tal_t *ctx,
 	struct node_map *connected = tal(ctx, struct node_map);
 
 	node_map_init(connected);
+	tal_add_destructor(connected, node_map_clear);
 
 	json_for_each_arr(i, t, peers) {
 		const jsmntok_t *chans, *c;
@@ -580,6 +581,7 @@ static struct command_result *json_listincoming(struct command *cmd,
 		struct gossmap_chan *ourchan;
 		struct gossmap_node *peer;
 		struct short_channel_id scid;
+		const u8 *peer_features;
 
 		ourchan = gossmap_nth_chan(gossmap, me, i, &dir);
 		/* If its half is disabled, ignore. */
@@ -596,6 +598,9 @@ static struct command_result *json_listincoming(struct command *cmd,
 		json_add_amount_msat_only(js, "fee_base_msat",
 					  amount_msat(ourchan->half[!dir]
 						      .base_fee));
+		json_add_amount_msat_only(js, "htlc_min_msat",
+					  amount_msat(fp16_to_u64(ourchan->half[!dir]
+								  .htlc_min)));
 		json_add_amount_msat_only(js, "htlc_max_msat",
 					  amount_msat(fp16_to_u64(ourchan->half[!dir]
 								  .htlc_max)));
@@ -605,6 +610,10 @@ static struct command_result *json_listincoming(struct command *cmd,
 		json_add_amount_msat_only(js, "incoming_capacity_msat",
 					 peer_capacity(gossmap,
 						       me, peer, ourchan));
+		json_add_bool(js, "public", !ourchan->private);
+		peer_features = gossmap_node_get_features(tmpctx, gossmap, peer);
+		if (peer_features)
+			json_add_hex_talarr(js, "peer_features", peer_features);
 		json_object_end(js);
 	}
 done:

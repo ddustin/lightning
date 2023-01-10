@@ -5,7 +5,8 @@ SYNOPSIS
 --------
 
 **fundchannel** *id* *amount* [*feerate*] [*announce*] [*minconf*]
-[*utxos*] [*push_msat*] [*close_to*] [*request_amt*] [*compact_lease*]
+[*utxos*] [*push\_msat*] [*close\_to*] [*request\_amt*] [*compact\_lease*]
+[*reserve*]
 
 DESCRIPTION
 -----------
@@ -55,22 +56,27 @@ outputs should have. Default is 1.
 *utxos* specifies the utxos to be used to fund the channel, as an array
 of "txid:vout".
 
-*push_msat* is the amount of millisatoshis to push to the channel peer at
+*push\_msat* is the amount of millisatoshis to push to the channel peer at
 open. Note that this is a gift to the peer -- these satoshis are
 added to the initial balance of the peer at channel start and are largely
 unrecoverable once pushed.
 
-*close_to* is a Bitcoin address to which the channel funds should be sent to
+*close\_to* is a Bitcoin address to which the channel funds should be sent to
 on close. Only valid if both peers have negotiated `option_upfront_shutdown_script`.
 Returns `close_to` set to closing script iff is negotiated.
 
-*request_amt* is an amount of liquidity you'd like to lease from the peer.
+*request\_amt* is an amount of liquidity you'd like to lease from the peer.
 If peer supports `option_will_fund`, indicates to them to include this
-much liquidity into the channel. Must also pass in *compact_lease*.
+much liquidity into the channel. Must also pass in *compact\_lease*.
 
-*compact_lease* is a compact represenation of the peer's expected
+*compact\_lease* is a compact represenation of the peer's expected
 channel lease terms. If the peer's terms don't match this set, we will
 fail to open the channel.
+
+*reserve* is the amount we want the peer to maintain on its side of the channel.
+Default is 1% of the funding amount. It can be a whole number, a whole number
+ending in *sat*, a whole number ending in *000msat*, or a number with 1 to 8
+decimal places ending in *btc*.
 
 
 
@@ -88,8 +94,8 @@ On success, an object is returned, containing:
 - **tx** (hex): The raw transaction which funded the channel
 - **txid** (txid): The txid of the transaction which funded the channel
 - **outnum** (u32): The 0-based output index showing which output funded the channel
-- **channel\_id** (hex): The channel_id of the resulting channel (always 64 characters)
-- **close\_to** (hex, optional): The raw scriptPubkey which mutual close will go to; only present if *close_to* parameter was specified and peer supports `option_upfront_shutdown_script`
+- **channel\_id** (hex): The channel\_id of the resulting channel (always 64 characters)
+- **close\_to** (hex, optional): The raw scriptPubkey which mutual close will go to; only present if *close\_to* parameter was specified and peer supports `option_upfront_shutdown_script`
 - **mindepth** (u32, optional): Number of confirmations before we consider the channel active.
 
 [comment]: # (GENERATE-FROM-SCHEMA-END)
@@ -115,4 +121,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:bca36e910b93b86fc42c2d047e703e9760250757cbf09d8cacdf4e3fe1a1f605)
+[comment]: # ( SHA256STAMP:ed7d5aa730bf6b87b3f7072272b984539ca991670c13f85a0da8d4d1333549ae)

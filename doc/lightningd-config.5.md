@@ -141,8 +141,8 @@ Current subdaemons are *channeld*, *closingd*,
 If the supplied path is relative the subdaemon binary is found in the
 working directory. This option may be specified multiple times.
 
-  So, **subdaemon=hsmd:remote_signer** would use a
-hypothetical remote signing proxy instead of the standard *lightning_hsmd*
+  So, **subdaemon=hsmd:remote\_signer** would use a
+hypothetical remote signing proxy instead of the standard *lightning\_hsmd*
 binary.
 
 * **pid-file**=*PATH*
@@ -174,7 +174,7 @@ Subsystems include:
 
   * *jsonrpc#FD*: Each JSONRPC connection, FD = file descriptor number
 
-  
+
   The following subsystems exist for each channel, where N is an incrementing internal integer id assigned for the lifetime of the channel:
 
   * *openingd-chan#N*: Each opening / idling daemon
@@ -185,10 +185,10 @@ Subsystems include:
 
   * *onchaind-chan#N*: Each onchain close handling daemon
 
-  
+
   So, **log-level=debug:plugin** would set debug level logging on all
 plugins and the plugin manager.  **log-level=io:chan#55** would set
-IO logging on channel number 55 (or 550, for that matter). 
+IO logging on channel number 55 (or 550, for that matter).
 **log-level=debug:024b9a1fa8** would set debug logging for that channel
 (or any node id containing that string).
 
@@ -343,8 +343,8 @@ This allows override of one or more of our standard feerates (see
 lightning-feerates(7)).  Up to 5 values, separated by '/' can be
 provided: if fewer are provided, then the final value is used for the
 remainder.  The values are in per-kw (roughly 1/4 of bitcoind's per-kb
-values), and the order is "opening", "mutual_close", "unilateral_close",
-"delayed_to_us", "htlc_resolution", and "penalty".
+values), and the order is "opening", "mutual\_close", "unilateral\_close",
+"delayed\_to\_us", "htlc\_resolution", and "penalty".
 
   You would usually put this option in the per-chain config file, to avoid
 setting it on Bitcoin mainnet!  e.g. `~rusty/.lightning/regtest/config`.
@@ -493,9 +493,8 @@ precisely control where to bind and what to announce with the
 *bind-addr* and *announce-addr* options. These will **disable** the
 *autolisten* logic, so you must specifiy exactly what you want!
 
-* **addr**=*\[IPADDRESS\[:PORT\]\]|autotor:TORIPADDRESS\[:SERVICEPORT\]\[/torport=TORPORT\]|statictor:TORIPADDRESS\[:SERVICEPORT\]\[/torport=TORPORT\]\[/torblob=\[blob\]\]*
+* **addr**=*\[IPADDRESS\[:PORT\]\]|autotor:TORIPADDRESS\[:SERVICEPORT\]\[/torport=TORPORT\]|statictor:TORIPADDRESS\[:SERVICEPORT\]\[/torport=TORPORT\]\[/torblob=\[blob\]\]|DNS\[:PORT\]*
 
-  
   Set an IP address (v4 or v6) or automatic Tor address to listen on and
 (maybe) announce as our node address.
 
@@ -531,10 +530,12 @@ defined by you and possibly different from your local node port assignment.
 
   This option can be used multiple times to add more addresses, and
 its use disables autolisten.  If necessary, and 'always-use-proxy'
-is not specified, a DNS lookup may be done to resolve 'IPADDRESS'
-or 'TORIPADDRESS'.
+is not specified, a DNS lookup may be done to resolve 'DNS' or 'TORIPADDRESS'.
 
-* **bind-addr**=*\[IPADDRESS\[:PORT\]\]|SOCKETPATH*
+  If a 'DNS' hostname was given that resolves to a local interface, the daemon
+will bind to that interface: if **announce-addr-dns** is true then it will also announce that as type 'DNS' (rather than announcing the IP address).
+
+* **bind-addr**=*\[IPADDRESS\[:PORT\]\]|SOCKETPATH|DNS\[:PORT\]|DNS\[:PORT\]*
 
   Set an IP address or UNIX domain socket to listen to, but do not
 announce. A UNIX domain socket is distinguished from an IP address by
@@ -549,7 +550,10 @@ not specified, 9735 is used.
 its use disables autolisten.  If necessary, and 'always-use-proxy'
 is not specified, a DNS lookup may be done to resolve 'IPADDRESS'.
 
-* **announce-addr**=*IPADDRESS\[:PORT\]|TORADDRESS.onion\[:PORT\]*
+  If a 'DNS' hostname was given and 'always-use-proxy' is not specified,
+a lookup may be done to resolve it and bind to a local interface (if found).
+
+* **announce-addr**=*IPADDRESS\[:PORT\]|TORADDRESS.onion\[:PORT\]|DNS\[:PORT\]*
 
   Set an IP (v4 or v6) address or Tor address to announce; a Tor address
 is distinguished by ending in *.onion*. *PORT* defaults to 9735.
@@ -561,8 +565,12 @@ announced addresses are public (e.g. not localhost).
   This option can be used multiple times to add more addresses, and
 its use disables autolisten.
 
-  If necessary, and 'always-use-proxy' is not specified, a DNS
-lookup may be done to resolve 'IPADDRESS'.
+  Since v22.11 'DNS' hostnames can be used for announcement: see **announce-addr-dns**.
+
+* **announce-addr-dns**=*BOOL*
+
+  Set to *true* (default is *false), this so that names given as arguments to **addr** and **announce-addr** are published in node announcement messages as names, rather than IP addresses.  Please note that most mainnet nodes do not yet use, read or propagate this information correctly.
+
 
 * **offline**
 
@@ -654,21 +662,26 @@ Experimental options are subject to breakage between releases: they
 are made available for advanced users who want to test proposed
 features. When the build is configured _without_ `--enable-experimental-features`,
 below options are available but disabled by default.
-A build _with_ `--enable-experimental-features` enables some of below options
-by default and also adds support for even more features. Supported features can
-be listed with `lightningd --list-features-only`.
+Supported features can be listed with `lightningd --list-features-only`
+
+A build _with_ `--enable-experimental-features` flag hard-codes some of below
+options as enabled, ignoring their command line flag. It may also add support for
+even more features. The safest way to determine the active configuration is by
+checking `listconfigs` or by looking at `our_features` (bits) in `getinfo`.
 
 * **experimental-onion-messages**
 
   Specifying this enables sending, forwarding and receiving onion messages,
-which are in draft status in the BOLT specifications.
+which are in draft status in the [bolt][bolt] specifications (PR #759).
+A build with `--enable-experimental-features` usually enables this via
+experimental-offers, see below.
 
 * **experimental-offers**
 
   Specifying this enables the `offers` and `fetchinvoice` plugins and
-corresponding functionality, which are in draft status as BOLT12.
-This usually requires **experimental-onion-messages** as well.  See
-lightning-offer(7) and lightning-fetchinvoice(7).
+corresponding functionality, which are in draft status ([bolt][bolt] #798) as [bolt12][bolt12].
+A build with `--enable-experimental-features` enables this permanently and usually
+enables experimental-onion-messages as well.
 
 * **fetchinvoice-noconnect**
 
@@ -677,14 +690,14 @@ trying to connect directly to the offering node as a last resort.
 
 * **experimental-shutdown-wrong-funding**
 
-  Specifying this allows the `wrong_funding` field in shutdown: if a
+  Specifying this allows the `wrong_funding` field in _shutdown: if a
 remote node has opened a channel but claims it used the incorrect txid
 (and the channel hasn't been used yet at all) this allows them to
-negotiate a clean shutdown with the txid they offer.
+negotiate a clean shutdown with the txid they offer ([#4421][pr4421]).
 
 * **experimental-dual-fund**
 
-  Specifying this enables support for the dual funding protocol,
+  Specifying this enables support for the dual funding protocol ([bolt][bolt] #851),
 allowing both parties to contribute funds to a channel. The decision
 about whether to add funds or not to a proposed channel is handled
 automatically by a plugin that implements the appropriate logic for
@@ -694,7 +707,7 @@ your needs. The default behavior is to not contribute funds.
 
   Specifying this enables support for accepting incoming WebSocket
 connections on that port, on any IPv4 and IPv6 addresses you listen
-to.  The normal protocol is expected to be sent over WebSocket binary
+to ([bolt][bolt] #891).  The normal protocol is expected to be sent over WebSocket binary
 frames once the connection is upgraded.
 
 BUGS
@@ -726,3 +739,7 @@ COPYING
 
 Note: the modules in the ccan/ directory have their own licenses, but
 the rest of the code is covered by the BSD-style MIT license.
+
+[bolt]: https://github.com/lightning/bolts
+[bolt12]: https://github.com/rustyrussell/lightning-rfc/blob/guilt/offers/12-offer-encoding.md
+[pr4421]: https://github.com/ElementsProject/lightning/pull/4421

@@ -125,37 +125,3 @@ void towire_pubkey(u8 **pptr, const struct pubkey *pubkey)
 
 	towire(pptr, output, outputlen);
 }
-
-void fromwire_point32(const u8 **cursor, size_t *max, struct point32 *point32)
-{
-	u8 raw[32];
-
-	if (!fromwire(cursor, max, raw, sizeof(raw)))
-		return;
-
-	if (secp256k1_xonly_pubkey_parse(secp256k1_ctx,
-					 &point32->pubkey,
-					 raw) != 1) {
-		SUPERVERBOSE("not a valid point");
-		fromwire_fail(cursor, max);
-	}
-}
-
-void towire_point32(u8 **pptr, const struct point32 *point32)
-{
-	u8 output[32];
-
-	secp256k1_xonly_pubkey_serialize(secp256k1_ctx, output,
-					 &point32->pubkey);
-	towire(pptr, output, sizeof(output));
-}
-
-static char *point32_to_hexstr(const tal_t *ctx, const struct point32 *point32)
-{
-	u8 output[32];
-
-	secp256k1_xonly_pubkey_serialize(secp256k1_ctx, output,
-					 &point32->pubkey);
-	return tal_hexstr(ctx, output, sizeof(output));
-}
-REGISTER_TYPE_TO_STRING(point32, point32_to_hexstr);

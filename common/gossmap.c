@@ -1290,18 +1290,21 @@ int gossmap_node_get_feature(const struct gossmap *map,
 				n->nann_off + feature_len_off + 2, feature_len);
 }
 
-/* There are two 33-byte pubkeys possible: choose the one which appears
- * in the graph (otherwise payment will fail anyway). */
-void gossmap_guess_node_id(const struct gossmap *map,
-			   const struct point32 *point32,
-			   struct node_id *id)
+u8 *gossmap_node_get_features(const tal_t *ctx,
+			      const struct gossmap *map,
+			      const struct gossmap_node *n)
 {
-	id->k[0] = SECP256K1_TAG_PUBKEY_EVEN;
-	secp256k1_xonly_pubkey_serialize(secp256k1_ctx,
-					 id->k + 1,
-					 &point32->pubkey);
+	u8 *ret;
+	/* Note that first two bytes are message type */
+	const size_t feature_len_off = 2 + 64;
+	size_t feature_len;
 
-	/* If we don't find this, let's assume it's odd. */
-	if (!gossmap_find_node(map, id))
-		id->k[0] = SECP256K1_TAG_PUBKEY_ODD;
+	if (n->nann_off == 0)
+		return NULL;
+
+	feature_len = map_be16(map, n->nann_off + feature_len_off);
+	ret = tal_arr(ctx, u8, feature_len);
+
+	map_copy(map, n->nann_off + feature_len_off + 2, ret, feature_len);
+	return ret;
 }

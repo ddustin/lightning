@@ -22,6 +22,7 @@
 #include <ccan/tal/str/str.h>
 #include <common/configdir.h>
 #include <common/json_command.h>
+#include <common/json_filter.h>
 #include <common/json_param.h>
 #include <common/memleak.h>
 #include <common/timeout.h>
@@ -461,6 +462,16 @@ struct command_result *command_success(struct command *cmd,
 {
 	assert(cmd);
 	assert(cmd->json_stream == result);
+
+	/* Filter will get upset if we close "result" object it didn't
+	 * see! */
+	if (cmd->filter) {
+		const char *err = json_stream_detach_filter(tmpctx, result);
+		if (err)
+			json_add_string(result, "warning_parameter_filter",
+					err);
+	}
+
 	json_object_end(result);
 	json_object_end(result);
 
@@ -491,6 +502,11 @@ struct command_result *command_fail(struct command *cmd, enum jsonrpc_errcode co
 	r = json_stream_fail_nodata(cmd, code, errmsg);
 
 	return command_failed(cmd, r);
+}
+
+struct json_filter **command_filter_ptr(struct command *cmd)
+{
+	return &cmd->filter;
 }
 
 struct command_result *command_still_pending(struct command *cmd)
@@ -600,6 +616,10 @@ struct json_stream *json_stream_success(struct command *cmd)
 {
 	struct json_stream *r = json_start(cmd);
 	json_object_start(r, "result");
+
+	/* We have results?  OK, start filtering */
+	if (cmd->filter)
+		json_stream_attach_filter(r, cmd->filter);
 	return r;
 }
 
@@ -691,7 +711,7 @@ static void replace_command(struct rpc_command_hook_payload *p,
 			    const char *buffer,
 			    const jsmntok_t *replacetok)
 {
-	const jsmntok_t *method = NULL, *params = NULL, *jsonrpc;
+	const jsmntok_t *method = NULL, *params = NULL;
 	const char *bad;
 
 	/* Must contain "method", "params" and "id" */
@@ -723,10 +743,14 @@ static void replace_command(struct rpc_command_hook_payload *p,
 		goto fail;
 	}
 
-	jsonrpc = json_get_member(buffer, replacetok, "jsonrpc");
-	if (!jsonrpc || jsonrpc->type != JSMN_STRING || !json_tok_streq(buffer, jsonrpc, "2.0")) {
-		bad = "jsonrpc: \"2.0\" must be specified in the request";
-		goto fail;
+	// deprecated phase to give the possibility to all to migrate and stay safe
+	// from this more restrictive change.
+	if (!deprecated_apis) {
+		const jsmntok_t *jsonrpc = json_get_member(buffer, replacetok, "jsonrpc");
+		if (!jsonrpc || jsonrpc->type != JSMN_STRING || !json_tok_streq(buffer, jsonrpc, "2.0")) {
+			bad = "jsonrpc: \"2.0\" must be specified in the request";
+			goto fail;
+		}
 	}
 
 	was_pending(command_exec(p->cmd->jcon, p->cmd, buffer, replacetok,
@@ -863,7 +887,7 @@ REGISTER_PLUGIN_HOOK(rpc_command,
 static struct command_result *
 parse_request(struct json_connection *jcon, const jsmntok_t tok[])
 {
-	const jsmntok_t *method, *id, *params, *jsonrpc;
+	const jsmntok_t *method, *id, *params, *filter;
 	struct command *c;
 	struct rpc_command_hook_payload *rpc_hook;
 	bool completed;
@@ -876,6 +900,7 @@ parse_request(struct json_connection *jcon, const jsmntok_t tok[])
 
 	method = json_get_member(jcon->buffer, tok, "method");
 	params = json_get_member(jcon->buffer, tok, "params");
+	filter = json_get_member(jcon->buffer, tok, "filter");
 	id = json_get_member(jcon->buffer, tok, "id");
 
 	if (!id) {
@@ -891,11 +916,13 @@ parse_request(struct json_connection *jcon, const jsmntok_t tok[])
 
 	// Adding a deprecated phase to make sure that all the Core Lightning wrapper
 	// can migrate all the frameworks
-	jsonrpc = json_get_member(jcon->buffer, tok, "jsonrpc");
+	if (!deprecated_apis) {
+		const jsmntok_t *jsonrpc = json_get_member(jcon->buffer, tok, "jsonrpc");
 
-	if (!jsonrpc || jsonrpc->type != JSMN_STRING || !json_tok_streq(jcon->buffer, jsonrpc, "2.0")) {
-		json_command_malformed(jcon, "null", "jsonrpc: \"2.0\" must be specified in the request");
-		return NULL;
+		if (!jsonrpc || jsonrpc->type != JSMN_STRING || !json_tok_streq(jcon->buffer, jsonrpc, "2.0")) {
+			json_command_malformed(jcon, "null", "jsonrpc: \"2.0\" must be specified in the request");
+			return NULL;
+		}
 	}
 
 	/* Allocate the command off of the `jsonrpc` object and not
@@ -909,6 +936,7 @@ parse_request(struct json_connection *jcon, const jsmntok_t tok[])
 	c->id_is_string = (id->type == JSMN_STRING);
 	c->id = json_strdup(c, jcon->buffer, id);
 	c->mode = CMD_NORMAL;
+	c->filter = NULL;
 	list_add_tail(&jcon->commands, &c->list);
 	tal_add_destructor(c, destroy_command);
 
@@ -920,6 +948,13 @@ parse_request(struct json_connection *jcon, const jsmntok_t tok[])
 	if (method->type != JSMN_STRING) {
 		return command_fail(c, JSONRPC2_INVALID_REQUEST,
 				    "Expected string for method");
+	}
+
+	if (filter) {
+		struct command_result *ret;
+		ret = parse_filter(c, "filter", jcon->buffer, filter);
+		if (ret)
+			return ret;
 	}
 
 	/* Debug was too chatty, so we use IO here, even though we're
@@ -1080,6 +1115,8 @@ again:
 							  start_time),
 					 time_from_msec(250))) {
 				db_commit_transaction(jcon->ld->wallet->db);
+				/* Call us back, as if we read nothing new */
+				jcon->len_read = 0;
 				return io_always(conn, read_json, jcon);
 			}
 		}
@@ -1347,7 +1384,7 @@ void jsonrpc_notification_end(struct jsonrpc_notification *n)
 
 struct jsonrpc_request *jsonrpc_request_start_(
     const tal_t *ctx, const char *method,
-    const char *id_prefix, struct log *log,
+    const char *id_prefix, bool id_as_string, struct log *log,
     bool add_header,
     void (*notify_cb)(const char *buffer,
 		      const jsmntok_t *methodtok,
@@ -1360,11 +1397,17 @@ struct jsonrpc_request *jsonrpc_request_start_(
 {
 	struct jsonrpc_request *r = tal(ctx, struct jsonrpc_request);
 	static u64 next_request_id = 0;
-	if (id_prefix)
-		r->id = tal_fmt(r, "%s/cln:%s#%"PRIu64,
-				id_prefix, method, next_request_id);
-	else
-		r->id = tal_fmt(r, "cln:%s#%"PRIu64, method, next_request_id);
+
+	r->id_is_string = id_as_string;
+	if (r->id_is_string) {
+		if (id_prefix)
+			r->id = tal_fmt(r, "%s/cln:%s#%"PRIu64,
+					id_prefix, method, next_request_id);
+		else
+			r->id = tal_fmt(r, "cln:%s#%"PRIu64, method, next_request_id);
+	} else {
+		r->id = tal_fmt(r, "%"PRIu64, next_request_id);
+	}
 	if (taken(id_prefix))
 		tal_free(id_prefix);
 	next_request_id++;
@@ -1380,7 +1423,10 @@ struct jsonrpc_request *jsonrpc_request_start_(
 	if (add_header) {
 		json_object_start(r->stream, NULL);
 		json_add_string(r->stream, "jsonrpc", "2.0");
-		json_add_string(r->stream, "id", r->id);
+		if (r->id_is_string)
+			json_add_string(r->stream, "id", r->id);
+		else
+			json_add_primitive(r->stream, "id", r->id);
 		json_add_string(r->stream, "method", method);
 		json_object_start(r->stream, "params");
 	}

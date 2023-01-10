@@ -40,9 +40,9 @@ which was reserved:
 
 - *txid* is the input transaction id.
 - *vout* is the input index.
-- *was_reserved* indicates whether the input was already reserved.
+- *was\_reserved* indicates whether the input was already reserved.
 - *reserved* indicates that the input is now reserved (i.e. true).
-- *reserved_to_block* indicates what blockheight the reservation will expire.
+- *reserved\_to\_block* indicates what blockheight the reservation will expire.
 
 On failure, an error is reported and no UTXOs are reserved.
 
@@ -64,4 +64,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:7fd7e24084f7e7da57bccd98cbcf511be56e44e282813c964bdd69d0785dfd22)
+[comment]: # ( SHA256STAMP:c3bb624daff32be6701e54505432ee6d33aab6491e3286791331d0b680fee737)

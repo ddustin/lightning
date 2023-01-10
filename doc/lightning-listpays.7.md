@@ -4,13 +4,13 @@ lightning-listpays -- Command for querying payment status
 SYNOPSIS
 --------
 
-**listpays** [*bolt11*] [*payment_hash*] [*status*]
+**listpays** [*bolt11*] [*payment\_hash*] [*status*]
 
 DESCRIPTION
 -----------
 
 The **listpay** RPC command gets the status of all *pay* commands, or a
-single one if either *bolt11* or *payment_hash* was specified.
+single one if either *bolt11* or *payment\_hash* was specified.
 It is possible filter the payments also by *status*.
 
 RETURN VALUE
@@ -19,7 +19,7 @@ RETURN VALUE
 [comment]: # (GENERATE-FROM-SCHEMA-START)
 On success, an object containing **pays** is returned.  It is an array of objects, where each object contains:
 
-- **payment\_hash** (hex): the hash of the *payment_preimage* which will prove payment (always 64 characters)
+- **payment\_hash** (hex): the hash of the *payment\_preimage* which will prove payment (always 64 characters)
 - **status** (string): status of the payment (one of "pending", "failed", "complete")
 - **created\_at** (u64): the UNIX timestamp showing when this payment was initiated
 - **destination** (pubkey, optional): the final destination of the payment if known
@@ -40,7 +40,7 @@ If **status** is "failed":
 
 [comment]: # (GENERATE-FROM-SCHEMA-END)
 
-The returned array is ordered by increasing **created_at** fields.
+The returned array is ordered by increasing **created\_at** fields.
 
 AUTHOR
 ------
@@ -57,4 +57,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:1175415c0f9398e1087d68dd75266bf894249053a4e57f16b8ee16cf5ffa414f)
+[comment]: # ( SHA256STAMP:ee5242e7cf0a7c1385ab26885436b723b916f0d4e17080323876781e8c2aee76)

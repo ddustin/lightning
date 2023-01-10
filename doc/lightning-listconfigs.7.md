@@ -98,9 +98,10 @@ On success, an object is returned, containing:
 - **force-feerates** (string, optional): force-feerate configuration setting, if any
 - **subdaemon** (string, optional): `subdaemon` fields from config or cmdline if any (can be more than one)
 - **fetchinvoice-noconnect** (boolean, optional): `fetchinvoice-noconnect` fields from config or cmdline, or default
-- **accept-htlc-tlv-types** (string, optional): `accept-extra-tlvs-type` fields from config or cmdline, or not present
+- **accept-htlc-tlv-types** (string, optional): `accept-htlc-tlv-types` fields from config or cmdline, or not present
 - **tor-service-password** (string, optional): `tor-service-password` field from config or cmdline, if any
 - **dev-allowdustreserve** (boolean, optional): Whether we allow setting dust reserves
+- **announce-addr-dns** (boolean, optional): Whether we put DNS entries into node\_announcement
 
 [comment]: # (GENERATE-FROM-SCHEMA-END)
 
@@ -218,4 +219,5 @@ RESOURCES
 ---------
 
 Main web site: <https://github.com/ElementsProject/lightning>
-[comment]: # ( SHA256STAMP:5871ac751654339ed65ab905d61f0bc3afbb8576a33a5c4e9a73d2084f438582)
+
+[comment]: # ( SHA256STAMP:4a72e74f8551a9ded7ad9a23044198c985530b72d9a8974bb4ef68b3ee37b8da)

@@ -19,7 +19,6 @@
 static void json_populate_offer(struct json_stream *response,
 				const struct sha256 *offer_id,
 				const char *b12,
-				const char *b12_nosig,
 				const struct json_escape *label,
 				enum offer_status status)
 {
@@ -27,8 +26,6 @@ static void json_populate_offer(struct json_stream *response,
 	json_add_bool(response, "active", offer_status_active(status));
 	json_add_bool(response, "single_use", offer_status_single(status));
 	json_add_string(response, "bolt12", b12);
-	if (b12_nosig)
-		json_add_string(response, "bolt12_unsigned", b12_nosig);
 	json_add_bool(response, "used", offer_status_used(status));
 	if (label)
 		json_add_escaped_string(response, "label", label);
@@ -46,9 +43,6 @@ static struct command_result *param_b12_offer(struct command *cmd,
 			      cmd->ld->our_features, chainparams, &fail);
 	if (!*offer)
 		return command_fail_badparam(cmd, name, buffer, tok, fail);
-	if ((*offer)->signature)
-		return command_fail_badparam(cmd, name, buffer, tok,
-					     "must be unsigned offer");
 	return NULL;
 }
 
@@ -57,7 +51,7 @@ static void hsm_sign_b12(struct lightningd *ld,
 			 const char *fieldname,
 			 const struct sha256 *merkle,
 			 const u8 *publictweak,
-			 const struct point32 *key,
+			 const struct pubkey *key,
 			 struct bip340sig *sig)
 {
 	u8 *msg;
@@ -75,11 +69,10 @@ static void hsm_sign_b12(struct lightningd *ld,
 
 	/* Now we sanity-check! */
 	sighash_from_merkle(messagename, fieldname, merkle, &sighash);
-	if (secp256k1_schnorrsig_verify(secp256k1_ctx, sig->u8,
-					sighash.u.u8, sizeof(sighash.u.u8), &key->pubkey) != 1)
+	if (!check_schnorr_sig(&sighash, &key->pubkey, sig))
 		fatal("HSM gave bad signature %s for pubkey %s",
 		      type_to_string(tmpctx, struct bip340sig, sig),
-		      type_to_string(tmpctx, struct point32, key));
+		      type_to_string(tmpctx, struct pubkey, (struct pubkey *)key));
 }
 
 static struct command_result *json_createoffer(struct command *cmd,
@@ -90,11 +83,10 @@ static struct command_result *json_createoffer(struct command *cmd,
 	struct json_stream *response;
 	struct json_escape *label;
 	struct tlv_offer *offer;
-	struct sha256 merkle;
-	const char *b12str, *b12str_nosig;
+	struct sha256 offer_id;
+	const char *b12str;
 	bool *single_use;
 	enum offer_status status;
-	struct point32 key;
 	bool created;
 
 	if (!param(cmd, buffer, params,
@@ -108,19 +100,14 @@ static struct command_result *json_createoffer(struct command *cmd,
 		status = OFFER_SINGLE_USE_UNUSED;
 	else
 		status = OFFER_MULTIPLE_USE_UNUSED;
- 	merkle_tlv(offer->fields, &merkle);
-	offer->signature = tal(offer, struct bip340sig);
-	if (!point32_from_node_id(&key, &cmd->ld->id))
-		fatal("invalid own node_id?");
-	hsm_sign_b12(cmd->ld, "offer", "signature", &merkle, NULL, &key,
-		     offer->signature);
 	b12str = offer_encode(cmd, offer);
+	offer_offer_id(offer, &offer_id);
 
 	/* If it already exists, we use that one instead (and then
 	 * the offer plugin will complain if it's inactive or expired) */
-	if (!wallet_offer_create(cmd->ld->wallet, &merkle,
+	if (!wallet_offer_create(cmd->ld->wallet, &offer_id,
 				 b12str, label, status)) {
-		if (!wallet_offer_find(cmd, cmd->ld->wallet, &merkle,
+		if (!wallet_offer_find(cmd, cmd->ld->wallet, &offer_id,
 				       cast_const2(const struct json_escape **,
 						   &label),
 				       &status)) {
@@ -131,11 +118,8 @@ static struct command_result *json_createoffer(struct command *cmd,
 	} else
 		created = true;
 
-	offer->signature = tal_free(offer->signature);
-	b12str_nosig = offer_encode(cmd, offer);
-
 	response = json_stream_success(cmd);
-	json_populate_offer(response, &merkle, b12str, b12str_nosig, label, status);
+	json_populate_offer(response, &offer_id, b12str, label, status);
 	json_add_bool(response, "created", created);
 	return command_success(cmd, response);
 }
@@ -147,25 +131,6 @@ static const struct json_command createoffer_command = {
 	"Create and sign an offer {bolt12} with and optional {label}."
 };
 AUTODATA(json_command, &createoffer_command);
-
-/* We store strings in the db, so removing signatures is easiest by conversion */
-static const char *offer_str_nosig(const tal_t *ctx,
-				   struct lightningd *ld,
-				   const char *b12str)
-{
-	char *fail;
-	struct tlv_offer *offer = offer_decode(tmpctx, b12str, strlen(b12str),
-					       ld->our_features, chainparams,
-					       &fail);
-
-	if (!offer) {
-		log_broken(ld->log, "Cannot reparse offerstr from db %s: %s",
-			   b12str, fail);
-		return NULL;
-	}
-	offer->signature = tal_free(offer->signature);
-	return offer_encode(ctx, offer);
-}
 
 static struct command_result *json_listoffers(struct command *cmd,
 					       const char *buffer,
@@ -195,7 +160,6 @@ static struct command_result *json_listoffers(struct command *cmd,
 			json_object_start(response, NULL);
 			json_populate_offer(response,
 					    offer_id, b12,
-					    offer_str_nosig(tmpctx, cmd->ld, b12),
 					    label, status);
 			json_object_end(response);
 		}
@@ -212,8 +176,6 @@ static struct command_result *json_listoffers(struct command *cmd,
 				json_object_start(response, NULL);
 				json_populate_offer(response,
 						    &id, b12,
-						    offer_str_nosig(tmpctx,
-								    cmd->ld, b12),
 						    label, status);
 				json_object_end(response);
 			}
@@ -259,10 +221,7 @@ static struct command_result *json_disableoffer(struct command *cmd,
 	status = wallet_offer_disable(wallet, offer_id, status);
 
 	response = json_stream_success(cmd);
-	json_populate_offer(response, offer_id, b12,
-			    offer_str_nosig(tmpctx,
-					    cmd->ld, b12),
-			    label, status);
+	json_populate_offer(response, offer_id, b12, label, status);
 	return command_success(cmd, response);
 }
 
@@ -275,24 +234,28 @@ static const struct json_command disableoffer_command = {
 AUTODATA(json_command, &disableoffer_command);
 
 /* We do some sanity checks now, since we're looking up prev payment anyway,
- * but our main purpose is to fill in invreq->payer_info tweak. */
+ * but our main purpose is to fill in invreq->invreq_metadata tweak. */
 static struct command_result *prev_payment(struct command *cmd,
-					   const char *label,
+					   struct json_escape *label,
 					   struct tlv_invoice_request *invreq,
 					   u64 **prev_basetime)
 {
 	const struct wallet_payment **payments;
 	bool prev_paid = false;
+	struct sha256 invreq_oid;
 
-	assert(!invreq->payer_info);
+	invreq_offer_id(invreq, &invreq_oid);
+	assert(!invreq->invreq_metadata);
 	payments = wallet_payment_list(cmd, cmd->ld->wallet, NULL);
 
 	for (size_t i = 0; i < tal_count(payments); i++) {
 		const struct tlv_invoice *inv;
 		char *fail;
+		struct sha256 inv_oid;
 
 		/* FIXME: Restrict db queries instead */
-		if (!payments[i]->label || !streq(label, payments[i]->label))
+		if (!payments[i]->label
+		    || !streq(label->s, payments[i]->label))
 			continue;
 
 		if (!payments[i]->invstring)
@@ -305,12 +268,13 @@ static struct command_result *prev_payment(struct command *cmd,
 			continue;
 
 		/* They can reuse labels across different offers. */
-		if (!sha256_eq(inv->offer_id, invreq->offer_id))
+		invoice_offer_id(inv, &inv_oid);
+		if (!sha256_eq(&inv_oid, &invreq_oid))
 			continue;
 
 		/* Be paranoid, in case someone inserts their own
 		 * clashing label! */
-		if (!inv->recurrence_counter)
+		if (!inv->invreq_recurrence_counter)
 			continue;
 
 		/* BOLT-offers-recurrence #12:
@@ -322,40 +286,40 @@ static struct command_result *prev_payment(struct command *cmd,
 		 *   - MUST set `period_offset` to the same value on all
 		 *     following requests.
 		 */
-		if (invreq->recurrence_start) {
-			if (!inv->recurrence_start)
+		if (invreq->invreq_recurrence_start) {
+			if (!inv->invreq_recurrence_start)
 				return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 						    "unexpected"
 						    " recurrence_start");
-			if (*inv->recurrence_start != *invreq->recurrence_start)
+			if (*inv->invreq_recurrence_start != *invreq->invreq_recurrence_start)
 				return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 						    "recurrence_start was"
 						    " previously %u",
-						    *inv->recurrence_start);
+						    *inv->invreq_recurrence_start);
 		} else {
-			if (inv->recurrence_start)
+			if (inv->invreq_recurrence_start)
 				return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 						    "missing"
 						    " recurrence_start");
 		}
 
-		if (*inv->recurrence_counter == *invreq->recurrence_counter-1) {
+		if (*inv->invreq_recurrence_counter == *invreq->invreq_recurrence_counter-1) {
 			if (payments[i]->status == PAYMENT_COMPLETE)
 				prev_paid = true;
 		}
 
-		if (inv->payer_info) {
-			invreq->payer_info
-				= tal_dup_talarr(invreq, u8, inv->payer_info);
+		if (inv->invreq_metadata) {
+			invreq->invreq_metadata
+				= tal_dup_talarr(invreq, u8, inv->invreq_metadata);
 			*prev_basetime = tal_dup(cmd, u64,
-						 inv->recurrence_basetime);
+						 inv->invoice_recurrence_basetime);
 		}
 
-		if (prev_paid && inv->payer_info)
+		if (prev_paid && inv->invreq_metadata)
 			break;
 	}
 
-	if (!invreq->payer_info)
+	if (!invreq->invreq_metadata)
 		return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 				    "No previous payment attempted for this"
 				    " label and offer");
@@ -382,36 +346,44 @@ static struct command_result *param_b12_invreq(struct command *cmd,
 		return command_fail_badparam(cmd, name, buffer, tok, fail);
 #if !DEVELOPER
 	/* We use this for testing with known payer_info */
-	if ((*invreq)->payer_info)
+	if ((*invreq)->invreq_metadata)
 		return command_fail_badparam(cmd, name, buffer, tok,
-					     "must not have payer_info");
+					     "must not have invreq_metadata");
 #endif
-	if ((*invreq)->payer_key)
+	if ((*invreq)->invreq_payer_id)
 		return command_fail_badparam(cmd, name, buffer, tok,
-					     "must not have payer_key");
+					     "must not have invreq_payer_id");
 	return NULL;
 }
 
 static bool payer_key(struct lightningd *ld,
 		      const u8 *public_tweak, size_t public_tweak_len,
-		      struct point32 *key)
+		      struct pubkey *key)
 {
 	struct sha256 tweakhash;
-	secp256k1_pubkey tweaked;
 
 	payer_key_tweak(&ld->bolt12_base, public_tweak, public_tweak_len,
 			&tweakhash);
 
-	/* Tweaking gives a not-x-only pubkey, must then convert. */
-	if (secp256k1_xonly_pubkey_tweak_add(secp256k1_ctx,
-					     &tweaked,
-					     &ld->bolt12_base.pubkey,
-					     tweakhash.u.u8) != 1)
-		return false;
+	*key = ld->bolt12_base;
+	return secp256k1_ec_pubkey_tweak_add(secp256k1_ctx,
+					     &key->pubkey,
+					     tweakhash.u.u8) == 1;
+}
 
-	return secp256k1_xonly_pubkey_from_pubkey(secp256k1_ctx,
-						   &key->pubkey,
-						   NULL, &tweaked) == 1;
+static void json_populate_invreq(struct json_stream *response,
+				 const struct sha256 *invreq_id,
+				 const char *b12,
+				 const struct json_escape *label,
+				 enum offer_status status)
+{
+	json_add_sha256(response, "invreq_id", invreq_id);
+	json_add_bool(response, "active", offer_status_active(status));
+	json_add_bool(response, "single_use", offer_status_single(status));
+	json_add_string(response, "bolt12", b12);
+	json_add_bool(response, "used", offer_status_used(status));
+	if (label)
+		json_add_escaped_string(response, "label", label);
 }
 
 static struct command_result *json_createinvoicerequest(struct command *cmd,
@@ -420,23 +392,37 @@ static struct command_result *json_createinvoicerequest(struct command *cmd,
 							const jsmntok_t *params)
 {
 	struct tlv_invoice_request *invreq;
-	const char *label;
+	struct json_escape *label;
 	struct json_stream *response;
 	u64 *prev_basetime = NULL;
 	struct sha256 merkle;
+	bool *save, *single_use, *exposeid;
+	enum offer_status status;
+	struct sha256 invreq_id;
+	const char *b12str;
 
 	if (!param(cmd, buffer, params,
 		   p_req("bolt12", param_b12_invreq, &invreq),
-		   p_opt("recurrence_label", param_escaped_string, &label),
+		   p_req("savetodb", param_bool, &save),
+		   p_opt_def("exposeid", param_bool, &exposeid, false),
+		   p_opt("recurrence_label", param_label, &label),
+		   p_opt_def("single_use", param_bool, &single_use, true),
 		   NULL))
 		return command_param_failed();
 
-	if (invreq->recurrence_counter) {
+	if (*single_use)
+		status = OFFER_SINGLE_USE_UNUSED;
+	else
+		status = OFFER_MULTIPLE_USE_UNUSED;
+
+	/* If it's a recurring payment, we look for previous to copy
+	 * invreq_metadata, basetime */
+	if (invreq->invreq_recurrence_counter) {
 		if (!label)
 			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 					    "Need payment label for recurring payments");
 
-		if (*invreq->recurrence_counter != 0) {
+		if (*invreq->invreq_recurrence_counter != 0) {
 			struct command_result *err
 				= prev_payment(cmd, label, invreq,
 					       &prev_basetime);
@@ -445,46 +431,63 @@ static struct command_result *json_createinvoicerequest(struct command *cmd,
 		}
 	}
 
-	if (!invreq->payer_info) {
+	if (!invreq->invreq_metadata) {
 		/* BOLT-offers #12:
-		 * `payer_info` might typically contain information about the
-		 * derivation of the `payer_key`.  This should not leak any
-		 * information (such as using a simple BIP-32 derivation
-		 * path); a valid system might be for a node to maintain a
-		 * base payer key, and encode a 128-bit tweak here.  The
-		 * payer_key would be derived by tweaking the base key with
-		 * SHA256(payer_base_pubkey || tweak).
+		 *
+		 * `invreq_metadata` might typically contain information about
+		 * the derivation of the `invreq_payer_id`.  This should not
+		 * leak any information (such as using a simple BIP-32
+		 * derivation path); a valid system might be for a node to
+		 * maintain a base payer key and encode a 128-bit tweak here.
+		 * The payer_id would be derived by tweaking the base key with
+		 * SHA256(payer_base_pubkey || tweak).  It's also the first
+		 * entry (if present), ensuring an unpredictable nonce for
+		 * hashing.
 		 */
-		invreq->payer_info = tal_arr(invreq, u8, 16);
-		randombytes_buf(invreq->payer_info,
-				tal_bytelen(invreq->payer_info));
+		invreq->invreq_metadata = tal_arr(invreq, u8, 16);
+		randombytes_buf(invreq->invreq_metadata,
+				tal_bytelen(invreq->invreq_metadata));
 	}
 
-	invreq->payer_key = tal(invreq, struct point32);
-	if (!payer_key(cmd->ld,
-		       invreq->payer_info, tal_bytelen(invreq->payer_info),
-		       invreq->payer_key)) {
+	invreq->invreq_payer_id = tal(invreq, struct pubkey);
+	if (*exposeid) {
+		if (!pubkey_from_node_id(invreq->invreq_payer_id,
+					 &cmd->ld->id))
+			fatal("Our ID is invalid?");
+	} else if (!payer_key(cmd->ld,
+			      invreq->invreq_metadata,
+			      tal_bytelen(invreq->invreq_metadata),
+			      invreq->invreq_payer_id)) {
 		return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 				    "Invalid tweak");
 	}
 
 	/* BOLT-offers #12:
-	 *  - MUST set `signature` `sig` as detailed in
-	 *  [Signature Calculation](#signature-calculation) using the `payer_key`.
+	 *  - MUST set `signature`.`sig` as detailed in
+	 *  [Signature Calculation](#signature-calculation) using the `invreq_payer_id`.
 	 */
 	/* This populates the ->fields from our entries */
 	invreq->fields = tlv_make_fields(invreq, tlv_invoice_request);
 	merkle_tlv(invreq->fields, &merkle);
 	invreq->signature = tal(invreq, struct bip340sig);
 	hsm_sign_b12(cmd->ld, "invoice_request", "signature",
-		     &merkle, invreq->payer_info, invreq->payer_key,
-		     invreq->signature);
+		     &merkle, *exposeid ? NULL : invreq->invreq_metadata,
+		     invreq->invreq_payer_id, invreq->signature);
+
+	b12str = invrequest_encode(cmd, invreq);
+
+	invreq_invreq_id(invreq, &invreq_id);
+	if (*save && !wallet_invoice_request_create(cmd->ld->wallet, &invreq_id,
+						    b12str, label, status)) {
+		return command_fail(cmd, LIGHTNINGD,
+				    "Could not create invoice_request!");
+	}
 
 	response = json_stream_success(cmd);
-	json_add_string(response, "bolt12", invrequest_encode(tmpctx, invreq));
-	if (label)
-		json_add_escaped_string(response, "recurrence_label",
-					take(json_escape(NULL, label)));
+	json_populate_invreq(response, &invreq_id,
+			     b12str,
+			     label,
+			     status);
 	if (prev_basetime)
 		json_add_u64(response, "previous_basetime", *prev_basetime);
 	return command_success(cmd, response);
@@ -508,7 +511,7 @@ static struct command_result *json_payersign(struct command *cmd,
 	u8 *tweak;
 	struct bip340sig sig;
 	const char *messagename, *fieldname;
-	struct point32 key;
+	struct pubkey key;
 
 	if (!param(cmd, buffer, params,
 		   p_req("messagename", param_string, &messagename),
@@ -534,3 +537,107 @@ static const struct json_command payersign_command = {
 	"Sign {messagename} {fieldname} {merkle} (a 32-byte hex string) using public {tweak}",
 };
 AUTODATA(json_command, &payersign_command);
+
+static struct command_result *json_listinvoicerequests(struct command *cmd,
+						       const char *buffer,
+						       const jsmntok_t *obj UNNEEDED,
+						       const jsmntok_t *params)
+{
+	struct sha256 *invreq_id;
+	struct json_stream *response;
+	struct wallet *wallet = cmd->ld->wallet;
+	const char *b12;
+	const struct json_escape *label;
+	bool *active_only;
+	enum offer_status status;
+
+	if (!param(cmd, buffer, params,
+		   p_opt("invreq_id", param_sha256, &invreq_id),
+		   p_opt_def("active_only", param_bool, &active_only, false),
+		   NULL))
+		return command_param_failed();
+
+	response = json_stream_success(cmd);
+	json_array_start(response, "invoicerequests");
+	if (invreq_id) {
+		b12 = wallet_invoice_request_find(tmpctx, wallet,
+						  invreq_id, &label,
+						  &status);
+		if (b12 && offer_status_active(status) >= *active_only) {
+			json_object_start(response, NULL);
+			json_populate_invreq(response,
+					    invreq_id, b12,
+					    label, status);
+			json_object_end(response);
+		}
+	} else {
+		struct db_stmt *stmt;
+		struct sha256 id;
+
+		for (stmt = wallet_invreq_id_first(cmd->ld->wallet, &id);
+		     stmt;
+		     stmt = wallet_invreq_id_next(cmd->ld->wallet, stmt, &id)) {
+			b12 = wallet_invoice_request_find(tmpctx, wallet, &id,
+						&label, &status);
+			if (offer_status_active(status) >= *active_only) {
+				json_object_start(response, NULL);
+				json_populate_invreq(response,
+						    &id, b12,
+						    label, status);
+				json_object_end(response);
+			}
+		}
+	}
+	json_array_end(response);
+	return command_success(cmd, response);
+}
+
+static const struct json_command listinvoicerequests_command = {
+	"listinvoicerequests",
+	"payment",
+	json_listinvoicerequests,
+	"If {invreq_id} is set, show that."
+	" Otherwise, if {showdisabled} is true, list all, otherwise just non-disabled ones."
+};
+AUTODATA(json_command, &listinvoicerequests_command);
+
+static struct command_result *json_disableinvoicerequest(struct command *cmd,
+							 const char *buffer,
+							 const jsmntok_t *obj UNNEEDED,
+							 const jsmntok_t *params)
+{
+	struct json_stream *response;
+	struct sha256 *invreq_id;
+	struct wallet *wallet = cmd->ld->wallet;
+	const char *b12;
+	const struct json_escape *label;
+	enum offer_status status;
+
+	if (!param(cmd, buffer, params,
+		   p_req("invreq_id", param_sha256, &invreq_id),
+		   NULL))
+		return command_param_failed();
+
+	b12 = wallet_invoice_request_find(tmpctx, wallet, invreq_id,
+					  &label, &status);
+	if (!b12)
+		return command_fail(cmd, LIGHTNINGD, "Unknown invoice_request");
+
+	if (!offer_status_active(status))
+		return command_fail(cmd, OFFER_ALREADY_DISABLED,
+				    "invoice_request is not active");
+	status = wallet_invoice_request_disable(wallet, invreq_id, status);
+
+	response = json_stream_success(cmd);
+	json_populate_invreq(response, invreq_id, b12, label, status);
+	return command_success(cmd, response);
+}
+
+static const struct json_command disableinvoicerequest_command = {
+	"disableinvoicerequest",
+	"payment",
+	json_disableinvoicerequest,
+	"Disable invoice_request {invreq_id}",
+};
+AUTODATA(json_command, &disableinvoicerequest_command);
+

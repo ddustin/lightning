@@ -912,7 +912,10 @@ static struct migration dbmigrations[] = {
 	 ", PRIMARY KEY(in_channel_scid, in_htlc_id))"), NULL},
     {SQL("INSERT INTO forwards SELECT"
 	 " in_channel_scid"
-	 ", (SELECT channel_htlc_id FROM channel_htlcs WHERE id = forwarded_payments.in_htlc_id)"
+	 ", COALESCE("
+	 "    (SELECT channel_htlc_id FROM channel_htlcs WHERE id = forwarded_payments.in_htlc_id),"
+	 "    -_ROWID_"
+	 "  )"
 	 ", out_channel_scid"
 	 ", (SELECT channel_htlc_id FROM channel_htlcs WHERE id = forwarded_payments.out_htlc_id)"
 	 ", in_msatoshi"
@@ -929,6 +932,17 @@ static struct migration dbmigrations[] = {
     /* Adds scid column, then moves short_channel_id across to it */
     {SQL("ALTER TABLE channels ADD scid BIGINT;"), migrate_channels_scids_as_integers},
     {SQL("ALTER TABLE payments ADD failscid BIGINT;"), migrate_payments_scids_as_integers},
+    {SQL("ALTER TABLE outputs ADD is_in_coinbase INTEGER DEFAULT 0;"), NULL},
+    {SQL("CREATE TABLE invoicerequests ("
+	 "  invreq_id BLOB"
+	 ", bolt12 TEXT"
+	 ", label TEXT"
+	 ", status INTEGER"
+	 ", PRIMARY KEY (invreq_id)"
+	 ");"), NULL},
+    /* A reference into our own invoicerequests table, if it was made from one */
+    {SQL("ALTER TABLE payments ADD COLUMN local_invreq_id BLOB DEFAULT NULL REFERENCES invoicerequests(invreq_id);"), NULL},
+    /* FIXME: Remove payments local_offer_id column! */
     /* Splicing requires us to store HTLC sigs for inflight splices and allows us to discard old sigs after splice confirmation. */
     {SQL("ALTER TABLE htlc_sigs ADD inflight_id BLOB REFERENCES channel_funding_inflights(funding_tx_id)"), NULL},
     {SQL("ALTER TABLE channel_funding_inflights ADD starting_htlc_id INTEGER DEFAULT 0"), NULL},
@@ -1476,6 +1490,7 @@ static void migrate_channels_scids_as_integers(struct lightningd *ld,
 {
 	struct db_stmt *stmt;
 	char **scids = tal_arr(tmpctx, char *, 0);
+	size_t changes;
 
 	stmt = db_prepare_v2(db, SQL("SELECT short_channel_id FROM channels"));
 	db_query_prepared(stmt);
@@ -1487,6 +1502,7 @@ static void migrate_channels_scids_as_integers(struct lightningd *ld,
 	}
 	tal_free(stmt);
 
+	changes = 0;
 	for (size_t i = 0; i < tal_count(scids); i++) {
 		struct short_channel_id scid;
 		if (!short_channel_id_from_str(scids[i], strlen(scids[i]), &scid))
@@ -1499,11 +1515,20 @@ static void migrate_channels_scids_as_integers(struct lightningd *ld,
 		db_bind_scid(stmt, 0, &scid);
 		db_bind_text(stmt, 1, scids[i]);
 		db_exec_prepared_v2(stmt);
+
+		/* This was reported to happen with an (old, closed) channel: that we'd have
+		 * more than one change here!  That's weird, but just log about it. */
 		if (db_count_changes(stmt) != 1)
-			db_fatal("Converting channels.short_channel_id '%s' gave %zu changes != 1?",
-				 scids[i], db_count_changes(stmt));
+			log_broken(ld->log,
+				   "migrate_channels_scids_as_integers: converting channels.short_channel_id '%s' gave %zu changes != 1!",
+				   scids[i], db_count_changes(stmt));
+		changes += db_count_changes(stmt);
 		tal_free(stmt);
 	}
+
+	if (changes != tal_count(scids))
+		fatal("migrate_channels_scids_as_integers: only converted %zu of %zu scids!",
+		      changes, tal_count(scids));
 
 	/* FIXME: We cannot use ->delete_columns to remove
 	 * short_channel_id, as other tables reference the channels

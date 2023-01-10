@@ -122,10 +122,10 @@ struct lightningd {
 	struct node_id id;
 
 	/* The public base for our payer_id keys */
-	struct point32 bolt12_base;
+	struct pubkey bolt12_base;
 
-	/* The secret we put in onion message paths to know it's ours. */
-	struct secret onion_reply_secret;
+	/* Secret base for our invoices */
+	struct secret invoicesecret_base;
 
 	/* Feature set we offer. */
 	struct feature_set *our_features;
@@ -236,6 +236,9 @@ struct lightningd {
 
 	/* If they force db upgrade on or off this is set. */
 	bool *db_upgrade_ok;
+
+	/* Announce names in config as DNS records (recently BOLT 7 addition) */
+	bool announce_dns;
 
 #if DEVELOPER
 	/* If we want to debug a subdaemon/plugin. */

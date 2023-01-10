@@ -7,6 +7,7 @@
 #include <ccan/tal/path/path.h>
 #include <ccan/tal/str/str.h>
 #include <common/daemon.h>
+#include <common/json_filter.h>
 #include <common/json_parse_simple.h>
 #include <common/json_stream.h>
 #include <common/memleak.h>
@@ -132,6 +133,11 @@ struct command_result *command_done(void)
 	return &complete;
 }
 
+struct json_filter **command_filter_ptr(struct command *cmd)
+{
+	return &cmd->filter;
+}
+
 static void ld_send(struct plugin *plugin, struct json_stream *stream)
 {
 	struct jstream *jstr = tal(plugin, struct jstream);
@@ -255,6 +261,8 @@ struct json_stream *jsonrpc_stream_success(struct command *cmd)
 	struct json_stream *js = jsonrpc_stream_start(cmd);
 
 	json_object_start(js, "result");
+	if (cmd->filter)
+		json_stream_attach_filter(js, cmd->filter);
 	return js;
 }
 
@@ -267,6 +275,7 @@ struct json_stream *jsonrpc_stream_fail(struct command *cmd,
 	json_object_start(js, "error");
 	json_add_primitive_fmt(js, "code", "%d", code);
 	json_add_string(js, "message", err);
+	cmd->filter = tal_free(cmd->filter);
 
 	return js;
 }
@@ -296,6 +305,14 @@ static struct command_result *command_complete(struct command *cmd,
 struct command_result *command_finished(struct command *cmd,
 					struct json_stream *response)
 {
+	/* Detach filter before it complains about closing object it never saw */
+	if (cmd->filter) {
+		const char *err = json_stream_detach_filter(tmpctx, response);
+		if (err)
+			json_add_string(response, "warning_parameter_filter",
+					err);
+	}
+
 	/* "result" or "error" object */
 	json_object_end(response);
 
@@ -704,6 +721,82 @@ struct command_result *jsonrpc_set_datastore_(struct plugin *plugin,
 	return send_outreq(plugin, req);
 }
 
+struct get_ds_info {
+	struct command_result *(*string_cb)(struct command *command,
+					    const char *val,
+					    void *arg);
+	struct command_result *(*binary_cb)(struct command *command,
+					    const u8 *val,
+					    void *arg);
+	void *arg;
+};
+
+static struct command_result *listdatastore_done(struct command *cmd,
+						 const char *buf,
+						 const jsmntok_t *result,
+						 struct get_ds_info *dsi)
+{
+	const jsmntok_t *ds = json_get_member(buf, result, "datastore");
+	void *val;
+
+	if (ds->size == 0)
+		val = NULL;
+	else {
+		/* First element in array is object */
+		ds = ds + 1;
+		if (dsi->string_cb) {
+			const jsmntok_t *s;
+			s = json_get_member(buf, ds, "string");
+			if (!s) {
+				/* Complain loudly, since they
+				 * expected string! */
+				plugin_log(cmd->plugin, LOG_BROKEN,
+					   "Datastore gave nonstring result %.*s",
+					   json_tok_full_len(result),
+					   json_tok_full(buf, result));
+				val = NULL;
+			} else {
+				val = json_strdup(cmd, buf, s);
+			}
+		} else {
+			const jsmntok_t *hex;
+			hex = json_get_member(buf, ds, "hex");
+			val = json_tok_bin_from_hex(cmd, buf, hex);
+		}
+	}
+
+	if (dsi->string_cb)
+		return dsi->string_cb(cmd, val, dsi->arg);
+	return dsi->binary_cb(cmd, val, dsi->arg);
+}
+
+struct command_result *jsonrpc_get_datastore_(struct plugin *plugin,
+					      struct command *cmd,
+					      const char *path,
+					      struct command_result *(*string_cb)(struct command *command,
+									   const char *val,
+									   void *arg),
+					      struct command_result *(*binary_cb)(struct command *command,
+									   const u8 *val,
+									   void *arg),
+					      void *arg)
+{
+	struct out_req *req;
+	struct get_ds_info *dsi = tal(NULL, struct get_ds_info);
+
+	dsi->string_cb = string_cb;
+	dsi->binary_cb = binary_cb;
+	dsi->arg = arg;
+
+	/* listdatastore doesn't fail (except API misuse) */
+	req = jsonrpc_request_start(plugin, cmd, "listdatastore",
+				    listdatastore_done, datastore_fail, dsi);
+	tal_steal(req, dsi);
+
+	json_add_keypath(req->js->jout, "key", path);
+	return send_outreq(plugin, req);
+}
+
 static void handle_rpc_reply(struct plugin *plugin, const jsmntok_t *toks)
 {
 	const jsmntok_t *idtok, *contenttok;
@@ -871,6 +964,7 @@ handle_getmanifest(struct command *getmanifest_cmd,
 	}
 
 	json_add_bool(params, "dynamic", p->restartability == PLUGIN_RESTARTABLE);
+	json_add_bool(params, "nonnumericids", true);
 
 	json_array_start(params, "notifications");
 	for (size_t i = 0; p->notif_topics && i < p->num_notif_topics; i++) {
@@ -1429,11 +1523,12 @@ void plugin_set_memleak_handler(struct plugin *plugin,
 static void ld_command_handle(struct plugin *plugin,
 			      const jsmntok_t *toks)
 {
-	const jsmntok_t *methtok, *paramstok;
+	const jsmntok_t *methtok, *paramstok, *filtertok;
 	struct command *cmd;
 
 	methtok = json_get_member(plugin->buffer, toks, "method");
 	paramstok = json_get_member(plugin->buffer, toks, "params");
+	filtertok = json_get_member(plugin->buffer, toks, "filter");
 
 	if (!methtok || !paramstok)
 		plugin_err(plugin, "Malformed JSON-RPC notification missing "
@@ -1444,6 +1539,7 @@ static void ld_command_handle(struct plugin *plugin,
 	cmd = tal(plugin, struct command);
 	cmd->plugin = plugin;
 	cmd->usage_only = false;
+	cmd->filter = NULL;
 	cmd->methodname = json_strdup(cmd, plugin->buffer, methtok);
 	cmd->id = json_get_id(cmd, plugin->buffer, toks);
 
@@ -1502,6 +1598,13 @@ static void ld_command_handle(struct plugin *plugin,
 						    paramstok);
 			return;
 		}
+	}
+
+	if (filtertok) {
+		/* On error, this fails cmd */
+		if (parse_filter(cmd, "filter", plugin->buffer, filtertok)
+		    != NULL)
+			return;
 	}
 
 	for (size_t i = 0; i < plugin->num_commands; i++) {

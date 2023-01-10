@@ -4,7 +4,7 @@ lightning-fundpsbt -- Command to populate PSBT inputs from the wallet
 SYNOPSIS
 --------
 
-**fundpsbt** *satoshi* *feerate* *startweight* [*minconf*] [*reserve*] [*locktime*] [*min_witness_weight*] [*excess_as_change*]
+**fundpsbt** *satoshi* *feerate* *startweight* [*minconf*] [*reserve*] [*locktime*] [*min\_witness\_weight*] [*excess\_as\_change*]
 
 DESCRIPTION
 -----------
@@ -40,11 +40,11 @@ If *reserve* if not zero, then *reserveinputs* is called (successfully, with
 *locktime* is an optional locktime: if not set, it is set to a recent
 block height.
 
-*min_witness_weight* is an optional minimum weight to use for a UTXO's
+*min\_witness\_weight* is an optional minimum weight to use for a UTXO's
 witness. If the actual witness weight is greater than the provided minimum,
 the actual witness weight will be used.
 
-*excess_as_change* is an optional boolean to flag to add a change output
+*excess\_as\_change* is an optional boolean to flag to add a change output
 for the excess sats.
 
 EXAMPLE USAGE
@@ -57,15 +57,15 @@ known outputs of the transaction (typically (9 + scriptlen) * 4).  For
 a simple P2WPKH it's a 22 byte scriptpubkey, so that's 124 weight.
 
 It calls "*fundpsbt* 100000sat slow 166", which succeeds, and returns
-the *psbt* and *feerate_per_kw* it used, the *estimated_final_weight*
-and any *excess_msat*.
+the *psbt* and *feerate\_per\_kw* it used, the *estimated\_final\_weight*
+and any *excess\_msat*.
 
-If *excess_msat* is greater than the cost of adding a change output,
+If *excess\_msat* is greater than the cost of adding a change output,
 the caller adds a change output randomly to position 0 or 1 in the
-PSBT.  Say *feerate_per_kw* is 253, and the change output is a P2WPKH
+PSBT.  Say *feerate\_per\_kw* is 253, and the change output is a P2WPKH
 (weight 124), the cost is around 31 sats.  With the dust limit disallowing
 payments below 546 satoshis, we would only create a change output
-if *excess_msat* was greater or equal to 31 + 546.
+if *excess\_msat* was greater or equal to 31 + 546.
 
 RETURN VALUE
 ------------
@@ -76,8 +76,8 @@ On success, an object is returned, containing:
 - **psbt** (string): Unsigned PSBT which fulfills the parameters given
 - **feerate\_per\_kw** (u32): The feerate used to create the PSBT, in satoshis-per-kiloweight
 - **estimated\_final\_weight** (u32): The estimated weight of the transaction once fully signed
-- **excess\_msat** (msat): The amount above *satoshi* which is available.  This could be zero, or dust; it will be zero if *change_outnum* is also returned
-- **change\_outnum** (u32, optional): The 0-based output number where change was placed (only if parameter *excess_as_change* was true and there was sufficient funds)
+- **excess\_msat** (msat): The amount above *satoshi* which is available.  This could be zero, or dust; it will be zero if *change\_outnum* is also returned
+- **change\_outnum** (u32, optional): The 0-based output number where change was placed (only if parameter *excess\_as\_change* was true and there was sufficient funds)
 - **reservations** (array of objects, optional): If *reserve* was true or a non-zero number, just as per lightning-reserveinputs(7):
   - **txid** (txid): The txid of the transaction
   - **vout** (u32): The 0-based output number
@@ -87,10 +87,10 @@ On success, an object is returned, containing:
 
 [comment]: # (GENERATE-FROM-SCHEMA-END)
 
-If *excess_as_change* is true and the excess is enough to cover
+If *excess\_as\_change* is true and the excess is enough to cover
 an additional output above the `dust_limit`, then an output is
-added to the PSBT for the excess amount. The *excess_msat* will
-be zero. A *change_outnum* will be returned with the index of
+added to the PSBT for the excess amount. The *excess\_msat* will
+be zero. A *change\_outnum* will be returned with the index of
 the change output.
 
 On error the returned object will contain `code` and `message` properties,
@@ -115,4 +115,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:0f290582f49c6103258b7f781a9e7fa4075ec6c05335a459a91da0b6fd58c68d)
+[comment]: # ( SHA256STAMP:35947e2b2c402a87c4bad3a5a90443bfe5db44d71cb515541074abfc4dc3f24d)

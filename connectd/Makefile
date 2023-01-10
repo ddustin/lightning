@@ -60,8 +60,9 @@ CONNECTD_COMMON_OBJS :=				\
 	common/memleak.o			\
 	common/msg_queue.o			\
 	common/node_id.o			\
-	common/onion.o				\
+	common/onion_decode.o			\
 	common/onionreply.o			\
+	common/onion_message_parse.o		\
 	common/ping.o				\
 	common/per_peer_state.o			\
 	common/psbt_open.o			\

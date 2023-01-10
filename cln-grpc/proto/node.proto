@@ -70,6 +70,7 @@ message GetinfoResponse {
 	uint32 num_inactive_channels = 7;
 	string version = 8;
 	string lightning_dir = 9;
+	optional GetinfoOur_features our_features = 10;
 	uint32 blockheight = 11;
 	string network = 12;
 	optional uint64 msatoshi_fees_collected = 18;
@@ -173,6 +174,7 @@ message ListpeersPeersChannels {
 	}
 	ListpeersPeersChannelsState state = 1;
 	optional bytes scratch_txid = 2;
+	optional ListpeersPeersChannelsFeerate feerate = 3;
 	optional string owner = 4;
 	optional string short_channel_id = 5;
 	optional bytes channel_id = 6;
@@ -188,6 +190,7 @@ message ListpeersPeersChannels {
 	ChannelSide opener = 16;
 	optional ChannelSide closer = 17;
 	repeated string features = 18;
+	optional ListpeersPeersChannelsFunding funding = 19;
 	optional Amount to_us_msat = 20;
 	optional Amount min_to_us_msat = 21;
 	optional Amount max_to_us_msat = 22;
@@ -206,6 +209,7 @@ message ListpeersPeersChannels {
 	optional uint32 their_to_self_delay = 33;
 	optional uint32 our_to_self_delay = 34;
 	optional uint32 max_accepted_htlcs = 35;
+	optional ListpeersPeersChannelsAlias alias = 50;
 	repeated string status = 37;
 	optional uint64 in_payments_offered = 38;
 	optional Amount in_offered_msat = 39;
@@ -278,6 +282,7 @@ message ListfundsOutputs {
 		UNCONFIRMED = 0;
 		CONFIRMED = 1;
 		SPENT = 2;
+		IMMATURE = 3;
 	}
 	bytes txid = 1;
 	uint32 output = 2;
@@ -309,7 +314,7 @@ message SendpayRequest {
 	optional string bolt11 = 5;
 	optional bytes payment_secret = 6;
 	optional uint32 partid = 7;
-	optional bytes localofferid = 8;
+	optional bytes localinvreqid = 11;
 	optional uint64 groupid = 9;
 }
 
@@ -437,6 +442,7 @@ message ConnectResponse {
 	bytes id = 1;
 	bytes features = 2;
 	ConnectDirection direction = 3;
+	ConnectAddress address = 4;
 }
 
 message ConnectAddress {
@@ -480,7 +486,7 @@ message CreateinvoiceResponse {
 	optional uint64 paid_at = 11;
 	optional bytes payment_preimage = 12;
 	optional bytes local_offer_id = 13;
-	optional string payer_note = 14;
+	optional string invreq_payer_note = 15;
 }
 
 message DatastoreRequest {
@@ -570,7 +576,7 @@ message DelinvoiceResponse {
 	DelinvoiceStatus status = 7;
 	uint64 expires_at = 8;
 	optional bytes local_offer_id = 9;
-	optional string payer_note = 10;
+	optional string invreq_payer_note = 11;
 }
 
 message InvoiceRequest {
@@ -639,7 +645,7 @@ message ListinvoicesInvoices {
 	optional string bolt11 = 7;
 	optional string bolt12 = 8;
 	optional bytes local_offer_id = 9;
-	optional string payer_note = 10;
+	optional string invreq_payer_note = 15;
 	optional uint64 pay_index = 11;
 	optional Amount amount_received_msat = 12;
 	optional uint64 paid_at = 13;
@@ -648,6 +654,7 @@ message ListinvoicesInvoices {
 
 message SendonionRequest {
 	bytes onion = 1;
+	SendonionFirst_hop first_hop = 2;
 	bytes payment_hash = 3;
 	optional string label = 4;
 	repeated bytes shared_secrets = 5;
@@ -655,7 +662,7 @@ message SendonionRequest {
 	optional string bolt11 = 7;
 	optional Amount amount_msat = 12;
 	optional bytes destination = 9;
-	optional bytes localofferid = 10;
+	optional bytes localinvreqid = 13;
 	optional uint64 groupid = 11;
 }
 
@@ -797,7 +804,7 @@ message PayRequest {
 	optional uint32 retry_for = 5;
 	optional uint32 maxdelay = 6;
 	optional Amount exemptfee = 7;
-	optional bytes localofferid = 9;
+	optional bytes localinvreqid = 14;
 	repeated string exclude = 10;
 	optional Amount maxfee = 11;
 	optional string description = 12;
@@ -968,6 +975,7 @@ message KeysendRequest {
 	optional uint32 maxdelay = 6;
 	optional Amount exemptfee = 7;
 	optional RoutehintList routehints = 8;
+	optional TlvStream extratlvs = 9;
 }
 
 message KeysendResponse {
@@ -984,9 +992,6 @@ message KeysendResponse {
 	Amount amount_sent_msat = 7;
 	optional string warning_partial_completion = 8;
 	KeysendStatus status = 9;
-}
-
-message KeysendExtratlvs {
 }
 
 message FundpsbtRequest {
@@ -1116,6 +1121,9 @@ message FeeratesRequest {
 
 message FeeratesResponse {
 	optional string warning_missing_feerates = 1;
+	optional FeeratesPerkb perkb = 2;
+	optional FeeratesPerkw perkw = 3;
+	optional FeeratesOnchain_fee_estimates onchain_fee_estimates = 4;
 }
 
 message FeeratesPerkb {
@@ -1282,8 +1290,8 @@ message ListpaysPays {
 
 message PingRequest {
 	bytes id = 1;
-	optional double len = 2;
-	optional double pongbytes = 3;
+	optional uint32 len = 2;
+	optional uint32 pongbytes = 3;
 }
 
 message PingResponse {

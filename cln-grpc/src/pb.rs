@@ -1,5 +1,5 @@
 tonic::include_proto!("cln");
-use bitcoin_hashes::Hash;
+use bitcoin::hashes::Hash;
 use std::str::FromStr;
 
 use cln_rpc::primitives::{
@@ -31,7 +31,7 @@ impl From<JOutpoint> for Outpoint {
 impl From<Outpoint> for JOutpoint {
     fn from(a: Outpoint) -> Self {
         JOutpoint {
-            txid: bitcoin_hashes::sha256::Hash::from_slice(&a.txid).unwrap(),
+            txid: bitcoin::hashes::sha256::Hash::from_slice(&a.txid).unwrap(),
             outnum: a.outnum,
         }
     }
@@ -114,6 +114,7 @@ impl From<RouteHop> for cln_rpc::primitives::Routehop {
         }
     }
 }
+
 impl From<Routehint> for cln_rpc::primitives::Routehint {
     fn from(c: Routehint) -> Self {
         Self {
@@ -121,6 +122,7 @@ impl From<Routehint> for cln_rpc::primitives::Routehint {
         }
     }
 }
+
 impl From<RoutehintList> for cln_rpc::primitives::RoutehintList {
     fn from(c: RoutehintList) -> Self {
         Self {
@@ -128,6 +130,24 @@ impl From<RoutehintList> for cln_rpc::primitives::RoutehintList {
         }
     }
 }
+
+impl From<TlvStream> for cln_rpc::primitives::TlvStream {
+    fn from(s: TlvStream) -> Self {
+        Self {
+            entries: s.entries.into_iter().map(|e| e.into()).collect(),
+        }
+    }
+}
+
+impl From<TlvEntry> for cln_rpc::primitives::TlvEntry {
+    fn from(e: TlvEntry) -> Self {
+        Self {
+            typ: e.r#type,
+            value: e.value,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -347,6 +367,6 @@ mod test {
           ]
         });
         let u: cln_rpc::model::ListpeersResponse = serde_json::from_value(j).unwrap();
-        let g: ListpeersResponse = (&u).into();
+        let _g: ListpeersResponse = u.into();
     }
 }

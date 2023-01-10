@@ -5,13 +5,13 @@ SYNOPSIS
 --------
 **(WARNING: experimental-offers only)**
 
-**listoffers** [*offer_id*] [*active_only*]
+**listoffers** [*offer\_id*] [*active\_only*]
 
 DESCRIPTION
 -----------
 
 The **listoffers** RPC command list all offers, or with `offer_id`,
-only the offer with that offer_id (if it exists).  If `active_only` is
+only the offer with that offer\_id (if it exists).  If `active_only` is
 set and is true, only offers with `active` true are returned.
 
 EXAMPLE JSON REQUEST
@@ -36,7 +36,6 @@ On success, an object containing **offers** is returned.  It is an array of obje
 - **active** (boolean): whether this can still be used
 - **single\_use** (boolean): whether this expires as soon as it's paid
 - **bolt12** (string): the bolt12 encoding of the offer
-- **bolt12\_unsigned** (string): the bolt12 encoding of the offer, without signature
 - **used** (boolean): True if an associated invoice has been paid
 - **label** (string, optional): the (optional) user-specified label
 
@@ -81,4 +80,5 @@ RESOURCES
 ---------
 
 Main web site: <https://github.com/ElementsProject/lightning>
-[comment]: # ( SHA256STAMP:ac5b79c1f9b76add7eb08b9940180f2200049509df627cccc1dc892efa488778)
+
+[comment]: # ( SHA256STAMP:088d6fef8790bc9151b07f9b974568ce612c7fea8f52fdcaaf52b32e4ef8d5f2)

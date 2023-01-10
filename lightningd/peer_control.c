@@ -613,6 +613,7 @@ static void subtract_received_htlcs(const struct channel *channel,
 struct amount_msat channel_amount_spendable(const struct channel *channel)
 {
 	struct amount_msat spendable;
+	bool wumbo;
 
 	/* Compute how much we can send via this channel in one payment. */
 	if (!amount_msat_sub_sat(&spendable,
@@ -636,9 +637,15 @@ struct amount_msat channel_amount_spendable(const struct channel *channel)
 			     channel->channel_info.their_config.htlc_minimum))
 		return AMOUNT_MSAT(0);
 
+	wumbo = feature_negotiated(channel->peer->ld->our_features,
+				   channel->peer->their_features,
+				   OPT_LARGE_CHANNELS);
+
 	/* We can't offer an HTLC over the max payment threshold either. */
-	if (amount_msat_greater(spendable, chainparams->max_payment))
+	if (amount_msat_greater(spendable, chainparams->max_payment)
+	    && !wumbo) {
 		spendable = chainparams->max_payment;
+	}
 
 	return spendable;
 }
@@ -646,6 +653,7 @@ struct amount_msat channel_amount_spendable(const struct channel *channel)
 struct amount_msat channel_amount_receivable(const struct channel *channel)
 {
 	struct amount_msat their_msat, receivable;
+	bool wumbo;
 
 	/* Compute how much we can receive via this channel in one payment */
 	if (!amount_sat_sub_msat(&their_msat,
@@ -672,9 +680,15 @@ struct amount_msat channel_amount_receivable(const struct channel *channel)
 	if (amount_msat_less(receivable, channel->our_config.htlc_minimum))
 		return AMOUNT_MSAT(0);
 
+	wumbo = feature_negotiated(channel->peer->ld->our_features,
+				   channel->peer->their_features,
+				   OPT_LARGE_CHANNELS);
+
 	/* They can't offer an HTLC over the max payment threshold either. */
-	if (amount_msat_greater(receivable, chainparams->max_payment))
+	if (amount_msat_greater(receivable, chainparams->max_payment)
+	    && !wumbo) {
 		receivable = chainparams->max_payment;
+	}
 
 	return receivable;
 }
@@ -1901,8 +1915,8 @@ void channel_watch_funding(struct lightningd *ld, struct channel *channel)
 }
 
 void channel_watch_inflight(struct lightningd *ld,
-			    struct channel *channel,
-			    struct channel_inflight *inflight)
+				   struct channel *channel,
+				   struct channel_inflight *inflight)
 {
 	/* FIXME: Remove arg from cb? */
 	watch_txid(channel, ld->topology, channel,
@@ -2628,79 +2642,6 @@ static void set_channel_config(struct command *cmd, struct channel *channel,
 	}
 	json_object_end(response);
 }
-
-static struct command_result *json_setchannelfee(struct command *cmd,
-					 const char *buffer,
-					 const jsmntok_t *obj UNNEEDED,
-					 const jsmntok_t *params)
-{
-	struct json_stream *response;
-	struct peer *peer;
-	struct channel **channels;
-	u32 *base, *ppm, *delaysecs;
-
-	/* Parse the JSON command */
-	if (!param(cmd, buffer, params,
-		   p_req("id", param_channel_or_all, &channels),
-		   p_opt_def("base", param_msat_u32,
-			     &base, cmd->ld->config.fee_base),
-		   p_opt_def("ppm", param_number, &ppm,
-			     cmd->ld->config.fee_per_satoshi),
-		   /* BOLT #7:
-		    * If it creates a new `channel_update` with updated channel parameters:
-		    *    - SHOULD keep accepting the previous channel parameters for 10 minutes
-		    */
-		   p_opt_def("enforcedelay", param_number, &delaysecs, 600),
-		   NULL))
-		return command_param_failed();
-
-	/* Open JSON response object for later iteration */
-	response = json_stream_success(cmd);
-	json_add_num(response, "base", *base);
-	json_add_num(response, "ppm", *ppm);
-	json_array_start(response, "channels");
-
-	/* If the users requested 'all' channels we need to iterate */
-	if (channels == NULL) {
-		list_for_each(&cmd->ld->peers, peer, list) {
-			struct channel *channel;
-			list_for_each(&peer->channels, channel, list) {
-				if (channel->state != CHANNELD_NORMAL &&
-				    channel->state != CHANNELD_AWAITING_SPLICE &&
-				    channel->state != CHANNELD_AWAITING_LOCKIN &&
-				    channel->state != DUALOPEND_AWAITING_LOCKIN)
-					continue;
-				set_channel_config(cmd, channel, base, ppm, NULL, NULL,
-						   *delaysecs, response, false);
-			}
-		}
-	/* single peer should be updated */
-	} else {
-		for (size_t i = 0; i < tal_count(channels); i++) {
-			set_channel_config(cmd, channels[i], base, ppm, NULL, NULL,
-					   *delaysecs, response, false);
-		}
-	}
-
-	/* Close and return response */
-	json_array_end(response);
-	return command_success(cmd, response);
-}
-
-static const struct json_command setchannelfee_command = {
-	"setchannelfee",
-	"channels",
-	json_setchannelfee,
-	"Sets specific routing fees for channel with {id} "
-	"(either peer ID, channel ID, short channel ID or 'all'). "
-	"Routing fees are defined by a fixed {base} (msat) "
-	"and a {ppm} (proportional per millionth) value. "
-	"If values for {base} or {ppm} are left out, defaults will be used. "
-	"{base} can also be defined in other units, for example '1sat'. "
-	"If {id} is 'all', the fees will be applied for all channels. ",
-	true /* deprecated */
-};
-AUTODATA(json_command, &setchannelfee_command);
 
 static struct command_result *json_setchannel(struct command *cmd,
 					      const char *buffer,

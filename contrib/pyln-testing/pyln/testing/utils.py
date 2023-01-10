@@ -90,7 +90,7 @@ def wait_for(success, timeout=TIMEOUT):
     while not success():
         time_left = start_time + timeout - time.time()
         if time_left <= 0:
-            raise ValueError("Timeout while waiting for {}", success)
+            raise ValueError("Timeout while waiting for {}".format(success))
         time.sleep(min(interval, time_left))
         interval *= 2
         if interval > 5:
@@ -413,7 +413,11 @@ class BitcoinD(TailableProc):
             '-nolisten',
             '-txindex',
             '-nowallet',
-            '-addresstype=bech32'
+            '-addresstype=bech32',
+            '-debug=mempool',
+            '-debug=mempoolrej',
+            '-debug=rpc',
+            '-debug=validation',
         ]
         # For up to and including 0.16.1, this needs to be in main section.
         BITCOIND_CONFIG['rpcport'] = rpcport
@@ -678,13 +682,14 @@ class PrettyPrintingLightningRpc(LightningRpc):
         self.jsonschemas = jsonschemas
         self.check_request_schemas = True
 
-    def call(self, method, payload=None, cmdprefix=None):
+    def call(self, method, payload=None, cmdprefix=None, filter=None):
         id = self.get_json_id(method, cmdprefix)
         schemas = self.jsonschemas.get(method)
         self.logger.debug(json.dumps({
             "id": id,
             "method": method,
-            "params": payload
+            "params": payload,
+            "filter": filter,
         }, indent=2))
 
         # We only check payloads which are dicts, which is what we
@@ -698,13 +703,14 @@ class PrettyPrintingLightningRpc(LightningRpc):
                     testpayload[k] = v
             schemas[0].validate(testpayload)
 
-        res = LightningRpc.call(self, method, payload, cmdprefix)
+        res = LightningRpc.call(self, method, payload, cmdprefix, filter)
         self.logger.debug(json.dumps({
             "id": id,
             "result": res
         }, indent=2))
 
-        if schemas and schemas[1]:
+        # FIXME: if filter set, just remove "required" from schemas?
+        if schemas and schemas[1] and filter is None and self._filter is None:
             schemas[1].validate(res)
 
         return res

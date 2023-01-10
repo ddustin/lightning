@@ -210,6 +210,11 @@ class GrpcGenerator(IGenerator):
                 if f.path in overrides:
                     typename = overrides[f.path]
                 self.write(f"\t{opt}{typename} {f.normalized()} = {i};\n", False)
+            elif isinstance(f, CompositeField):
+                typename = f.typename
+                if f.path in overrides:
+                    typename = overrides[f.path]
+                self.write(f"\t{opt}{typename} {f.normalized()} = {i};\n", False)
 
         self.write(f"""}}
         """)
@@ -256,11 +261,14 @@ class GrpcConverterGenerator(IGenerator):
         for f in field.fields:
             if isinstance(f, ArrayField):
                 self.generate_array(prefix, f)
+            elif isinstance(f, CompositeField):
+                self.generate_composite(prefix, f)
 
+        pbname = self.to_camel_case(field.typename)
         # And now we can convert the current field:
         self.write(f"""\
         #[allow(unused_variables)]
-        impl From<{prefix}::{field.typename}> for pb::{field.typename} {{
+        impl From<{prefix}::{field.typename}> for pb::{pbname} {{
             fn from(c: {prefix}::{field.typename}) -> Self {{
                 Self {{
         """)
@@ -321,12 +329,25 @@ class GrpcConverterGenerator(IGenerator):
 
                 self.write(f"{name}: {rhs}, // Rule #2 for type {typ}\n", numindent=3)
 
+            elif isinstance(f, CompositeField):
+                rhs = ""
+                if f.required:
+                    rhs = f'Some(c.{name}.into())'
+                else:
+                    rhs = f'c.{name}.map(|v| v.into())'
+                self.write(f"{name}: {rhs},\n", numindent=3)
         self.write(f"""\
                 }}
             }}
         }}
 
         """)
+
+    def to_camel_case(self, snake_str):
+        components = snake_str.split('_')
+        # We capitalize the first letter of each component except the first one
+        # with the 'title' method and join them together.
+        return components[0] + ''.join(x.title() for x in components[1:])
 
     def generate_requests(self, service):
         for meth in service.methods:
@@ -349,8 +370,8 @@ class GrpcConverterGenerator(IGenerator):
         use cln_rpc::model::{responses,requests};
         use crate::pb;
         use std::str::FromStr;
-        use bitcoin_hashes::sha256::Hash as Sha256;
-        use bitcoin_hashes::Hash;
+        use bitcoin::hashes::sha256::Hash as Sha256;
+        use bitcoin::hashes::Hash;
         use cln_rpc::primitives::PublicKey;
 
         """)
@@ -380,12 +401,15 @@ class GrpcUnconverterGenerator(GrpcConverterGenerator):
         for f in field.fields:
             if isinstance(f, ArrayField):
                 self.generate_array(prefix, f)
+            elif isinstance(f, CompositeField):
+                self.generate_composite(prefix, f)
 
+        pbname = self.to_camel_case(field.typename)
         # And now we can convert the current field:
         self.write(f"""\
         #[allow(unused_variables)]
-        impl From<pb::{field.typename}> for {prefix}::{field.typename} {{
-            fn from(c: pb::{field.typename}) -> Self {{
+        impl From<pb::{pbname}> for {prefix}::{field.typename} {{
+            fn from(c: pb::{pbname}) -> Self {{
                 Self {{
         """)
 
@@ -440,11 +464,19 @@ class GrpcUnconverterGenerator(GrpcConverterGenerator):
                     'hash': f'Sha256::from_slice(&c.{name}).unwrap()',
                     'hash?': f'c.{name}.map(|v| Sha256::from_slice(&v).unwrap())',
                     'txid': f'hex::encode(&c.{name})',
+                    'TlvStream?': f'c.{name}.map(|s| s.into())',
                 }.get(
                     typ,
                     f'c.{name}'  # default to just assignment
                 )
                 self.write(f"{name}: {rhs}, // Rule #1 for type {typ}\n", numindent=3)
+            elif isinstance(f, CompositeField):
+                rhs = ""
+                if f.required:
+                    rhs = f'c.{name}.unwrap().into()'
+                else:
+                    rhs = f'c.{name}.map(|v| v.into())'
+                self.write(f"{name}: {rhs},\n", numindent=3)
 
         self.write(f"""\
                 }}

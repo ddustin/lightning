@@ -4,7 +4,7 @@ lightning-createonion -- Low-level command to create a custom onion
 SYNOPSIS
 --------
 
-**createonion** *hops* *assocdata* [*session_key*] [*onion_size*]
+**createonion** *hops* *assocdata* [*session\_key*] [*onion\_size*]
 
 DESCRIPTION
 -----------
@@ -75,13 +75,13 @@ The *assocdata* parameter specifies the associated data that the onion should
 commit to. If the onion is to be used to send a payment later it MUST match
 the `payment_hash` of the payment in order to be valid.
 
-The optional *session_key* parameter can be used to specify a secret that is
+The optional *session\_key* parameter can be used to specify a secret that is
 used to generate the shared secrets used to encrypt the onion for each hop. It
 should only be used for testing or if a specific shared secret is
 important. If not specified it will be securely generated internally, and the
 shared secrets will be returned.
 
-The optional *onion_size* parameter specifies a size different from the default
+The optional *onion\_size* parameter specifies a size different from the default
 payment onion (1300 bytes). May be used for custom protocols like trampoline
 routing.
 
@@ -91,7 +91,7 @@ RETURN VALUE
 [comment]: # (GENERATE-FROM-SCHEMA-START)
 On success, an object is returned, containing:
 
-- **onion** (hex): the onion packet (*onion_size* bytes)
+- **onion** (hex): the onion packet (*onion\_size* bytes)
 - **shared\_secrets** (array of secrets): one shared secret for each node in the *hops* parameter:
   - the shared secret with this hop (always 64 characters)
 
@@ -132,4 +132,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:c8bd0abd35904cb009b95a7d345be4cc254cff2a427dcf04679a64a6e62dce1e)
+[comment]: # ( SHA256STAMP:da11700fff0b97851d2c649b3717a3b51c606a930b84dbdd24fb3367dd7de8cb)

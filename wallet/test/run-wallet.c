@@ -347,6 +347,11 @@ void json_add_node_id(struct json_stream *response UNNEEDED,
 void json_add_num(struct json_stream *result UNNEEDED, const char *fieldname UNNEEDED,
 		  unsigned int value UNNEEDED)
 { fprintf(stderr, "json_add_num called!\n"); abort(); }
+/* Generated stub for json_add_pubkey */
+void json_add_pubkey(struct json_stream *response UNNEEDED,
+		     const char *fieldname UNNEEDED,
+		     const struct pubkey *key UNNEEDED)
+{ fprintf(stderr, "json_add_pubkey called!\n"); abort(); }
 /* Generated stub for json_add_s32 */
 void json_add_s32(struct json_stream *result UNNEEDED, const char *fieldname UNNEEDED,
 		  int32_t value UNNEEDED)
@@ -548,10 +553,12 @@ enum watch_result onchaind_funding_spent(struct channel *channel UNNEEDED,
 { fprintf(stderr, "onchaind_funding_spent called!\n"); abort(); }
 /* Generated stub for onion_decode */
 struct onion_payload *onion_decode(const tal_t *ctx UNNEEDED,
+				   bool blinding_support UNNEEDED,
 				   const struct route_step *rs UNNEEDED,
 				   const struct pubkey *blinding UNNEEDED,
-				   const struct secret *blinding_ss UNNEEDED,
 				   const u64 *accepted_extra_tlvs UNNEEDED,
+				   struct amount_msat amount_in UNNEEDED,
+				   u32 cltv_expiry UNNEEDED,
 				   u64 *failtlvtype UNNEEDED,
 				   size_t *failtlvpos UNNEEDED)
 { fprintf(stderr, "onion_decode called!\n"); abort(); }
@@ -804,6 +811,9 @@ u8 *towire_incorrect_cltv_expiry(const tal_t *ctx UNNEEDED, u32 cltv_expiry UNNE
 /* Generated stub for towire_incorrect_or_unknown_payment_details */
 u8 *towire_incorrect_or_unknown_payment_details(const tal_t *ctx UNNEEDED, struct amount_msat htlc_msat UNNEEDED, u32 height UNNEEDED)
 { fprintf(stderr, "towire_incorrect_or_unknown_payment_details called!\n"); abort(); }
+/* Generated stub for towire_invalid_onion_blinding */
+u8 *towire_invalid_onion_blinding(const tal_t *ctx UNNEEDED, const struct sha256 *sha256_of_onion UNNEEDED)
+{ fprintf(stderr, "towire_invalid_onion_blinding called!\n"); abort(); }
 /* Generated stub for towire_invalid_onion_payload */
 u8 *towire_invalid_onion_payload(const tal_t *ctx UNNEEDED, bigsize type UNNEEDED, u16 offset UNNEEDED)
 { fprintf(stderr, "towire_invalid_onion_payload called!\n"); abort(); }

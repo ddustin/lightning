@@ -52,12 +52,18 @@ bool from_bech32_charset(const tal_t *ctx UNNEEDED,
 /* Generated stub for fromwire */
 const u8 *fromwire(const u8 **cursor UNNEEDED, size_t *max UNNEEDED, void *copy UNNEEDED, size_t n UNNEEDED)
 { fprintf(stderr, "fromwire called!\n"); abort(); }
+/* Generated stub for fromwire_bigsize */
+bigsize_t fromwire_bigsize(const u8 **cursor UNNEEDED, size_t *max UNNEEDED)
+{ fprintf(stderr, "fromwire_bigsize called!\n"); abort(); }
 /* Generated stub for fromwire_bool */
 bool fromwire_bool(const u8 **cursor UNNEEDED, size_t *max UNNEEDED)
 { fprintf(stderr, "fromwire_bool called!\n"); abort(); }
 /* Generated stub for fromwire_fail */
 void *fromwire_fail(const u8 **cursor UNNEEDED, size_t *max UNNEEDED)
 { fprintf(stderr, "fromwire_fail called!\n"); abort(); }
+/* Generated stub for fromwire_pad */
+void fromwire_pad(const u8 **cursor UNNEEDED, size_t *max UNNEEDED, size_t num UNNEEDED)
+{ fprintf(stderr, "fromwire_pad called!\n"); abort(); }
 /* Generated stub for fromwire_secp256k1_ecdsa_signature */
 void fromwire_secp256k1_ecdsa_signature(const u8 **cursor UNNEEDED, size_t *max UNNEEDED,
 					secp256k1_ecdsa_signature *signature UNNEEDED)
@@ -186,7 +192,7 @@ int main(int argc, char *argv[])
 	/* We deal in UTC; mktime() uses local time */
 	setenv("TZ", "", 1);
 	json_for_each_arr(i, t, toks) {
-		struct tlv_offer_recurrence recurrence;
+		struct recurrence recurrence;
 		int unit;
 		const jsmntok_t *exp;
 		u64 base, secs, n;

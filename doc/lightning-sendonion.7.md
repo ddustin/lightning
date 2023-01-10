@@ -4,8 +4,8 @@ lightning-sendonion -- Send a payment with a custom onion packet
 SYNOPSIS
 --------
 
-**sendonion** *onion* *first_hop* *payment_hash* [*label*] [*shared_secrets*] [*partid*] [*bolt11*]
-[*msatoshi*] [*destination*]
+**sendonion** *onion* *first\_hop* *payment\_hash* [*label*] [*shared\_secrets*] [*partid*] [*bolt11*]
+[*amount\_msat*] [*destination*]
 
 DESCRIPTION
 -----------
@@ -18,7 +18,7 @@ of the payment for the final hop. However, it is possible to add arbitrary
 information for hops in the custom onion, allowing for custom extensions that
 are not directly supported by Core Lightning.
 
-The onion is specific to the route that is being used and the *payment_hash*
+The onion is specific to the route that is being used and the *payment\_hash*
 used to construct, and therefore cannot be reused for other payments or to
 attempt a separate route. The custom onion can generally be created using the
 `devtools/onion` CLI tool, or the **createonion** RPC command.
@@ -28,7 +28,7 @@ by either of the tools that can generate onions. It contains the payloads
 destined for each hop and some metadata. Please refer to [BOLT 04][bolt04] for
 further details.
 
-The *first_hop* parameter instructs Core Lightning which peer to send the onion
+The *first\_hop* parameter instructs Core Lightning which peer to send the onion
 to. It is a JSON dictionary that corresponds to the first element of the route
 array returned by *getroute*. The following is a minimal example telling
 Core Lightning to use any available channel to `022d223620a359a47ff7f7ac447c85c46c923da53389221a0054c11c1e3ca31d59`
@@ -46,18 +46,18 @@ If the first element of *route* does not have "channel" set, a
 suitable channel (if any) will be chosen, otherwise that specific
 short-channel-id is used.
 
-The *payment_hash* parameter specifies the 32 byte hex-encoded hash to use as
+The *payment\_hash* parameter specifies the 32 byte hex-encoded hash to use as
 a challenge to the HTLC that we are sending. It is specific to the onion and
 has to match the one the onion was created with.
 
 The *label* parameter can be used to provide a human readable reference to
 retrieve the payment at a later time.
 
-The *shared_secrets* parameter is a JSON list of 32 byte hex-encoded secrets
+The *shared\_secrets* parameter is a JSON list of 32 byte hex-encoded secrets
 that were used when creating the onion. Core Lightning can send a payment with a
 custom onion without the knowledge of these secrets, however it will not be
 able to parse an eventual error message since that is encrypted with the
-shared secrets used in the onion. If *shared_secrets* is provided Core Lightning
+shared secrets used in the onion. If *shared\_secrets* is provided Core Lightning
 will decrypt the error, act accordingly, e.g., add a `channel_update` included
 in the error to its network view, and set the details in *listsendpays*
 correctly. If it is not provided Core Lightning will store the encrypted onion,
@@ -72,19 +72,19 @@ externally. The following is an example of a 3 hop onion:
 ]
 ```
 
-If *shared_secrets* is not provided the Core Lightning node does not know how
+If *shared\_secrets* is not provided the Core Lightning node does not know how
 long the route is, which channels or nodes are involved, and what an eventual
 error could have been. It can therefore be used for oblivious payments.
 
 The *partid* value, if provided and non-zero, allows for multiple parallel
-partial payments with the same *payment_hash*.
+partial payments with the same *payment\_hash*.
 
 The *bolt11* parameter, if provided, will be returned in
 *waitsendpay* and *listsendpays* results.
 
 The *destination* parameter, if provided, will be returned in **listpays** result.
 
-The *msatoshi* parameter is used to annotate the payment, and is returned by
+The *amount\_msat* parameter is used to annotate the payment, and is returned by
 *waitsendpay* and *listsendpays*.
 
 RETURN VALUE
@@ -94,7 +94,7 @@ RETURN VALUE
 On success, an object is returned, containing:
 
 - **id** (u64): unique ID for this payment attempt
-- **payment\_hash** (hash): the hash of the *payment_preimage* which will prove payment (always 64 characters)
+- **payment\_hash** (hash): the hash of the *payment\_preimage* which will prove payment (always 64 characters)
 - **status** (string): status of the payment (could be complete if already sent previously) (one of "pending", "complete")
 - **created\_at** (u64): the UNIX timestamp showing when this payment was initiated
 - **amount\_sent\_msat** (msat): The amount sent
@@ -107,7 +107,7 @@ On success, an object is returned, containing:
 
 If **status** is "complete":
 
-  - **payment\_preimage** (secret): the proof of payment: SHA256 of this **payment_hash** (always 64 characters)
+  - **payment\_preimage** (secret): the proof of payment: SHA256 of this **payment\_hash** (always 64 characters)
 
 If **status** is "pending":
 
@@ -115,7 +115,7 @@ If **status** is "pending":
 
 [comment]: # (GENERATE-FROM-SCHEMA-END)
 
-If *shared_secrets* was provided and an error was returned by one of the
+If *shared\_secrets* was provided and an error was returned by one of the
 intermediate nodes the error details are decrypted and presented
 here. Otherwise the error code is 202 for an unparseable onion.
 
@@ -135,4 +135,4 @@ RESOURCES
 Main web site: <https://github.com/ElementsProject/lightning>
 
 [bolt04]: https://github.com/lightning/bolts/blob/master/04-onion-routing.md
-[comment]: # ( SHA256STAMP:84283d16d289b6f72ffac0fdca6791bb49ac9ec1ef2bbb06028c18453bb15f02)
+[comment]: # ( SHA256STAMP:d01679d11406d49930e69a7492550a36118950b0d93acca5c26b299fc91680a4)

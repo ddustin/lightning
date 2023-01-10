@@ -28,7 +28,7 @@ Note: The return is the same as an object from lightning-listinvoice(7).
 On success, an object is returned, containing:
 
 - **label** (string): Unique label given at creation time
-- **payment\_hash** (hash): the hash of the *payment_preimage* which will prove payment (always 64 characters)
+- **payment\_hash** (hash): the hash of the *payment\_preimage* which will prove payment (always 64 characters)
 - **status** (string): State of invoice (one of "paid", "expired", "unpaid")
 - **expires\_at** (u64): UNIX timestamp when invoice expires (or expired)
 - **bolt11** (string, optional): BOLT11 string
@@ -39,14 +39,14 @@ On success, an object is returned, containing:
 If **bolt12** is present:
 
   - **local\_offer\_id** (hex, optional): offer for which this invoice was created
-  - **payer\_note** (string, optional): the optional *payer_note* from invoice_request which created this invoice
+  - **invreq\_payer\_note** (string, optional): the optional *invreq\_payer\_note* from invoice\_request which created this invoice
 
 If **status** is "paid":
 
   - **pay\_index** (u64): unique index for this invoice payment
   - **amount\_received\_msat** (msat): how much was actually received
   - **paid\_at** (u64): UNIX timestamp of when payment was received
-  - **payment\_preimage** (secret): SHA256 of this is the *payment_hash* offered in the invoice (always 64 characters)
+  - **payment\_preimage** (secret): SHA256 of this is the *payment\_hash* offered in the invoice (always 64 characters)
 
 [comment]: # (GENERATE-FROM-SCHEMA-END)
 
@@ -59,7 +59,7 @@ The following errors may be reported:
 - 905:  An invoice with that label does not exist.
 - 906:  The invoice *status* does not match the parameter.
   An error object will be returned as error *data*, containing
-  *current_status* and *expected_status* fields.
+  *current\_status* and *expected\_status* fields.
   This is most likely due to the *status* of the invoice
   changing just before this command is invoked.
 - 908: The invoice already has no description, and *desconly* was set.
@@ -81,4 +81,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:d754daa61ddb65009fced566338af35ffb23069593f4741e6d8f6f138f60bb4f)
+[comment]: # ( SHA256STAMP:c21dd851c40769c1b79489ccaf364c4647a67bf6cd1a34dd96a8574016d66d96)

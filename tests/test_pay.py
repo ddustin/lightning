@@ -3627,7 +3627,8 @@ def test_keysend_strip_tlvs(node_factory):
     ksinfo = """💕 ₿"'
 More info
 """
-    l1.rpc.keysend(l2.info['id'], amt, extratlvs={133773310: bytes(ksinfo, encoding='utf8').hex()})
+    # Since we're at it, use this to test string-keyed TLVs
+    l1.rpc.keysend(l2.info['id'], amt, extratlvs={"133773310": bytes(ksinfo, encoding='utf8').hex()})
     inv = only_one(l2.rpc.listinvoices()['invoices'])
     assert inv['description'] == 'keysend: ' + ksinfo
     l2.daemon.wait_for_log('Keysend payment uses illegal even field 133773310: stripping')
@@ -4379,13 +4380,13 @@ def test_offer_needs_option(node_factory):
     with pytest.raises(RpcError, match='experimental-offers not enabled'):
         l1.rpc.call('offer', {'amount': '1msat', 'description': 'test'})
     with pytest.raises(RpcError, match='experimental-offers not enabled'):
-        l1.rpc.call('offerout', {'amount': '2msat',
-                                 'description': 'simple test'})
+        l1.rpc.call('invoicerequest', {'amount': '2msat',
+                                       'description': 'simple test'})
     with pytest.raises(RpcError, match='Unknown command'):
         l1.rpc.call('fetchinvoice', {'offer': 'aaaa'})
 
     # Decode still works though
-    assert l1.rpc.decode('lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrcgqyys5qq7ypnwgkvdr57yzh6h92zg3qctvrm7w38djg67kzcm4yeg8vc4cq633uzqaxlsxzxergsrav494jjrpuy9hcldjeglha57lxvz20fhha6hjwhv69nnzwzjsajntyf0c4z8h9e70dfdlfq8jdvc9rdht8vr955udtg')['valid']
+    assert l1.rpc.decode('lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrcgqyqs5pr5v4ehg93pqfnwgkvdr57yzh6h92zg3qctvrm7w38djg67kzcm4yeg8vc4cq63s')['valid']
 
 
 def test_offer(node_factory, bitcoind):
@@ -4404,17 +4405,10 @@ def test_offer(node_factory, bitcoind):
         offer = only_one(l1.rpc.call('listoffers', [ret['offer_id']])['offers'])
 
         assert offer['bolt12'] == ret['bolt12']
-        assert offer['bolt12_unsigned'] == ret['bolt12_unsigned']
         assert offer['offer_id'] == ret['offer_id']
 
         output = subprocess.check_output([bolt12tool, 'decode',
                                           offer['bolt12']]).decode('ASCII')
-        if amount == 'any':
-            assert 'amount' not in output
-        else:
-            assert 'amount' in output
-        output = subprocess.check_output([bolt12tool, 'decode',
-                                          offer['bolt12_unsigned']]).decode('ASCII')
         if amount == 'any':
             assert 'amount' not in output
         else:
@@ -4458,14 +4452,14 @@ def test_offer(node_factory, bitcoind):
                                       offer['bolt12']]).decode('UTF-8')
     assert 'issuer: ' + weird_issuer in output
 
-    # Test quantity min/max
+    # Test quantity
     ret = l1.rpc.call('offer', {'amount': '100000sat',
-                                'description': 'quantity_min test',
-                                'quantity_min': 1})
+                                'description': 'quantity_max existence test',
+                                'quantity_max': 0})
     offer = only_one(l1.rpc.call('listoffers', [ret['offer_id']])['offers'])
     output = subprocess.check_output([bolt12tool, 'decode',
                                       offer['bolt12']]).decode('UTF-8')
-    assert 'quantity_min: 1' in output
+    assert 'quantity_max: 0' in output
 
     ret = l1.rpc.call('offer', {'amount': '100000sat',
                                 'description': 'quantity_max test',
@@ -4474,26 +4468,6 @@ def test_offer(node_factory, bitcoind):
     output = subprocess.check_output([bolt12tool, 'decode',
                                       offer['bolt12']]).decode('UTF-8')
     assert 'quantity_max: 2' in output
-
-    # BOLT-offers #12:
-    # 	 * - MUST NOT set `quantity_min` or `quantity_max` less than 1.
-    with pytest.raises(RpcError, match='quantity_min: must be >= 1'):
-        ret = l1.rpc.call('offer', {'amount': '100000sat',
-                                    'description': 'quantity_min test',
-                                    'quantity_min': 0})
-
-    with pytest.raises(RpcError, match='quantity_max: must be >= 1'):
-        ret = l1.rpc.call('offer', {'amount': '100000sat',
-                                    'description': 'quantity_max test',
-                                    'quantity_max': 0})
-    # BOLT-offers #12:
-    # - if both:
-    #    - MUST set `quantity_min` greater or equal to `quantity_max`.
-    with pytest.raises(RpcError, match='quantity_min: must be <= quantity_max'):
-        ret = l1.rpc.call('offer', {'amount': '100000sat',
-                                    'description': 'quantity_max test',
-                                    'quantity_min': 10,
-                                    'quantity_max': 9})
 
     # Test absolute_expiry
     exp = int(time.time() + 2)
@@ -4607,7 +4581,7 @@ def test_fetchinvoice(node_factory, bitcoind):
     assert offer1['created'] is True
 
     inv1 = l1.rpc.call('fetchinvoice', {'offer': offer1['bolt12']})
-    inv2 = l1.rpc.call('fetchinvoice', {'offer': offer1['bolt12_unsigned'],
+    inv2 = l1.rpc.call('fetchinvoice', {'offer': offer1['bolt12'],
                                         'payer_note': 'Thanks for the fish!'})
     assert inv1 != inv2
     assert 'next_period' not in inv1
@@ -4621,15 +4595,15 @@ def test_fetchinvoice(node_factory, bitcoind):
     # listinvoices will show these on l3
     assert [x['local_offer_id'] for x in l3.rpc.listinvoices()['invoices']] == [offer1['offer_id'], offer1['offer_id']]
 
-    assert 'payer_note' not in only_one(l3.rpc.call('listinvoices', {'invstring': inv1['invoice']})['invoices'])
-    assert only_one(l3.rpc.call('listinvoices', {'invstring': inv2['invoice']})['invoices'])['payer_note'] == 'Thanks for the fish!'
+    assert 'invreq_payer_note' not in only_one(l3.rpc.call('listinvoices', {'invstring': inv1['invoice']})['invoices'])
+    assert only_one(l3.rpc.call('listinvoices', {'invstring': inv2['invoice']})['invoices'])['invreq_payer_note'] == 'Thanks for the fish!'
 
     # BTW, test listinvoices-by-offer_id:
     assert len(l3.rpc.listinvoices(offer_id=offer1['offer_id'])['invoices']) == 2
 
     # We can also set the amount explicitly, to tip.
     inv1 = l1.rpc.call('fetchinvoice', {'offer': offer1['bolt12'], 'amount_msat': 3})
-    assert l1.rpc.call('decode', [inv1['invoice']])['amount_msat'] == 3
+    assert l1.rpc.call('decode', [inv1['invoice']])['invoice_amount_msat'] == 3
     l1.rpc.pay(inv1['invoice'])
 
     # More than ~5x expected is rejected as absurd (it's actually a divide test,
@@ -4664,7 +4638,8 @@ def test_fetchinvoice(node_factory, bitcoind):
     l1.rpc.pay(inv1['invoice'])
 
     # We can't pay the other one now.
-    with pytest.raises(RpcError, match="INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS.*'erring_node': '{}'".format(l3.info['id'])):
+    # FIXME: Even dummy blinded paths always return WIRE_INVALID_ONION_BLINDING!
+    with pytest.raises(RpcError, match="INVALID_ONION_BLINDING.*'erring_node': '{}'".format(l3.info['id'])):
         l1.rpc.pay(inv2['invoice'])
 
     # We can't reuse the offer, either.
@@ -4758,7 +4733,7 @@ def test_fetchinvoice(node_factory, bitcoind):
                                    'description': 'simple test'})
     assert offer1['created'] is False
     l3.rpc.call('disableoffer', {'offer_id': offer1['offer_id']})
-    with pytest.raises(RpcError, match="1000.*Offer already exists, but isn't active"):
+    with pytest.raises(RpcError, match="1000.*Already exists, but isn't active"):
         l3.rpc.call('offer', {'amount': '2msat',
                               'description': 'simple test'})
 
@@ -4828,13 +4803,13 @@ def test_fetchinvoice_autoconnect(node_factory, bitcoind):
     l3.rpc.call('fetchinvoice', {'offer': offer['bolt12']})
     assert l3.rpc.listpeers(l2.info['id'])['peers'] != []
 
-    # Similarly for send-invoice offer.
+    # Similarly for an invoice_request.
     l3.rpc.disconnect(l2.info['id'])
-    offer = l2.rpc.call('offerout', {'amount': '2msat',
-                                     'description': 'simple test'})
+    invreq = l2.rpc.call('invoicerequest', {'amount': '2msat',
+                                            'description': 'simple test'})
     # Ofc l2 can't actually pay it!
     with pytest.raises(RpcError, match='pay attempt failed: "Ran out of routes to try'):
-        l3.rpc.call('sendinvoice', {'offer': offer['bolt12'], 'label': 'payme!'})
+        l3.rpc.call('sendinvoice', {'invreq': invreq['bolt12'], 'label': 'payme!'})
 
     assert l3.rpc.listpeers(l2.info['id'])['peers'] != []
 
@@ -4848,7 +4823,7 @@ def test_fetchinvoice_autoconnect(node_factory, bitcoind):
     wait_for(lambda: only_one(only_one(l2.rpc.listpeers(l1.info['id'])['peers'])['channels'])['spendable_msat'] != Millisatoshi(0))
 
     l3.rpc.disconnect(l2.info['id'])
-    l3.rpc.call('sendinvoice', {'offer': offer['bolt12'], 'label': 'payme for real!'})
+    l3.rpc.call('sendinvoice', {'invreq': invreq['bolt12'], 'label': 'payme for real!'})
     # It will have autoconnected, to send invoice (since l1 says it doesn't do onion messages!)
     assert l3.rpc.listpeers(l2.info['id'])['peers'] != []
 
@@ -4895,18 +4870,22 @@ def test_sendinvoice(node_factory, bitcoind):
                                            l2opts])
 
     # Simple offer to send money (balances channel a little)
-    offer = l1.rpc.call('offerout', {'amount': '100000sat',
-                                     'description': 'simple test'})
+    invreq = l1.rpc.call('invoicerequest', {'amount': '100000sat',
+                                            'description': 'simple test'})
 
-    # Fetchinvoice will refuse, since you're supposed to send an invoice.
-    with pytest.raises(RpcError, match='Offer wants an invoice, not invoice_request'):
-        l2.rpc.call('fetchinvoice', {'offer': offer['bolt12']})
+    # Fetchinvoice will refuse, since it's not an offer.
+    with pytest.raises(RpcError, match='unexpected prefix lnr'):
+        l2.rpc.call('fetchinvoice', {'offer': invreq['bolt12']})
+
+    # Pay will refuse, since it's not an invoice.
+    with pytest.raises(RpcError, match='unexpected prefix lnr'):
+        l2.rpc.call('fetchinvoice', {'offer': invreq['bolt12']})
 
     # used will be false
-    assert only_one(l1.rpc.call('listoffers', [offer['offer_id']])['offers'])['used'] is False
+    assert only_one(l1.rpc.call('listinvoicerequests', [invreq['invreq_id']])['invoicerequests'])['used'] is False
 
     # sendinvoice should work.
-    out = l2.rpc.call('sendinvoice', {'offer': offer['bolt12_unsigned'],
+    out = l2.rpc.call('sendinvoice', {'invreq': invreq['bolt12'],
                                       'label': 'test sendinvoice 1'})
     assert out['label'] == 'test sendinvoice 1'
     assert out['description'] == 'simple test'
@@ -4922,37 +4901,19 @@ def test_sendinvoice(node_factory, bitcoind):
     # Note, if we're slow, this fails with "Offer no longer available",
     # *but* if it hasn't heard about payment success yet, l2 will fail
     # simply because payments are already pending.
-    with pytest.raises(RpcError, match='Offer no longer available|pay attempt failed'):
-        l2.rpc.call('sendinvoice', {'offer': offer['bolt12'],
+    with pytest.raises(RpcError, match='no longer available|pay attempt failed'):
+        l2.rpc.call('sendinvoice', {'invreq': invreq['bolt12'],
                                     'label': 'test sendinvoice 2'})
 
     # Technically, l1 may not have gotten payment success, so we need to wait.
-    wait_for(lambda: only_one(l1.rpc.call('listoffers', [offer['offer_id']])['offers'])['used'] is True)
+    wait_for(lambda: only_one(l1.rpc.call('listinvoicerequests', [invreq['invreq_id']])['invoicerequests'])['used'] is True)
 
-    # Now try a refund.
-    offer = l2.rpc.call('offer', {'amount': '100msat',
-                                  'description': 'simple test'})
-    assert only_one(l2.rpc.call('listoffers', [offer['offer_id']])['offers'])['used'] is False
+    # Offer with issuer: we must copy issuer into our invoice!
+    invreq = l1.rpc.call('invoicerequest', {'amount': '10000sat',
+                                            'description': 'simple test',
+                                            'issuer': "clightning test suite"})
 
-    inv = l1.rpc.call('fetchinvoice', {'offer': offer['bolt12']})
-    l1.rpc.pay(inv['invoice'])
-    assert only_one(l2.rpc.call('listoffers', [offer['offer_id']])['offers'])['used'] is True
-
-    refund = l2.rpc.call('offerout', {'amount': '100msat',
-                                      'description': 'refund test',
-                                      'refund_for': inv['invoice']})
-    assert only_one(l2.rpc.call('listoffers', [refund['offer_id']])['offers'])['used'] is False
-
-    l1.rpc.call('sendinvoice', {'offer': refund['bolt12'],
-                                'label': 'test sendinvoice refund'})
-    wait_for(lambda: only_one(l2.rpc.call('listoffers', [refund['offer_id']])['offers'])['used'] is True)
-
-    # Offer with issuer: we must not copy issuer into our invoice!
-    offer = l1.rpc.call('offerout', {'amount': '10000sat',
-                                     'description': 'simple test',
-                                     'issuer': "clightning test suite"})
-
-    out = l2.rpc.call('sendinvoice', {'offer': offer['bolt12'],
+    out = l2.rpc.call('sendinvoice', {'invreq': invreq['bolt12'],
                                       'label': 'test sendinvoice 3'})
     assert out['label'] == 'test sendinvoice 3'
     assert out['description'] == 'simple test'
@@ -5329,14 +5290,14 @@ def test_payerkey(node_factory):
     """payerkey calculation should not change across releases!"""
     nodes = node_factory.get_nodes(7)
 
-    expected_keys = ["ed648d8c53c73eb4ef97f3e9586ecfd86e2628037dd91e96ecdc469467dcc1b2",
-                     "ee90e2adcf0e12c5dd1d802af792a4f4b18fd3926a9cc325ffe181bab1c48661",
-                     "17b9ecb1870b5d3896e88247fcb592833fbee8abb5e89673d16560b0ed38f5c6",
-                     "d37f723b611c15b7af394984aea84837d85371ba9eee95364b3c9f89a086f7bf",
-                     "b33482c9753af9deb6df365cf834eccaab7afb24d080caaf87a57010f78f5817",
-                     "f1d699068e3d276eddf9fc4caa0955604a34ee9b9b6529a1ec2eacebb82eb11e",
-                     "4ef73851fe22604e9b7034f548bcb79583ec503983879c56963b9a40fc854758"]
+    expected_keys = ["02294ec1cd3f100947fe859d71a42cb87932e36e7771abf2d50b02a7a92be8e4d5",
+                     "026a4a3b6b0c694da6f14629ca5140713fc703591a6d8aae5c79ba9b5556fc5723",
+                     "03defd2b1f3004b0145351f469f34512c6fa4d02fe891a977bafdb34fe7b73ea48",
+                     "03eccb00c0a3c760465bb69a6297d7cfa5bcbd989d5a88e435bd8d6e4c723013cd",
+                     "021b4bfa652f0df7498d734b0ca888b4e3b07f59e1a974ec7d4a9d6046e8e5ab92",
+                     "03fc91d60b061e517f9182e3e40ea14c27df520c51db204f1409ff50e5cf9a5e4d",
+                     "03a3bbda0137722ba62207b9d3e5e6cc2a11e58480f801892093e01383aacb7fb2"]
 
     for n, k in zip(nodes, expected_keys):
-        b12 = n.rpc.createinvoicerequest('lnr1qvsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrcyyrjjthf4rh99n7equvlrzrlalcacxj4y9hgzxc79yrntrth6mp3nkvssy5mac4pkfq2m3gq4ttajwh097s')['bolt12']
-        assert n.rpc.decode(b12)['payer_key'] == k
+        b12 = n.rpc.createinvoicerequest('lnr1qqgz2d7u2smys9dc5q2447e8thjlgq3qqc3xu3s3rg94nj40zfsy866mhu5vxne6tcej5878k2mneuvgjy8ssqvepgz5zsjrg3z3vggzvkm2khkgvrxj27r96c00pwl4kveecdktm29jdd6w0uwu5jgtv5v9qgqxyfhyvyg6pdvu4tcjvpp7kkal9rp57wj7xv4pl3ajku70rzy3pu', False)['bolt12']
+        assert n.rpc.decode(b12)['invreq_payer_id'] == k

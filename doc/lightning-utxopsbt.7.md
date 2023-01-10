@@ -4,7 +4,7 @@ lightning-utxopsbt -- Command to populate PSBT inputs from given UTXOs
 SYNOPSIS
 --------
 
-**utxopsbt** *satoshi* *feerate* *startweight* *utxos* [*reserve*] [*reservedok*] [*locktime*] [*min_witness_weight*] [*excess_as_change*]
+**utxopsbt** *satoshi* *feerate* *startweight* *utxos* [*reserve*] [*reservedok*] [*locktime*] [*min\_witness\_weight*] [*excess\_as\_change*]
 
 DESCRIPTION
 -----------
@@ -33,11 +33,11 @@ if any of the *utxos* are already reserved.
 *locktime* is an optional locktime: if not set, it is set to a recent
 block height.
 
-*min_witness_weight* is an optional minimum weight to use for a UTXO's
+*min\_witness\_weight* is an optional minimum weight to use for a UTXO's
 witness. If the actual witness weight is greater than the provided minimum,
 the actual witness weight will be used.
 
-*excess_as_change* is an optional boolean to flag to add a change output
+*excess\_as\_change* is an optional boolean to flag to add a change output
 for the excess sats.
 
 RETURN VALUE
@@ -49,8 +49,8 @@ On success, an object is returned, containing:
 - **psbt** (string): Unsigned PSBT which fulfills the parameters given
 - **feerate\_per\_kw** (u32): The feerate used to create the PSBT, in satoshis-per-kiloweight
 - **estimated\_final\_weight** (u32): The estimated weight of the transaction once fully signed
-- **excess\_msat** (msat): The amount above *satoshi* which is available.  This could be zero, or dust; it will be zero if *change_outnum* is also returned
-- **change\_outnum** (u32, optional): The 0-based output number where change was placed (only if parameter *excess_as_change* was true and there was sufficient funds)
+- **excess\_msat** (msat): The amount above *satoshi* which is available.  This could be zero, or dust; it will be zero if *change\_outnum* is also returned
+- **change\_outnum** (u32, optional): The 0-based output number where change was placed (only if parameter *excess\_as\_change* was true and there was sufficient funds)
 - **reservations** (array of objects, optional): If *reserve* was true or a non-zero number, just as per lightning-reserveinputs(7):
   - **txid** (txid): The txid of the transaction
   - **vout** (u32): The 0-based output number
@@ -62,20 +62,20 @@ On success, an object is returned, containing:
 
 
 On success, returns the *psbt* it created, containing the inputs,
-*feerate_per_kw* showing the exact numeric feerate it used, 
-*estimated_final_weight* for the estimated weight of the transaction
-once fully signed, and *excess_msat* containing the amount above *satoshi*
+*feerate\_per\_kw* showing the exact numeric feerate it used, 
+*estimated\_final\_weight* for the estimated weight of the transaction
+once fully signed, and *excess\_msat* containing the amount above *satoshi*
 which is available.  This could be zero, or dust.  If *satoshi* was "all",
-then *excess_msat* is the entire amount once fees are subtracted
+then *excess\_msat* is the entire amount once fees are subtracted
 for the weights of the inputs and *startweight*.
 
 If *reserve* was *true* or a non-zero number, then a *reservations*
 array is returned, exactly like *reserveinputs*.
 
-If *excess_as_change* is true and the excess is enough to cover
+If *excess\_as\_change* is true and the excess is enough to cover
 an additional output above the `dust_limit`, then an output is
-added to the PSBT for the excess amount. The *excess_msat* will
-be zero. A *change_outnum* will be returned with the index of
+added to the PSBT for the excess amount. The *excess\_msat* will
+be zero. A *change\_outnum* will be returned with the index of
 the change output.
 
 On error the returned object will contain `code` and `message` properties,
@@ -100,4 +100,4 @@ RESOURCES
 
 Main web site: <https://github.com/ElementsProject/lightning>
 
-[comment]: # ( SHA256STAMP:c2c513b40099c9cd2ef7bda1c430fdff055499b67ef2ff9edf7772ea4d87fb2d)
+[comment]: # ( SHA256STAMP:237c832f7a7c1ea2567192b7432f4ea7fe79e553c9c531acf5be733b92095464)

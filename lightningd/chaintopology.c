@@ -53,13 +53,7 @@ static void next_topology_timer(struct chain_topology *topo)
 static bool we_broadcast(const struct chain_topology *topo,
 			 const struct bitcoin_txid *txid)
 {
-	const struct outgoing_tx *otx;
-
-	list_for_each(&topo->outgoing_txs, otx, list) {
-		if (bitcoin_txid_eq(&otx->txid, txid))
-			return true;
-	}
-	return false;
+	return outgoing_tx_map_get(&topo->outgoing_txs, txid) != NULL;
 }
 
 static void filter_block_txs(struct chain_topology *topo, struct block *b)
@@ -72,6 +66,7 @@ static void filter_block_txs(struct chain_topology *topo, struct block *b)
 		const struct bitcoin_tx *tx = b->full_txs[i];
 		struct bitcoin_txid txid;
 		size_t j;
+		bool is_coinbase = i == 0;
 
 		/* Tell them if it spends a txo we care about. */
 		for (j = 0; j < tx->wtx->num_inputs; j++) {
@@ -92,7 +87,7 @@ static void filter_block_txs(struct chain_topology *topo, struct block *b)
 		txid = b->txids[i];
 		if (txfilter_match(topo->bitcoind->ld->owned_txfilter, tx)) {
 			wallet_extract_owned_outputs(topo->bitcoind->ld->wallet,
-						     tx->wtx, &b->height, &owned);
+						     tx->wtx, is_coinbase, &b->height, &owned);
 			wallet_transaction_add(topo->ld->wallet, tx->wtx,
 					       b->height, i);
 		}
@@ -159,13 +154,16 @@ static void rebroadcast_txs(struct chain_topology *topo)
 	/* Copy txs now (peers may go away, and they own txs). */
 	struct txs_to_broadcast *txs;
 	struct outgoing_tx *otx;
+	struct outgoing_tx_map_iter it;
 
 	txs = tal(topo, struct txs_to_broadcast);
 	txs->cmd_id = tal_arr(txs, const char *, 0);
 
 	/* Put any txs we want to broadcast in ->txs. */
 	txs->txs = tal_arr(txs, const char *, 0);
-	list_for_each(&topo->outgoing_txs, otx, list) {
+
+	for (otx = outgoing_tx_map_first(&topo->outgoing_txs, &it); otx;
+	     otx = outgoing_tx_map_next(&topo->outgoing_txs, &it)) {
 		if (wallet_transaction_height(topo->ld->wallet, &otx->txid))
 			continue;
 
@@ -179,9 +177,9 @@ static void rebroadcast_txs(struct chain_topology *topo)
 	broadcast_remainder(topo->bitcoind, true, "", txs);
 }
 
-static void destroy_outgoing_tx(struct outgoing_tx *otx)
+static void destroy_outgoing_tx(struct outgoing_tx *otx, struct chain_topology *topo)
 {
-	list_del(&otx->list);
+	outgoing_tx_map_del(&topo->outgoing_txs, otx);
 }
 
 static void clear_otx_channel(struct channel *channel, struct outgoing_tx *otx)
@@ -207,11 +205,18 @@ static void broadcast_done(struct bitcoind *bitcoind,
 	if (otx->failed_or_success) {
 		otx->failed_or_success(otx->channel, success, msg);
 		tal_free(otx);
+	} else if (we_broadcast(bitcoind->ld->topology, &otx->txid)) {
+		log_debug(
+		    bitcoind->ld->topology->log,
+		    "Not adding %s to list of outgoing transactions, already "
+		    "present",
+		    type_to_string(tmpctx, struct bitcoin_txid, &otx->txid));
+		tal_free(otx);
 	} else {
 		/* For continual rebroadcasting, until channel freed. */
 		tal_steal(otx->channel, otx);
-		list_add_tail(&bitcoind->ld->topology->outgoing_txs, &otx->list);
-		tal_add_destructor(otx, destroy_outgoing_tx);
+		outgoing_tx_map_add(&bitcoind->ld->topology->outgoing_txs, notleak(otx));
+		tal_add_destructor2(otx, destroy_outgoing_tx, bitcoind->ld->topology);
 	}
 }
 
@@ -933,13 +938,17 @@ u32 feerate_max(struct lightningd *ld, bool *unknown)
 static void destroy_chain_topology(struct chain_topology *topo)
 {
 	struct outgoing_tx *otx;
-
-	while ((otx = list_pop(&topo->outgoing_txs, struct outgoing_tx, list)))
+	struct outgoing_tx_map_iter it;
+	for (otx = outgoing_tx_map_first(&topo->outgoing_txs, &it); otx;
+	     otx = outgoing_tx_map_next(&topo->outgoing_txs, &it)) {
+		tal_del_destructor2(otx, destroy_outgoing_tx, topo);
 		tal_free(otx);
+	}
 
 	/* htable uses malloc, so it would leak here */
 	txwatch_hash_clear(&topo->txwatches);
 	txowatch_hash_clear(&topo->txowatches);
+	outgoing_tx_map_clear(&topo->outgoing_txs);
 	block_map_clear(&topo->block_map);
 }
 
@@ -949,7 +958,7 @@ struct chain_topology *new_topology(struct lightningd *ld, struct log *log)
 
 	topo->ld = ld;
 	block_map_init(&topo->block_map);
-	list_head_init(&topo->outgoing_txs);
+	outgoing_tx_map_init(&topo->outgoing_txs);
 	txwatch_hash_init(&topo->txwatches);
 	txowatch_hash_init(&topo->txowatches);
 	topo->log = log;
@@ -959,6 +968,7 @@ struct chain_topology *new_topology(struct lightningd *ld, struct log *log)
 	topo->feerate_uninitialized = true;
 	topo->root = NULL;
 	topo->sync_waiters = tal(topo, struct list_head);
+	topo->extend_timer = NULL;
 	topo->stopping = false;
 	list_head_init(topo->sync_waiters);
 

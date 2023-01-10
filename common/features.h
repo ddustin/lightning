@@ -10,8 +10,11 @@ enum feature_place {
 	NODE_ANNOUNCE_FEATURE,
 	CHANNEL_FEATURE,
 	BOLT11_FEATURE,
+	BOLT12_OFFER_FEATURE,
+	BOLT12_INVREQ_FEATURE,
+	BOLT12_INVOICE_FEATURE,
 };
-#define NUM_FEATURE_PLACE (BOLT11_FEATURE+1)
+#define NUM_FEATURE_PLACE (BOLT12_INVOICE_FEATURE+1)
 
 extern const char *feature_place_names[NUM_FEATURE_PLACE];
 
@@ -131,6 +134,11 @@ struct feature_set *feature_set_dup(const tal_t *ctx,
 #define OPT_SHUTDOWN_ANYSEGWIT			26
 #define OPT_CHANNEL_TYPE			44
 #define OPT_PAYMENT_METADATA			48
+
+/* BOLT-route-blinding #9:
+ * | 24/25 | `option_route_blinding` | Node supports blinded paths | IN9 | `var_onion_optin` | ...
+ */
+#define OPT_ROUTE_BLINDING 			24
 
 /* BOLT-f53ca2301232db780843e894f55d95d512f297f9 #9:
  * | 28/29 | `option_dual_fund` | ... IN9 ...

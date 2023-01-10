@@ -417,8 +417,8 @@ static void send_splice_tx_done(struct bitcoind *bitcoind UNUSED,
 
 	/* This might have spent UTXOs from our wallet */
 	num_utxos = wallet_extract_owned_outputs(ld->wallet,
-						 info->final_tx->wtx, NULL,
-						 &unused);
+						 info->final_tx->wtx, false,
+						 NULL, &unused);
 	if (num_utxos)
 		wallet_transaction_add(ld->wallet, info->final_tx->wtx, 0, 0);
 
@@ -816,7 +816,7 @@ static void peer_got_shutdown(struct channel *channel, const u8 *msg)
 	 *   - if the `scriptpubkey` is not in one of the above forms:
 	 *     - SHOULD send a `warning`.
 	 */
-	if (!valid_shutdown_scriptpubkey(scriptpubkey, anysegwit, anchors)) {
+	if (!valid_shutdown_scriptpubkey(scriptpubkey, anysegwit, !anchors)) {
 		u8 *warning = towire_warningfmt(NULL,
 						&channel->cid,
 						"Bad shutdown scriptpubkey %s",

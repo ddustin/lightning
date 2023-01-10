@@ -987,7 +987,7 @@ static struct command_result *json_pay(struct command *cmd,
 	struct shadow_route_data *shadow_route;
 	struct amount_msat *invmsat;
 	u64 invexpiry;
-	struct sha256 *local_offer_id;
+	struct sha256 *local_invreq_id;
 	const struct tlv_invoice *b12;
 	struct out_req *req;
 	struct route_exclusion **exclusions;
@@ -1011,7 +1011,7 @@ static struct command_result *json_pay(struct command *cmd,
 		   p_opt_def("maxdelay", param_number, &maxdelay,
 			     maxdelay_default),
 		   p_opt("exemptfee", param_msat, &exemptfee),
-		   p_opt("localofferid", param_sha256, &local_offer_id),
+		   p_opt("localinvreqid", param_sha256, &local_invreq_id),
 		   p_opt("exclude", param_route_exclusion_array, &exclusions),
 		   p_opt("maxfee", param_msat, &maxfee),
 		   p_opt("description", param_string, &description),
@@ -1024,6 +1024,9 @@ static struct command_result *json_pay(struct command *cmd,
 	p = payment_new(cmd, cmd, NULL /* No parent */, paymod_mods);
 	p->invstring = tal_steal(p, b11str);
 	p->description = tal_steal(p, description);
+	/* Overridded by bolt12 if present */
+	p->blindedpath = NULL;
+	p->blindedpay = NULL;
 
 	if (!bolt12_has_prefix(b11str)) {
 		b11 =
@@ -1063,7 +1066,7 @@ static struct command_result *json_pay(struct command *cmd,
 		 * - MUST check that the SHA2 256-bit hash in the `h` field
 		 *   exactly matches the hashed description.
 		 */
-		if (!b11->description && !deprecated_apis) {
+		if (!b11->description) {
 			if (!b11->description_hash) {
 				return command_fail(cmd,
 						    JSONRPC2_INVALID_PARAMS,
@@ -1085,64 +1088,78 @@ static struct command_result *json_pay(struct command *cmd,
 			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 					    "experimental-offers disabled");
 
-		p->features = tal_steal(p, b12->features);
+		/* FIXME: We disable MPP for now */
+		/* p->features = tal_steal(p, b12->features); */
+		p->features = NULL;
 
-		if (!b12->node_id)
+		if (!b12->invoice_node_id)
 			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 					    "invoice missing node_id");
-		if (!b12->payment_hash)
+		if (!b12->invoice_payment_hash)
 			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 					    "invoice missing payment_hash");
-		if (!b12->created_at)
+		if (!b12->invoice_created_at)
 			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 					    "invoice missing created_at");
-		if (b12->amount) {
-			invmsat = tal(cmd, struct amount_msat);
-			*invmsat = amount_msat(*b12->amount);
-		} else
-			invmsat = NULL;
+		if (!b12->invoice_amount)
+			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
+					    "invoice missing invoice_amount");
+		invmsat = tal(cmd, struct amount_msat);
+		*invmsat = amount_msat(*b12->invoice_amount);
 
-		/* FIXME: gossmap should store as point32 */
 		p->destination = tal(p, struct node_id);
-		gossmap_guess_node_id(get_gossmap(cmd->plugin), b12->node_id,
-				      p->destination);
-		p->payment_hash = tal_dup(p, struct sha256, b12->payment_hash);
-		if (b12->recurrence_counter && !label)
+		node_id_from_pubkey(p->destination, b12->invoice_node_id);
+		p->payment_hash = tal_dup(p, struct sha256,
+					  b12->invoice_payment_hash);
+		if (b12->invreq_recurrence_counter && !label)
 			return command_fail(
 			    cmd, JSONRPC2_INVALID_PARAMS,
 			    "recurring invoice requires a label");
-		/* FIXME payment_secret should be signature! */
-		{
-			struct sha256 merkle;
 
-			p->payment_secret = tal(p, struct secret);
-			merkle_tlv(b12->fields, &merkle);
-			memcpy(p->payment_secret, &merkle, sizeof(merkle));
-			BUILD_ASSERT(sizeof(*p->payment_secret) ==
-				     sizeof(merkle));
+		/* BOLT-offers #12:
+		 * - MUST reject the invoice if `invoice_paths` is not present
+		 *  or is empty.
+		 */
+		if (tal_count(b12->invoice_paths) == 0)
+			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
+					    "invoice missing invoice_paths");
+
+		/* BOLT-offers #12:
+		 * - MUST reject the invoice if `invoice_blindedpay` does not
+		 *   contain exactly one `blinded_payinfo` per
+		 *   `invoice_paths`.`blinded_path`. */
+		if (tal_count(b12->invoice_paths)
+		    != tal_count(b12->invoice_blindedpay)) {
+			return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
+					    "Wrong blinding info: %zu paths, %zu payinfo",
+					    tal_count(b12->invoice_paths),
+					    tal_count(b12->invoice_blindedpay));
 		}
+
+		/* FIXME: do MPP across these!  We choose first one. */
+		p->blindedpath = tal_steal(p, b12->invoice_paths[0]);
+		p->blindedpay = tal_steal(p, b12->invoice_blindedpay[0]);
+		p->min_final_cltv_expiry = p->blindedpay->cltv_expiry_delta;
+
+		/* Set destination to introduction point */
+		node_id_from_pubkey(p->destination, &p->blindedpath->first_node_id);
 		p->payment_metadata = NULL;
 		p->routes = NULL;
-		/* FIXME: paths! */
-		if (b12->cltv)
-			p->min_final_cltv_expiry = *b12->cltv;
-		else
-			p->min_final_cltv_expiry = 18;
 		/* BOLT-offers #12:
-		 * - if `relative_expiry` is present:
+		 * - if `invoice_relative_expiry` is present:
 		 *   - MUST reject the invoice if the current time since
-		 *     1970-01-01 UTC is greater than `created_at` plus
+		 *     1970-01-01 UTC is greater than `invoice_created_at` plus
 		 *     `seconds_from_creation`.
 		 * - otherwise:
 		 *   - MUST reject the invoice if the current time since
-		 *     1970-01-01 UTC is greater than `created_at` plus
-		 * 7200.
+		 *     1970-01-01 UTC is greater than `invoice_created_at` plus
+		 *     7200.
 		 */
-		if (b12->relative_expiry)
-			invexpiry = *b12->created_at + *b12->relative_expiry;
+		if (b12->invoice_relative_expiry)
+			invexpiry = *b12->invoice_created_at + *b12->invoice_relative_expiry;
 		else
-			invexpiry = *b12->created_at + BOLT12_DEFAULT_REL_EXPIRY;
-		p->local_offer_id = tal_steal(p, local_offer_id);
+			invexpiry = *b12->invoice_created_at + BOLT12_DEFAULT_REL_EXPIRY;
+		p->local_invreq_id = tal_steal(p, local_invreq_id);
 	}
 
 	if (time_now().ts.tv_sec > invexpiry)
@@ -1161,6 +1178,19 @@ static struct command_result *json_pay(struct command *cmd,
 					    "msatoshi parameter required");
 		}
 		p->amount = *msat;
+	}
+
+	/* We replace real final values if we're using a blinded path */
+	if (p->blindedpath) {
+		p->blindedfinalcltv = p->min_final_cltv_expiry;
+		p->blindedfinalamount = p->amount;
+
+		p->min_final_cltv_expiry += p->blindedpay->cltv_expiry_delta;
+		if (!amount_msat_add_fee(&p->amount,
+					 p->blindedpay->fee_base_msat,
+					 p->blindedpay->fee_proportional_millionths))
+			return command_fail(cmd, PAY_ROUTE_TOO_EXPENSIVE,
+					    "This payment blinded path fee overflows!");
 	}
 
 	if (node_id_eq(&my_id, p->destination))
