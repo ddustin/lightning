@@ -81,4 +81,11 @@ char *process_interactivetx_updates(const tal_t *ctx,
 				    struct interactivetx_context *ictx,
 				    bool *received_tx_complete);
 
+/* If the given ictx would cause `process_interactivetx_updates to send tx
+ * changes when called. Returns true if an error occurs
+ * (call `process_interactivetx_updates` for a description of the error).
+ */
+bool interactivetx_has_changes(struct interactivetx_context *ictx,
+			       struct wally_psbt *next_psbt);
+
 #endif /* LIGHTNING_COMMON_INTERACTIVETX_H */

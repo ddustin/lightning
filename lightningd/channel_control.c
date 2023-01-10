@@ -1153,7 +1153,6 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 	case WIRE_CHANNELD_SPLICE_INIT:
 	case WIRE_CHANNELD_SPLICE_UPDATE:
 	case WIRE_CHANNELD_SPLICE_LOOKUP_TX_RESULT:
-	case WIRE_CHANNELD_SPLICE_FINALIZE:
 	case WIRE_CHANNELD_SPLICE_SIGNED:
 	case WIRE_CHANNELD_DEV_QUIESCE_REPLY:
 		break;
@@ -1851,37 +1850,6 @@ static struct command_result *json_splice_update(struct command *cmd,
 	return command_still_pending(cmd);
 }
 
-static struct command_result *json_splice_finalize(struct command *cmd,
-						 const char *buffer,
-						 const jsmntok_t *obj UNNEEDED,
-						 const jsmntok_t *params)
-{
-	struct channel_id *cid;
-	struct channel *channel;
-	struct splice_command *cc;
-	struct command_result *error;
-
-	if(!param(cmd, buffer, params,
-		  p_req("channel_id", param_channel_id, &cid),
-		  NULL))
-		return command_param_failed();
-
-	channel = splice_load_channel(cmd, cid, &error);
-	if (error)
-		return error;
-
-	cc = tal(NULL, struct splice_command);
-
-	list_add_tail(&cmd->ld->splice_commands, &cc->list);
-
-	cc->cmd = tal_steal(cc, cmd);
-	cc->channel = channel;
-
-	subd_send_msg(channel->owner,
-		      take(towire_channeld_splice_finalize(NULL)));
-	return command_still_pending(cmd);
-}
-
 static struct command_result *json_splice_signed(struct command *cmd,
 						 const char *buffer,
 						 const jsmntok_t *obj UNNEEDED,
@@ -1942,17 +1910,6 @@ static const struct json_command splice_update_command = {
 	"{commitments_secured} is true."
 };
 AUTODATA(json_command, &splice_update_command);
-
-/* DTODO: Remove splice_finalize. Instead it's done as a splice_update call 
- * with no changes to PSBT. */
-static const struct json_command splice_finalize_command = {
-	"splice_finalize",
-	"channels",
-	json_splice_finalize,
-	"Finalize a {channel_id} splice by filling in channel output amount. "
-	"Resulting PSBT is returned for signing."
-};
-AUTODATA(json_command, &splice_finalize_command);
 
 static const struct json_command splice_signed_command = {
 	"splice_signed",

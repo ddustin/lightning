@@ -219,9 +219,6 @@ msgdata,channeld_splice_lookup_tx,txid,bitcoin_txid,
 msgtype,channeld_splice_lookup_tx_result,7209
 msgdata,channeld_splice_lookup_tx_result,tx,bitcoin_tx,
 
-# master->channeld: User is ready to finalize the psbt
-msgtype,channeld_splice_finalize,7210
-
 # channeld->master: Splice is finalized
 msgtype,channeld_splice_confirmed_finalize,7211
 msgdata,channeld_splice_confirmed_finalize,psbt,wally_psbt,

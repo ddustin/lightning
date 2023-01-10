@@ -31,7 +31,7 @@ def test_splice(node_factory, bitcoind):
     chan_size += 100000
 
     result = l1.rpc.splice_init(chan_id, chan_size, funds_result['psbt'])
-    result = l1.rpc.splice_finalize(chan_id)
+    result = l1.rpc.splice_update(chan_id, result['psbt'])
     result = l1.rpc.signpsbt(result['psbt'])
     result = l1.rpc.splice_signed(chan_id, result['signed_psbt'])
 

@@ -308,6 +308,20 @@ tx_complete:
 	return NULL;
 }
 
+bool interactivetx_has_changes(struct interactivetx_context *ictx,
+			       struct wally_psbt *next_psbt)
+{
+	struct psbt_changeset *set = psbt_get_changeset(tmpctx,
+							ictx->current_psbt,
+							next_psbt);
+
+	if(!set)
+		return true;
+
+	return tal_count(set->added_ins) || tal_count(set->rm_ins)
+	    || tal_count(set->added_outs) || tal_count(set->rm_outs);
+}
+
 char *process_interactivetx_updates(const tal_t *ctx,
 			 	    struct interactivetx_context *ictx,
 				    bool *received_tx_complete)

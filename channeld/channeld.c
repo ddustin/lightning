@@ -3402,6 +3402,56 @@ static void splice_intiator(struct peer *peer, const u8 *inmsg)
 	wire_sync_write(MASTER_FD, take(outmsg));
 }
 
+/* This occurs when the user has marked they are done making changes to the
+ * PSBT. Now we continually send `tx_complete` and intake our peer's changes
+ * inside `process_interactivetx_updates`. Once they are onboard indicated
+ * with their sending of `tx_complete` we clean up the final PSBT and return
+ * to the user for their final signing steps. */
+static void splice_initiator_user_finalized(struct peer *peer)
+{
+	u8 *outmsg;
+	struct interactivetx_context *ictx;
+	char *error;
+	int chan_output_index;
+	struct wally_tx_output *new_chan_outpoint;
+
+	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
+					 peer->pps, peer->channel_id);
+
+	ictx->next_update = next_splice_step;
+	ictx->pause_when_complete = false;
+	ictx->current_psbt = peer->current_psbt;
+	ictx->desired_psbt = ictx->current_psbt;
+	ictx->tx_add_input_count = peer->tx_add_input_count;
+	ictx->tx_add_output_count = peer->tx_add_output_count;
+
+	error = process_interactivetx_updates(tmpctx, ictx, &peer->received_tx_complete);
+	if (error)
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Splice finalize error: %s", error);
+
+	psbt_add_serials(ictx->current_psbt, ictx->our_role);
+	psbt_sort_by_serial_id(ictx->current_psbt);
+
+	new_chan_outpoint = find_channel_output(peer, ictx->current_psbt,
+						&chan_output_index);
+
+	new_chan_outpoint->satoshi = check_balances(peer, TX_INITIATOR,
+						    ictx->current_psbt,
+						    chan_output_index).satoshis;
+
+	/* DTODO: audit if we need more checks at this point (check feerate,
+	 * copy dualopen checks, spec, etc) */
+
+	psbt_elements_normalize_fees(ictx->current_psbt);
+
+	psbt_finalize(ictx->current_psbt);
+
+	peer->current_psbt = tal_steal(peer, ictx->current_psbt);
+	outmsg = towire_channeld_splice_confirmed_finalize(tmpctx,
+							   peer->current_psbt);
+	wire_sync_write(MASTER_FD, take(outmsg));
+}
 
 /* During a splice the user may call splice_update mulitple times adding
  * new details to the active PSBT. Each user call enters here: */
@@ -3432,6 +3482,12 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 	 * ensure that for them here */
 	psbt_add_serials(ictx->desired_psbt, ictx->our_role);
 
+	/* If there no are no changes, we consider the splice 'user finalized' */
+	if (!interactivetx_has_changes(ictx, ictx->desired_psbt)) {
+		splice_initiator_user_finalized(peer);
+		return;
+	}
+
 	error = process_interactivetx_updates(tmpctx, ictx, &peer->received_tx_complete);
 	if(error)
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -3450,64 +3506,6 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 	outmsg = towire_channeld_splice_confirmed_update(NULL,
 							 ictx->current_psbt,
 							 peer->received_tx_complete);
-	wire_sync_write(MASTER_FD, take(outmsg));
-}
-
-/* This occurs when the user has marked they are done making changes to the
- * PSBT. Now we continually send `tx_complete` and intake our peer's changes
- * inside `process_interactivetx_updates`. Once they are onboard indicated
- * with their sending of `tx_complete` we clean up the final PSBT and return
- * to the user for their final signing steps. */
-static void splice_intiator_user_finalized(struct peer *peer, const u8 *inmsg)
-{
-	u8 *outmsg;
-	struct interactivetx_context *ictx;
-	char *error;
-	int chan_output_index;
-	struct wally_tx_output *new_chan_outpoint;
-
-	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
-					 peer->pps, peer->channel_id);
-
-	ictx->next_update = next_splice_step;
-	ictx->pause_when_complete = false;
-	ictx->current_psbt = peer->current_psbt;
-	ictx->desired_psbt = ictx->current_psbt;
-	ictx->tx_add_input_count = peer->tx_add_input_count;
-	ictx->tx_add_output_count = peer->tx_add_output_count;
-
-	if (!fromwire_channeld_splice_finalize(inmsg))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Invalid splice finalized message: %s",
-				 tal_hex(tmpctx, inmsg));
-
-	psbt_add_serials(ictx->current_psbt, ictx->our_role);
-
-	error = process_interactivetx_updates(tmpctx, ictx, &peer->received_tx_complete);
-	if (error)
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Splice finalize error: %s", error);
-
-	psbt_add_serials(ictx->current_psbt, ictx->our_role);
-	psbt_sort_by_serial_id(ictx->current_psbt);
-
-	new_chan_outpoint = find_channel_output(peer, ictx->current_psbt,
-						&chan_output_index);
-
-	new_chan_outpoint->satoshi = check_balances(peer, TX_INITIATOR,
-						    ictx->current_psbt,
-						    chan_output_index).satoshis;
-
-	/* DTODO: audit if we need more checks at this point (check feerate,
-	 * copy dualopen checks, spec, etc) */
-
-	psbt_elements_normalize_fees(ictx->current_psbt);
-
-	psbt_finalize(ictx->current_psbt);
-
-	peer->current_psbt = tal_steal(peer, ictx->current_psbt);
-	outmsg = towire_channeld_splice_confirmed_finalize(tmpctx,
-							   peer->current_psbt);
 	wire_sync_write(MASTER_FD, take(outmsg));
 }
 
@@ -5343,9 +5341,6 @@ static void req_in(struct peer *peer, const u8 *msg)
 		return;
 	case WIRE_CHANNELD_SPLICE_UPDATE:
 		splice_intiator_user_update(peer, msg);
-		return;
-	case WIRE_CHANNELD_SPLICE_FINALIZE:
-		splice_intiator_user_finalized(peer, msg);
 		return;
 	case WIRE_CHANNELD_SPLICE_SIGNED:
 		splice_intiator_user_signed(peer, msg);
