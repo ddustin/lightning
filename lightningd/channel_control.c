@@ -736,6 +736,9 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 		return;
 	}
 
+	/* Remember that we got the lockin */
+	wallet_channel_save(channel->peer->ld->wallet, channel);
+
 	lockin_complete(channel, CHANNELD_AWAITING_SPLICE);
 }
 
