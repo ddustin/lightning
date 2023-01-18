@@ -187,6 +187,8 @@ struct peer {
 	bool received_tx_complete;
 	/* Tally of which sides are locked, or not */
 	bool splice_locked_ready[NUM_SIDES];
+	/* The txid of which splice inflight was confirmed */
+	struct bitcoin_txid splice_locked_txid;
 	/* The active inflights */
 	struct inflight *inflights;
 
@@ -703,6 +705,9 @@ static void channel_announcement_negotiate(struct peer *peer)
 static void check_mutual_splice_locked(struct peer *peer)
 {
 	u8 *msg;
+	char *error;
+	struct inflight *inflight;
+	struct amount_msat local_funding_msat;
 
 	/* If both sides haven't splice_locked we're not ready */
 	if (!peer->splice_locked_ready[LOCAL]
@@ -715,11 +720,43 @@ static void check_mutual_splice_locked(struct peer *peer)
 	peer->have_sigs[LOCAL] = false;
 	peer->have_sigs[REMOTE] = false;
 
-	msg = towire_channeld_got_splice_locked(NULL);
+	inflight = NULL;
+	for (size_t i = 0; i < tal_count(peer->inflights); i++)
+		if (bitcoin_txid_eq(&peer->inflights[i].outpoint.txid,
+			&peer->splice_locked_txid))
+			inflight = &peer->inflights[i];
+
+	if (!inflight)
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Unable to find inflight txid.");
+
+	if (!amount_sat_to_msat(&local_funding_msat, inflight->local_funding))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Uabled to convert local funding to msats.");
+
+	msg = towire_channeld_got_splice_locked(NULL, inflight->amnt,
+						peer->channel->starting_local_msats,
+						local_funding_msat);
 	wire_sync_write(MASTER_FD, take(msg));
 	channel_announcement_negotiate(peer);
 	billboard_update(peer);
 	send_channel_update(peer, 0);
+
+	status_debug("mutual splice_locked, updating change from: %s",
+		     type_to_string(tmpctx, struct channel, peer->channel));
+
+	error = channel_update_funding(peer->channel, &inflight->outpoint,
+				       inflight->amnt,
+				       peer->channel->starting_local_msats,
+				       inflight->local_funding);
+
+	if(error)
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Splice lock unable to update funding. %s",
+				 error);
+
+	status_debug("mutual splice_locked, channel updated to: %s",
+		     type_to_string(tmpctx, struct channel, peer->channel));
 
 	peer->inflights = tal_free(peer->inflights);
 }
@@ -3059,6 +3096,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	peer->inflights[tal_count(peer->inflights) - 1].outpoint = outpoint;
 	peer->inflights[tal_count(peer->inflights) - 1].amnt = both_amount;
+	peer->inflights[tal_count(peer->inflights) - 1].local_funding = peer->splice_accepter_funding;
 
 	peer->splice_count++;
 
@@ -3579,6 +3617,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	peer->inflights[tal_count(peer->inflights) - 1].outpoint = outpoint;
 	peer->inflights[tal_count(peer->inflights) - 1].amnt = funding_sats;
+	peer->inflights[tal_count(peer->inflights) - 1].local_funding = peer->splice_opener_funding;
 
 	peer->splice_count++;
 
@@ -4818,13 +4857,15 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 	struct tlv_channel_ready_tlvs *tlvs;
 	struct pubkey point;
 	bool splicing;
+	struct bitcoin_txid txid;
 
 	if (!fromwire_channeld_funding_depth(tmpctx,
 					     msg,
 					     &scid,
 					     &alias_local,
 					     &depth,
-					     &splicing))
+					     &splicing,
+					     &txid))
 		master_badmsg(WIRE_CHANNELD_FUNDING_DEPTH, msg);
 
 	/* Too late, we're shutting down! */
@@ -4882,6 +4923,7 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 			peer->short_channel_ids[REMOTE] = *scid;
 			peer->have_sigs[LOCAL] = false;
 			peer->have_sigs[REMOTE] = false;
+			peer->splice_locked_txid = txid;
 
 			peer_write(peer->pps, take(msg));
 

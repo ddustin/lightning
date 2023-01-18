@@ -7,6 +7,7 @@
 struct inflight {
 	struct bitcoin_outpoint outpoint;
 	struct amount_sat amnt;
+	struct amount_sat local_funding;
 };
 
 #endif /* CHANNELD_INFLIGHT */

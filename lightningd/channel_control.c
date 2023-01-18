@@ -729,15 +729,74 @@ bool channel_on_channel_ready(struct channel *channel,
 
 static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 {
-	if (!fromwire_channeld_got_splice_locked(msg)) {
+	struct amount_sat funding_sats;
+	struct amount_msat old_local_funding_msats, new_local_funding_msats;
+	struct amount_msat local_change;
+	bool local_negative;
+	bool res;
+
+	if (!fromwire_channeld_got_splice_locked(msg, &funding_sats,
+						 &old_local_funding_msats,
+						 &new_local_funding_msats)) {
 		channel_internal_error(channel,
 				       "bad channel_got_funding_locked %s",
 				       tal_hex(channel, msg));
 		return;
 	}
 
+	local_negative = amount_msat_greater(old_local_funding_msats,
+					     new_local_funding_msats);
+
+	if (local_negative)
+		res = amount_msat_sub(&local_change, old_local_funding_msats,
+				      new_local_funding_msats);
+	else
+		res = amount_msat_sub(&local_change, new_local_funding_msats,
+				      old_local_funding_msats);
+	if (!res)
+		channel_internal_error(channel, "Unable to calculate local "
+				       "splice funding change");
+
+	if (local_negative) {
+		if (!amount_msat_sub(&channel->our_msat,
+				     channel->our_msat,
+				     local_change))
+			channel_internal_error(channel, "Unable to update "
+					       "our_msat");
+		if (!amount_msat_sub(&channel->msat_to_us_min,
+				     channel->msat_to_us_min,
+				     local_change))
+			channel_internal_error(channel, "Unable to update "
+					       "msat_to_us_min");
+		if (!amount_msat_sub(&channel->msat_to_us_max,
+				     channel->msat_to_us_max,
+				     local_change))
+			channel_internal_error(channel, "Unable to update "
+					       "msat_to_us_max");
+	}
+	else {
+		if (!amount_msat_add(&channel->our_msat,
+				     channel->our_msat,
+				     local_change))
+			channel_internal_error(channel, "Unable to update "
+					       "our_msat");
+		if (!amount_msat_add(&channel->msat_to_us_min,
+				     channel->msat_to_us_min,
+				     local_change))
+			channel_internal_error(channel, "Unable to update "
+					       "msat_to_us_min");
+		if (!amount_msat_add(&channel->msat_to_us_max,
+				     channel->msat_to_us_max,
+				     local_change))
+			channel_internal_error(channel, "Unable to update "
+					       "msat_to_us_max");
+	}
+
 	/* Remember that we got the lockin */
 	wallet_channel_save(channel->peer->ld->wallet, channel);
+
+	/* Empty out the inflights */
+	wallet_channel_clear_inflights(channel->peer->ld->wallet, channel);
 
 	lockin_complete(channel, CHANNELD_AWAITING_SPLICE);
 }
@@ -1181,6 +1240,7 @@ bool peer_start_channeld(struct channel *channel,
 	struct penalty_base *pbases;
 	struct channel_inflight *inflight;
 	struct inflight *inflights;
+	struct bitcoin_txid txid;
 
 	hsmfd = hsm_get_client_fd(ld, &channel->peer->id,
 				  channel->dbid,
@@ -1286,6 +1346,7 @@ bool peer_start_channeld(struct channel *channel,
 		tal_resize(&inflights, i + 1);
 		inflights[i].outpoint = inflight->funding->outpoint;
 		inflights[i].amnt = inflight->funding->total_funds;
+		inflights[i].local_funding = inflight->funding->our_funds;
 		i++;
 	}
 
@@ -1372,10 +1433,13 @@ bool peer_start_channeld(struct channel *channel,
 				       get_block_height(ld->topology));
 	}
 
+	memset(&txid, 0, sizeof(txid));
+
 	/* Artificial confirmation event for zeroconf */
 	subd_send_msg(channel->owner,
 		      take(towire_channeld_funding_depth(
-			  NULL, channel->scid, channel->alias[LOCAL], 0, false)));
+			   NULL, channel->scid, channel->alias[LOCAL], 0, false,
+			   &txid)));
 	return true;
 }
 
@@ -1462,7 +1526,7 @@ bool channel_tell_depth(struct lightningd *ld,
 	subd_send_msg(channel->owner,
 		      take(towire_channeld_funding_depth(
 			  NULL, channel->scid, channel->alias[LOCAL], depth,
-			  channel->state == CHANNELD_AWAITING_SPLICE)));
+			  channel->state == CHANNELD_AWAITING_SPLICE, txid)));
 
 	if (channel->remote_channel_ready &&
 	    channel->state == CHANNELD_AWAITING_LOCKIN &&

@@ -1773,11 +1773,10 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 	bool min_depth_reached = depth >= channel->minimum_depth;
 	bool min_depth_no_scid = min_depth_reached && !channel->scid;
 	bool some_depth_has_scid = depth && channel->scid;
-
+	
 	/* Reorg can change scid, so always update/save scid when possible (depth=0
 	 * means the stale block with our funding tx was removed) */
-	if (channel->state != CHANNELD_AWAITING_SPLICE
-	    && (min_depth_no_scid || some_depth_has_scid)) {
+	if (min_depth_no_scid || some_depth_has_scid) {
 		struct txlocator *loc;
 		struct channel_inflight *inf;
 
@@ -1817,7 +1816,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 
 		/* If we restart, we could already have peer->scid from database,
 		 * we don't need to update scid for stub channels(1x1x1) */
-		if (!channel->scid) {
+		if (!channel->scid || channel->state == CHANNELD_AWAITING_SPLICE) {
 			channel->scid = tal(channel, struct short_channel_id);
 			*channel->scid = scid;
 			wallet_channel_save(ld->wallet, channel);
@@ -1837,8 +1836,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 										  channel->peer->connectd_counter,
 										  warning)));
 		}
-		else if (channel->state != CHANNELD_AWAITING_SPLICE
-			&& !short_channel_id_eq(channel->scid, &scid)) {
+		else if (!short_channel_id_eq(channel->scid, &scid)) {
 
 			/* When we restart channeld, it will be initialized with updated scid
 			 * and also adds it (at least our halve_chan) to rtable. */
