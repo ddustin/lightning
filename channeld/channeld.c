@@ -284,13 +284,8 @@ static void end_stfu_mode(struct peer *peer)
 static void maybe_send_stfu(struct peer *peer)
 {
 	if (!peer->stfu) {
-		status_unusual("maybe_send_stfu called while not in STFU mode (ignored).");
 		return;
 	}
-
-	status_debug("maybe_send_stfu but yeschanneld is %s",
-		type_to_string(tmpctx, struct channel_id,
-					       &peer->channel_id));
 
 	if (!peer->stfu_sent[LOCAL] && !pending_updates(peer->channel, LOCAL, false)) {
 		status_debug("Sending peer that we want to STFU.");
@@ -300,7 +295,7 @@ static void maybe_send_stfu(struct peer *peer)
 		peer->stfu_sent[LOCAL] = true;
 	}
 	else if(pending_updates(peer->channel, LOCAL, false)) {
-		status_debug("Pending updates prevent us from STFU mode at this time.");
+		status_info("Pending updates prevent us from STFU mode at this time.");
 	}
 
 	if (peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE]) {
@@ -314,9 +309,6 @@ static void maybe_send_stfu(struct peer *peer)
 			peer->on_stfu_success(peer);
 			peer->on_stfu_success = NULL;
 		}
-	}
-	else {
-		status_debug("STFU in await mode.");
 	}
 }
 
