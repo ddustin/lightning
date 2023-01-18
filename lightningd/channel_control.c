@@ -1813,6 +1813,13 @@ static struct command_result *splice_load_channel(struct command *cmd,
 				    "abnormal owner state %s",
 				    (*channel)->owner->name);
 
+	if ((*channel)->state != CHANNELD_STATE_NORMAL)
+		return command_fail(cmd,
+				    SPLICE_INVALID_CHANNEL_STATE,
+				    "Channel needs to be in normal state but "
+				    "is in state %s"
+				    channel_state_name(*channel));
+
 	return NULL;
 }
 
