@@ -598,8 +598,6 @@ static void announce_channel(struct peer *peer)
 {
 	u8 *cannounce;
 
-	send_channel_update(peer, 0);
-
 	cannounce = create_channel_announcement(tmpctx, peer);
 
 	wire_sync_write(MASTER_FD,
