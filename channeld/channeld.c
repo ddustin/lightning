@@ -694,7 +694,7 @@ static void check_mutual_splice_locked(struct peer *peer)
 	    || !peer->splice_locked_ready[REMOTE])
 		return;
 
-	/* This splice_locked event is used, so reset the flages to false */
+	/* This splice_locked event is used, so reset the flags to false */
 	peer->splice_locked_ready[LOCAL] = false;
 	peer->splice_locked_ready[REMOTE] = false;
 	peer->have_sigs[LOCAL] = false;
