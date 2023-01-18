@@ -68,7 +68,7 @@ struct interactivetx_context *new_interactivetx_context(const tal_t *ctx,
 	ictx->channel_id = channel_id;
 	ictx->tx_add_input_count = 0;
 	ictx->tx_add_output_count = 0;
-	ictx->next_update = default_next_update;
+	ictx->next_update_fn = default_next_update;
 	ictx->current_psbt = create_psbt(ictx, 0, 0, 0);
 	ictx->desired_psbt = NULL;
 	ictx->pause_when_complete = false;
@@ -337,10 +337,10 @@ char *process_interactivetx_updates(const tal_t *ctx,
 	/* Build change_set and handle PSBT variables */
 	ictx->change_set = tal_free(ictx->change_set);
 
-	/* Call next_update or default to 'desired_psbt' */
-	next_psbt = ictx->next_update(ictx, ictx);
+	/* Call next_update_fn or default to 'desired_psbt' */
+	next_psbt = ictx->next_update_fn(ictx, ictx);
 
-	/* Returning NULL from next_update is the same as using `current_psbt`
+	/* Returning NULL from next_update_fn is the same as using `current_psbt`
 	 * with no changes -- both indicate no changes */
 	if (!next_psbt)
 		next_psbt = ictx->current_psbt;

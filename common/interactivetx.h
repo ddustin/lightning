@@ -41,14 +41,14 @@ struct interactivetx_context {
 	 * If no more changes are demanded, return NULL or current_psbt
 	 * unchanged to signal completion.
 	 */
-	struct wally_psbt *(*next_update)(const tal_t *ctx,
+	struct wally_psbt *(*next_update_fn)(const tal_t *ctx,
 					  struct interactivetx_context *ictx);
 
 	/* Set this to the intial psbt. Defaults to an empty PSBT. */
 	struct wally_psbt *current_psbt;
 
 	/* Optional field for storing your side's desired psbt state, to be
-	 * used inside 'next_update'.
+	 * used inside 'next_update_fn'.
 	 */
 	struct wally_psbt *desired_psbt;
 

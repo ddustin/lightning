@@ -3004,7 +3004,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	 *    - MUST begin splice negotiation.
 	 */
 
-	ictx->next_update = next_splice_step;
+	ictx->next_update_fn = next_splice_step;
 	ictx->desired_psbt = NULL;
 	ictx->pause_when_complete = false;
 
@@ -3356,7 +3356,7 @@ static void splice_intiator(struct peer *peer, const u8 *inmsg)
 	peer->splice_locked_ready[LOCAL] = false;
 	peer->splice_locked_ready[REMOTE] = false;
 
-	ictx->next_update = next_splice_step;
+	ictx->next_update_fn = next_splice_step;
 	ictx->pause_when_complete = true;
 	ictx->desired_psbt = peer->current_psbt;
 
@@ -3449,7 +3449,7 @@ static void splice_initiator_user_finalized(struct peer *peer)
 	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
 					 peer->pps, peer->channel_id);
 
-	ictx->next_update = next_splice_step;
+	ictx->next_update_fn = next_splice_step;
 	ictx->pause_when_complete = false;
 	ictx->current_psbt = peer->current_psbt;
 	ictx->desired_psbt = ictx->current_psbt;
@@ -3499,7 +3499,7 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
 					 peer->pps, peer->channel_id);
 
-	ictx->next_update = next_splice_step;
+	ictx->next_update_fn = next_splice_step;
 	ictx->pause_when_complete = true;
 
 	/* Should already have a current_psbt from a previously initiated one */
