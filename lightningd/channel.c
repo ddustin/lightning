@@ -549,6 +549,12 @@ const char *channel_state_str(enum channel_state state)
 	return "unknown";
 }
 
+bool channel_state_normalish(const struct channel *channel)
+{
+	return channel->state == CHANNELD_NORMAL
+		|| channel->state == CHANNELD_AWAITING_SPLICE;
+}
+
 struct channel *peer_any_active_channel(struct peer *peer, bool *others)
 {
 	struct channel *channel, *ret = NULL;
