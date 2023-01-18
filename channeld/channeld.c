@@ -191,13 +191,6 @@ struct peer {
 	struct bitcoin_txid splice_locked_txid;
 	/* The active inflights */
 	struct inflight *inflights;
-
-	/* DTODO: instead of querying all inflights with
-	 * channeld_get_inflight / channeld_got_inflight, add the individual
-	 * inflights here by hand *after* we get ack back from lightningd
-	 * stored it.
-	 * Also have lightningd send us all the inflights on init
-	 */
 #endif
 
 #if DEVELOPER
