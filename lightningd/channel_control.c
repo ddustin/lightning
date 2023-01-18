@@ -331,39 +331,6 @@ static void handle_splice_lookup_tx(struct lightningd *ld,
 	subd_send_msg(channel->owner, take(outmsg));
 }
 
-/* Channeld sends us this message in response to `splice_finalize` completing */
-static void handle_splice_confirmed_finalize(struct lightningd *ld,
-					     struct channel *channel,
-					     const u8 *msg)
-{
-	struct splice_command *cc;
-	struct splice_command *n;
-	struct wally_psbt *psbt;
-
-	if (!fromwire_channeld_splice_confirmed_finalize(tmpctx,
-							msg,
-							&psbt)) {
-		channel_internal_error(channel,
-				       "bad splice_confirmed_update %s",
-				       tal_hex(channel, msg));
-		return;
-	}
-
-	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if (channel != cc->channel)
-			continue;
-
-		struct json_stream *response = json_stream_success(cc->cmd);
-		json_add_string(response, "message", "Splice finalized");
-		json_add_string(response, "psbt", psbt_to_b64(tmpctx, psbt));
-
-		was_pending(command_success(cc->cmd, response));
-
-		list_del(&cc->list);
-		tal_free(cc);
-	}
-}
-
 /* Extra splice data we want to store for bitcoin send tx interface */
 struct send_splice_info
 {
@@ -1160,9 +1127,6 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 		break;
 	case WIRE_CHANNELD_SPLICE_LOOKUP_TX:
 		handle_splice_lookup_tx(sd->ld, sd->channel, msg);
-		break;
-	case WIRE_CHANNELD_SPLICE_CONFIRMED_FINALIZE:
-		handle_splice_confirmed_finalize(sd->ld, sd->channel, msg);
 		break;
 	case WIRE_CHANNELD_SPLICE_CONFIRMED_SIGNED:
 		handle_splice_confirmed_signed(sd->ld, sd->channel, msg);
