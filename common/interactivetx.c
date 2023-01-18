@@ -315,7 +315,7 @@ bool interactivetx_has_changes(struct interactivetx_context *ictx,
 							ictx->current_psbt,
 							next_psbt);
 
-	if(!set)
+	if (!set)
 		return true;
 
 	return tal_count(set->added_ins) || tal_count(set->rm_ins)

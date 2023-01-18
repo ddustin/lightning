@@ -539,7 +539,7 @@ static u8 *create_unsigned_update(const tal_t *ctx,
 	channel_flags = direction;
 	if (disable)
 		channel_flags |= ROUTING_FLAGS_DISABLED;
-	if(splicing)
+	if (splicing)
 		channel_flags |= ROUTING_FLAGS_SPLICING;
 
 	/* BOLT #7:

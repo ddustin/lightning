@@ -55,33 +55,33 @@ static size_t index_of_pubkey_in_multisig(const unsigned char *pubkey,
 					  const unsigned char *witness_script,
 					  size_t witness_script_len)
 {
-	if(!witness_script_len)
+	if (!witness_script_len)
 		return SIZE_MAX;
 
 	/* Currently only support 1-16 required signatures
 	 *
 	 * 0x51: OP_1
 	 * 0x60: OP_16 */
-	if(*witness_script < 0x51 || *witness_script > 0x60)
+	if (*witness_script < 0x51 || *witness_script > 0x60)
 		return SIZE_MAX;
 
 	size_t pubkey_index = 0;
 
-	for(int i = 1; i < witness_script_len; ) {
+	for (int i = 1; i < witness_script_len; ) {
 
 		unsigned char item_size = witness_script[i];
 
 		 /* item_size must be a raw push data */
-		if(item_size < 0x01 || item_size > 0x4b)
+		if (item_size < 0x01 || item_size > 0x4b)
 			break;
 
-		if(++i + item_size >= witness_script_len)
+		if (++i + item_size >= witness_script_len)
 			break;
 
 		/* Check for pubkey binary match */
 
-		if(item_size == pubkey_len)
-			if(0 == memcmp(witness_script + i,
+		if (item_size == pubkey_len)
+			if (0 == memcmp(witness_script + i,
 				       pubkey,
 				       item_size))
 				return pubkey_index;
@@ -100,7 +100,7 @@ int psbt_finalize_multisig_signatures(const tal_t *ctx,
 
 	tal_wally_start();
 
-	if(!in->final_witness)
+	if (!in->final_witness)
 		wally_tx_witness_stack_init_alloc(1,
 						  &in->final_witness);
 
@@ -108,7 +108,7 @@ int psbt_finalize_multisig_signatures(const tal_t *ctx,
 	 * the witness script
 	 */
 
-	if(!in->final_witness->num_items) {
+	if (!in->final_witness->num_items) {
 
 		wally_tx_witness_stack_add(in->final_witness,
 					   NULL,
@@ -121,7 +121,7 @@ int psbt_finalize_multisig_signatures(const tal_t *ctx,
 
 	/* Add signatures to the witness stack */
 
-	for(int i = 0; i < in->signatures.num_items; i++) {
+	for (int i = 0; i < in->signatures.num_items; i++) {
 
 		u8 der[EC_SIGNATURE_DER_MAX_LEN + 1];
 		struct wally_map_item *item = &in->signatures.items[i];
@@ -136,7 +136,7 @@ int psbt_finalize_multisig_signatures(const tal_t *ctx,
 
 		/* If the public key is not found in the witness script, skip */
 
-		if(pubkey_index == SIZE_MAX)
+		if (pubkey_index == SIZE_MAX)
 			continue;
 
 		/* Because the first signature is always an empty one, we move
@@ -152,7 +152,7 @@ int psbt_finalize_multisig_signatures(const tal_t *ctx,
 
 		/* If the signature is not DER encoded, let's encode it */
 
-		if(item->value_len == sizeof(secp256k1_ecdsa_signature)) {
+		if (item->value_len == sizeof(secp256k1_ecdsa_signature)) {
 
 			secp256k1_ecdsa_signature *sig;
 
@@ -175,21 +175,21 @@ int psbt_finalize_multisig_signatures(const tal_t *ctx,
 
 		bool is_already_present = false;
 
-		for(int j = 0; j < in->final_witness->num_items; j++) {
+		for (int j = 0; j < in->final_witness->num_items; j++) {
 
 			struct wally_tx_witness_item *cmp_item =
 				&in->final_witness->items[j];
 
-			if(value_len != cmp_item->witness_len)
+			if (value_len != cmp_item->witness_len)
 				continue;
 
-			if(0 == memcmp(value,
+			if (0 == memcmp(value,
 				       cmp_item->witness,
 				       value_len))
 				is_already_present = true;
 		}
 
-		if(is_already_present)
+		if (is_already_present)
 			continue;
 
 		/* wally current has no witness stack insert, so we must
@@ -252,7 +252,7 @@ psbt_to_witness_stacks(const tal_t *ctx,
 			/* FIXME: throw an error ? */
 			return NULL;
 
-		if(input_index_to_ignore == i)
+		if (input_index_to_ignore == i)
 			continue;
 
 		/* BOLT-f53ca2301232db780843e894f55d95d512f297f9 #2:

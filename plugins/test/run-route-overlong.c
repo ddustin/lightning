@@ -265,9 +265,9 @@ static void update_connection(int store_fd,
 	u8 flags = node_id_idx(from, to);
 	u8 *msg;
 
-	if(disable)
+	if (disable)
 		flags |= ROUTING_FLAGS_DISABLED;
-	if(splicing)
+	if (splicing)
 		flags |= ROUTING_FLAGS_SPLICING;
 
 	/* So valgrind doesn't complain */

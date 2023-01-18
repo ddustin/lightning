@@ -750,7 +750,7 @@ static void check_mutual_splice_locked(struct peer *peer)
 				       peer->channel->starting_local_msats,
 				       inflight->local_funding);
 
-	if(error)
+	if (error)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Splice lock unable to update funding. %s",
 				 error);
@@ -1981,19 +1981,19 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 		     tal_count(htlc_sigs));
 
 	/* First pass some common error scenarios for nicer log outputs */
-	if(peer->splice_count) {
-		if(!cs_tlv)
+	if (peer->splice_count) {
+		if (!cs_tlv)
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Bad commitment_signed mesage"
 					 " without a splice commit sig"
 					 " section during a splice.");
-		if(!cs_tlv->splice_commitsigs
+		if (!cs_tlv->splice_commitsigs
 		   || !tal_count(cs_tlv->splice_commitsigs))
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Bad commitment_signed mesage"
 					 " without a (needed) splice commit sig"
 					 " section.");
-		if(tal_count(cs_tlv->splice_commitsigs) != peer->splice_count)
+		if (tal_count(cs_tlv->splice_commitsigs) != peer->splice_count)
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Bad commitment_signed message with"
 					 " an incorrect number of splice"
@@ -2626,7 +2626,7 @@ static bool is_openers(const struct wally_map *unknowns)
 static bool do_i_sign_first(struct peer *peer, struct wally_psbt *psbt,
 			    enum tx_role our_role)
 {
-	if(peer->splice_force_sign_first)
+	if (peer->splice_force_sign_first)
 		return true;
 
 	struct amount_sat opener_in = AMOUNT_SAT(0);
@@ -2641,10 +2641,10 @@ static bool do_i_sign_first(struct peer *peer, struct wally_psbt *psbt,
 					 "signing order");
 	}
 
-	if(amount_sat_less(accepter_in, opener_in))
+	if (amount_sat_less(accepter_in, opener_in))
 		return our_role == TX_ACCEPTER;
 
-	if(amount_sat_less(opener_in, accepter_in))
+	if (amount_sat_less(opener_in, accepter_in))
 		return our_role == TX_INITIATOR;
 	
 	/* Current tiebreaker is initiator goes first but may change as signing
@@ -2745,11 +2745,11 @@ static struct wally_tx_output *find_channel_output(struct peer *peer,
 	scriptpubkey = scriptpubkey_p2wsh(psbt, wit_script);
 
 	for (int i = 0; i < psbt->tx->num_outputs; i++) {
-		if(memeq(psbt->tx->outputs[i].script,
+		if (memeq(psbt->tx->outputs[i].script,
 			 psbt->tx->outputs[i].script_len,
 			 scriptpubkey,
 			 tal_bytelen(scriptpubkey))) {
-			if(chan_output_index)
+			if (chan_output_index)
 				*chan_output_index = i;
 			return &psbt->tx->outputs[i];
 		}
@@ -2757,7 +2757,7 @@ static struct wally_tx_output *find_channel_output(struct peer *peer,
 
 	status_failed(STATUS_FAIL_INTERNAL_ERROR,
 		      "Unable to find channel output");
-	if(chan_output_index)
+	if (chan_output_index)
 		*chan_output_index = -1;
 	return NULL;
 }
@@ -2776,7 +2776,7 @@ static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
 				weight += psbt_input_weight(psbt, i);
 		}
 		else
-			if(role != TX_INITIATOR)
+			if (role != TX_INITIATOR)
 				weight += psbt_input_weight(psbt, i);
 
 	return weight;
@@ -2808,11 +2808,11 @@ static struct amount_sat check_balances(struct peer *peer,
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Input %d of splice does not have an input amount",
 					 i);
-		if(!amount_sat_add(&total_in, total_in, amount))
+		if (!amount_sat_add(&total_in, total_in, amount))
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Unable to amount_sat_add input amounts");
 		/* amount_sat_add would have failed above so no need to check */
-		if(is_openers(&psbt->inputs[i].unknowns))
+		if (is_openers(&psbt->inputs[i].unknowns))
 			res = amount_sat_add(&opener_in, opener_in, amount);
 		else
 			res = amount_sat_add(&accepter_in, accepter_in, amount);
@@ -2826,14 +2826,14 @@ static struct amount_sat check_balances(struct peer *peer,
 	for (int i = 0; i < psbt->tx->num_outputs; i++) {
 		struct amount_sat amount = psbt_output_get_amount(psbt, i);
 		bool res;
-		if(i == chan_output_index)
+		if (i == chan_output_index)
 			continue;
 
-		if(!amount_sat_add(&change_out, change_out, amount))
+		if (!amount_sat_add(&change_out, change_out, amount))
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Unable to amount_sat_add output amounts");
 		/* amount_sat_add would have already failed above */
-		if(is_openers(&psbt->outputs[i].unknowns))
+		if (is_openers(&psbt->outputs[i].unknowns))
 			res = amount_sat_add(&opener_out, opener_out, amount);
 		else
 			res = amount_sat_add(&accepter_out, accepter_out, amount);
@@ -2841,7 +2841,7 @@ static struct amount_sat check_balances(struct peer *peer,
 	}
 
 	/* Calculate total channel output amount */
-	if(!amount_sat_add(&funding_amount,
+	if (!amount_sat_add(&funding_amount,
 			   peer->splice_opener_funding,
 			   peer->splice_accepter_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -2865,7 +2865,7 @@ static struct amount_sat check_balances(struct peer *peer,
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate intiator fee");
 	/* An extra check for cleaner log messages */
-	if(amount_sat_less(initiator_fee, peer->splice_opener_funding)) {
+	if (amount_sat_less(initiator_fee, peer->splice_opener_funding)) {
 		msg = towire_channeld_splice_funding_error(NULL, initiator_fee,
 							   peer->splice_opener_funding,
 							   true);
@@ -2883,7 +2883,7 @@ static struct amount_sat check_balances(struct peer *peer,
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate accepter fee");
 	/* An extra check for cleaner log messages */
-	if(amount_sat_less(accepter_fee, peer->splice_accepter_funding)) {
+	if (amount_sat_less(accepter_fee, peer->splice_accepter_funding)) {
 		msg = towire_channeld_splice_funding_error(NULL, accepter_fee,
 							   peer->splice_accepter_funding,
 							   false);
@@ -2992,7 +2992,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Bad wire_splice %s", tal_hex(tmpctx, inmsg));
 
-	if(!peer->stfu_sent[LOCAL] || !peer->stfu_sent[REMOTE])
+	if (!peer->stfu_sent[LOCAL] || !peer->stfu_sent[REMOTE])
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Must be in STFU mode before intiating splice");
 
@@ -3089,7 +3089,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	master_wait_sync_reply(tmpctx, peer, take(msg),
 			       WIRE_CHANNELD_GOT_INFLIGHT);
 
-	if(peer->inflights)
+	if (peer->inflights)
 		tal_resize(&peer->inflights, tal_count(peer->inflights) + 1);
 	else
 		peer->inflights = tal_arr(peer, struct inflight, 1);
@@ -3429,7 +3429,7 @@ static void splice_intiator(struct peer *peer, const u8 *inmsg)
 	peer->tx_add_input_count = ictx->tx_add_input_count;
 	peer->tx_add_output_count = ictx->tx_add_output_count;
 
-	if(peer->current_psbt != ictx->current_psbt)
+	if (peer->current_psbt != ictx->current_psbt)
 		tal_free(peer->current_psbt);
 	peer->current_psbt = tal_steal(peer, ictx->current_psbt);
 
@@ -3527,7 +3527,7 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 	}
 
 	error = process_interactivetx_updates(tmpctx, ictx, &peer->received_tx_complete);
-	if(error)
+	if (error)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				"Splice update error: %s", error);
 
@@ -3536,7 +3536,7 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 	peer->tx_add_input_count = ictx->tx_add_input_count;
 	peer->tx_add_output_count = ictx->tx_add_output_count;
 
-	if(peer->current_psbt != ictx->current_psbt)
+	if (peer->current_psbt != ictx->current_psbt)
 		tal_free(peer->current_psbt);
 	peer->current_psbt = tal_steal(peer, ictx->current_psbt);
 
@@ -3610,7 +3610,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	master_wait_sync_reply(tmpctx, peer, take(msg),
 			       WIRE_CHANNELD_GOT_INFLIGHT);
 
-	if(peer->inflights)
+	if (peer->inflights)
 		tal_resize(&peer->inflights, tal_count(peer->inflights) + 1);
 	else
 		peer->inflights = tal_arr(peer, struct inflight, 1);
@@ -3731,7 +3731,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	outmsg = towire_channeld_update_inflight(NULL, signed_psbt);
 	wire_sync_write(MASTER_FD, take(outmsg));
 
-	if(!do_i_sign_first(peer, signed_psbt, TX_INITIATOR)) {
+	if (!do_i_sign_first(peer, signed_psbt, TX_INITIATOR)) {
 		status_debug("Splice accepter: we sign first");
 		peer_write(peer->pps, take(sigout_msg));
 	}

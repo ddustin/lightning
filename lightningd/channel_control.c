@@ -149,7 +149,7 @@ static void handle_splice_funding_error(struct lightningd *ld,
 	struct amount_sat funding, req_funding;
 	bool opener_error;
 
-	if(!fromwire_channeld_splice_funding_error(msg, &funding,
+	if (!fromwire_channeld_splice_funding_error(msg, &funding,
 						   &req_funding,
 						   &opener_error)) {
 		channel_internal_error(channel,
@@ -159,7 +159,7 @@ static void handle_splice_funding_error(struct lightningd *ld,
 	}
 
 	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if(channel != cc->channel)
+		if (channel != cc->channel)
 			continue;
 
 		struct json_stream *response = json_stream_success(cc->cmd);
@@ -195,7 +195,7 @@ static void handle_splice_feerate_error(struct lightningd *ld,
 	struct amount_sat fee;
 	bool too_high;
 
-	if(!fromwire_channeld_splice_feerate_error(msg, &fee, &too_high)) {
+	if (!fromwire_channeld_splice_feerate_error(msg, &fee, &too_high)) {
 		channel_internal_error(channel,
 				       "bad fromwire_channeld_splice_feerate_error %s",
 				       tal_hex(channel, msg));
@@ -203,13 +203,13 @@ static void handle_splice_feerate_error(struct lightningd *ld,
 	}
 
 	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if(channel != cc->channel)
+		if (channel != cc->channel)
 			continue;
 
 		struct json_stream *response = json_stream_success(cc->cmd);
 		json_add_string(response, "message", "Splice feerate failed");
 
-		if(too_high)
+		if (too_high)
 			json_add_string(response, "error",
 					tal_fmt(tmpctx, "Feerate too high. Do you "
 						"really want to spend %s on fees?",
@@ -249,7 +249,7 @@ static void handle_splice_confirmed_init(struct lightningd *ld,
 	}
 
 	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if(channel != cc->channel)
+		if (channel != cc->channel)
 			continue;
 
 		struct json_stream *response = json_stream_success(cc->cmd);
@@ -284,7 +284,7 @@ static void handle_splice_confirmed_update(struct lightningd *ld,
 	}
 
 	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if(channel != cc->channel)
+		if (channel != cc->channel)
 			continue;
 
 		struct json_stream *response = json_stream_success(cc->cmd);
@@ -350,7 +350,7 @@ static void handle_splice_confirmed_finalize(struct lightningd *ld,
 	}
 
 	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if(channel != cc->channel)
+		if (channel != cc->channel)
 			continue;
 
 		struct json_stream *response = json_stream_success(cc->cmd);
@@ -422,7 +422,7 @@ static void send_splice_tx_done(struct bitcoind *bitcoind UNUSED,
 	if (num_utxos)
 		wallet_transaction_add(ld->wallet, info->final_tx->wtx, 0, 0);
 
-	if(cc) {
+	if (cc) {
 		response = json_stream_success(cc->cmd);
 
 		json_add_string(response, "message", "Splice confirmed");
@@ -495,7 +495,7 @@ static void handle_splice_confirmed_signed(struct lightningd *ld,
 
 	/* First look for a matching user command for this splice */
 	list_for_each_safe(&ld->splice_commands, cc, n, list) {
-		if(channel != cc->channel)
+		if (channel != cc->channel)
 			continue;
 
 		channel_set_state(channel,
@@ -1086,7 +1086,7 @@ static bool get_inflight_outpoint_index(struct channel *channel,
 	struct channel_inflight *inflight;
 
 	list_for_each(&channel->inflights, inflight, list) {
-		if(bitcoin_txid_eq(txid, &inflight->funding->outpoint.txid)) {
+		if (bitcoin_txid_eq(txid, &inflight->funding->outpoint.txid)) {
 			*index = inflight->funding->outpoint.n;
 			return true;
 		}
@@ -1815,7 +1815,7 @@ static struct channel *splice_load_channel(struct command *cmd,
 		return NULL;
 	}
 
-	if(!streq(channel->owner->name, "channeld")) {
+	if (!streq(channel->owner->name, "channeld")) {
 		*error = command_fail(cmd,
 				    SPLICE_WRONG_OWNER,
 				    "Channel hasn't finished connecting or in "
@@ -1842,7 +1842,7 @@ static struct command_result *json_splice_init(struct command *cmd,
 	bool *force_feerate;
 	u8 *msg;
 
-	if(!param(cmd, buffer, params,
+	if (!param(cmd, buffer, params,
 		  p_req("channel_id", param_channel_id, &cid),
 		  p_req("amount", param_sat, &amount),
 		  p_opt("initialpsbt", param_psbt, &initialpsbt),
@@ -1891,7 +1891,7 @@ static struct command_result *json_splice_update(struct command *cmd,
 	struct wally_psbt *psbt;
 	struct command_result *error;
 
-	if(!param(cmd, buffer, params,
+	if (!param(cmd, buffer, params,
 		  p_req("channel_id", param_channel_id, &cid),
 		  p_req("psbt", param_psbt, &psbt),
 		  NULL))
@@ -1926,7 +1926,7 @@ static struct command_result *json_splice_signed(struct command *cmd,
 	struct command_result *error;
 	bool *sign_first;
 
-	if(!param(cmd, buffer, params,
+	if (!param(cmd, buffer, params,
 		  p_req("channel_id", param_channel_id, &cid),
 		  p_req("psbt", param_psbt, &psbt),
 		  p_opt_def("sign_first", param_bool, &sign_first, false),
