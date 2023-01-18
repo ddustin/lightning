@@ -174,11 +174,11 @@ struct peer {
 	/* Callback for when when stfu is negotiated successfully */
 	void (*on_stfu_success)(struct peer*);
 	/* The number of splices that have been signed & committed */
-	int committed_splice_count;
+	u32 committed_splice_count;
 	/* the number of splices that have been revoke_and_ack'ed */
-	int revoked_splice_count;
+	u32 revoked_splice_count;
 	/* The number of splices that are active (awaiting confirmation) */
-	int splice_count;
+	u32 splice_count;
 	/* Track how many of each tx collab msg we receive */
 	u16 tx_add_input_count, tx_add_output_count;
 	/* Current negoitated psbt */
