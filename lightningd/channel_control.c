@@ -1782,49 +1782,38 @@ void channel_replace_update(struct channel *channel, u8 *update TAKES)
 							  channel->channel_update)));
 }
 
-static struct channel *splice_load_channel(struct command *cmd,
-					   struct channel_id *cid,
-					   struct command_result **error)
+/* Returns an error if load fails */
+static struct command_result *splice_load_channel(struct command *cmd,
+						  struct channel_id *cid,
+						  struct channel **channel)
 {
-	struct channel *channel;
-
-	*error = NULL;
-
-	channel = channel_by_cid(cmd->ld, cid);
-	if (!channel) {
-		*error = command_fail(cmd, SPLICE_UNKNOWN_CHANNEL,
+	*channel = channel_by_cid(cmd->ld, cid);
+	if (!*channel)
+		return command_fail(cmd, SPLICE_UNKNOWN_CHANNEL,
 				    "Unknown channel %s",
 				    type_to_string(tmpctx, struct channel_id,
 						   cid));
-		return NULL;
-	}
 
 	/* DTODO: Register splicing feature bits and change check below */
 	if (!feature_negotiated(cmd->ld->our_features,
-			        channel->peer->their_features,
-				OPT_DUAL_FUND)) {
-		*error = command_fail(cmd, FUNDING_V2_NOT_SUPPORTED,
+			        (*channel)->peer->their_features,
+				OPT_DUAL_FUND))
+		return command_fail(cmd, FUNDING_V2_NOT_SUPPORTED,
 				    "v2 openchannel not supported "
 				    "by peer");
-		return NULL;
-	}
 
-	if (!channel->owner) {
-		*error = command_fail(cmd, SPLICE_WRONG_OWNER,
+	if (!(*channel)->owner)
+		return command_fail(cmd, SPLICE_WRONG_OWNER,
 				    "Channel is disconnected");
-		return NULL;
-	}
 
-	if (!streq(channel->owner->name, "channeld")) {
-		*error = command_fail(cmd,
+	if (!streq((*channel)->owner->name, "channeld"))
+		return command_fail(cmd,
 				    SPLICE_WRONG_OWNER,
 				    "Channel hasn't finished connecting or in "
 				    "abnormal owner state %s",
-				    channel->owner->name);
-		return NULL;
-	}
+				    (*channel)->owner->name);
 
-	return channel;
+	return NULL;
 }
 
 static struct command_result *json_splice_init(struct command *cmd,
@@ -1851,7 +1840,7 @@ static struct command_result *json_splice_init(struct command *cmd,
 		  NULL))
 		return command_param_failed();
 
-	channel = splice_load_channel(cmd, cid, &error);
+	error = splice_load_channel(cmd, cid, &channel);
 	if (error)
 		return error;
 
@@ -1897,7 +1886,7 @@ static struct command_result *json_splice_update(struct command *cmd,
 		  NULL))
 		return command_param_failed();
 
-	channel = splice_load_channel(cmd, cid, &error);
+	error = splice_load_channel(cmd, cid, &channel);
 	if (error)
 		return error;
 
@@ -1933,7 +1922,7 @@ static struct command_result *json_splice_signed(struct command *cmd,
 		  NULL))
 		return command_param_failed();
 
-	channel = splice_load_channel(cmd, cid, &error);
+	error = splice_load_channel(cmd, cid, &channel);
 	if (error)
 		return error;
 
