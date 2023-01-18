@@ -106,7 +106,7 @@ bool hsmd_check_client_capabilities(struct hsmd_client *client,
 		return (client->capabilities & HSM_CAP_SIGN_CLOSING_TX) != 0;
 
 	case WIRE_HSMD_SIGN_SPLICE_TX:
-		return (client->capabilities & HSM_CAP_SIGN_CLOSING_TX) != 0;
+		return true; /* DTODO: Add splice signing capability flag */
 
 	case WIRE_HSMD_SIGN_OPTION_WILL_FUND_OFFER:
 		return (client->capabilities & HSM_CAP_SIGN_WILL_FUND_OFFER) != 0;
