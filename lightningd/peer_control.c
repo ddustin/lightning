@@ -1835,8 +1835,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 										  &channel->peer->id,
 										  channel->peer->connectd_counter,
 										  warning)));
-		}
-		else if (!short_channel_id_eq(channel->scid, &scid)) {
+		} else if (!short_channel_id_eq(channel->scid, &scid)) {
 
 			/* When we restart channeld, it will be initialized with updated scid
 			 * and also adds it (at least our halve_chan) to rtable. */
