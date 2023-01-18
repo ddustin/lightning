@@ -1467,7 +1467,9 @@ bool channel_tell_depth(struct lightningd *ld,
 		if (!get_inflight_outpoint_index(channel, &outnum, txid)) {
 			channel_fail_permanent(channel,
 					       REASON_LOCAL,
-					       "Can't locate splice inflight");
+					       "Can't locate splice inflight "
+					       "txid %s",
+					       txidstr);
 			return false;
 		}
 
@@ -1476,7 +1478,7 @@ bool channel_tell_depth(struct lightningd *ld,
 			channel_fail_permanent(channel,
 					       REASON_LOCAL,
 					       "Can't locate splice transaction"
-					       " in wallet");
+					       " in wallet txid %s", txidstr);
 			return false;
 		}
 
@@ -1490,8 +1492,6 @@ bool channel_tell_depth(struct lightningd *ld,
 					       channel->funding.n);
 			return false;
 		}
-
-		tal_steal(channel, channel->scid);
 	}
 
 	if (streq(channel->owner->name, "dualopend")) {
