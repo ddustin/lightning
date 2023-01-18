@@ -185,6 +185,8 @@ struct peer {
 	struct wally_psbt *current_psbt;
 	/* If, in the last splice_update, we tx_complete was received */
 	bool received_tx_complete;
+	/* The pending short channel id for a splice. Set when mutual lock. */
+	struct short_channel_id splice_short_channel_id;
 	/* Tally of which sides are locked, or not */
 	bool splice_locked_ready[NUM_SIDES];
 	/* The txid of which splice inflight was confirmed */
@@ -661,8 +663,7 @@ static void channel_announcement_negotiate(struct peer *peer)
 	/* If we've completed the signature exchange, we can send a real
 	 * announcement, otherwise we send a temporary one */
 	if (peer->have_sigs[LOCAL] && peer->have_sigs[REMOTE]) {
-		// check_short_ids_match(peer);
-		(void)check_short_ids_match;
+		check_short_ids_match(peer);
 
 		/* After making sure short_channel_ids match, we can send remote
 		 * announcement to MASTER. */
@@ -698,6 +699,8 @@ static void check_mutual_splice_locked(struct peer *peer)
 	peer->splice_locked_ready[REMOTE] = false;
 	peer->have_sigs[LOCAL] = false;
 	peer->have_sigs[REMOTE] = false;
+
+	peer->short_channel_ids[LOCAL] = peer->splice_short_channel_id;
 
 	inflight = NULL;
 	for (size_t i = 0; i < tal_count(peer->inflights); i++)
@@ -4856,14 +4859,20 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 	else {
 		peer->depth_togo = 0;
 
-		/* If we know an actual short_channel_id prefer to use
-		 * that, otherwise fill in the alias. From channeld's
-		 * point of view switching from zeroconf to an actual
-		 * funding scid is just a reorg. */
-		if (scid)
-			peer->short_channel_ids[LOCAL] = *scid;
-		else if (alias_local)
-			peer->short_channel_ids[LOCAL] = *alias_local;
+		/* For splicing we only update the short channel id on mutual
+		 * splice lock */
+		if (splicing) {
+			peer->splice_short_channel_id = *scid;
+		} else {
+			/* If we know an actual short_channel_id prefer to use
+			 * that, otherwise fill in the alias. From channeld's
+			 * point of view switching from zeroconf to an actual
+			 * funding scid is just a reorg. */
+			if (scid)
+				peer->short_channel_ids[LOCAL] = *scid;
+			else if (alias_local)
+				peer->short_channel_ids[LOCAL] = *alias_local;
+		}
 
 		if (!peer->channel_ready[LOCAL]) {
 			status_debug("channel_ready: sending commit index"
@@ -4895,11 +4904,8 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 				     short_channel_id_to_str(tmpctx,
 				     			     scid));
 
-			peer->short_channel_ids[LOCAL] = *scid;
-
 			msg = towire_splice_locked(NULL, &peer->channel_id);
 
-			peer->short_channel_ids[REMOTE] = *scid;
 			peer->have_sigs[LOCAL] = false;
 			peer->have_sigs[REMOTE] = false;
 			peer->splice_locked_txid = txid;
