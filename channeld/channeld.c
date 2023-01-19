@@ -2944,7 +2944,6 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	struct pubkey splice_remote_pubkey;
 	char *error;
 	struct bitcoin_outpoint outpoint;
-	u32 their_feerate = channel_feerate(peer->channel, REMOTE);
 	struct bitcoin_tx *bitcoin_tx;
 	struct wally_tx_output *new_chan_outpoint;
 	struct bitcoin_signature splice_sig;
@@ -3060,7 +3059,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	msg = towire_channeld_add_inflight(NULL,
 					   &outpoint.txid,
 					   outpoint.n,
-					   their_feerate,
+					   funding_feerate_perkw,
 					   both_amount,
 					   peer->splice_accepter_funding,
 					   ictx->current_psbt);
@@ -3464,7 +3463,6 @@ static void splice_initiator_user_finalized(struct peer *peer)
 	/* With pause_when_complete fase, this assert should never fail */
 	assert(peer->received_tx_complete);
 
-	psbt_add_serials(ictx->current_psbt, ictx->our_role);
 	psbt_sort_by_serial_id(ictx->current_psbt);
 
 	new_chan_outpoint = find_channel_output(peer, ictx->current_psbt,
@@ -3528,8 +3526,6 @@ static void splice_intiator_user_update(struct peer *peer, const u8 *inmsg)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				"Splice update error: %s", error);
 
-	psbt_add_serials(ictx->current_psbt, ictx->our_role);
-
 	peer->tx_add_input_count = ictx->tx_add_input_count;
 	peer->tx_add_output_count = ictx->tx_add_output_count;
 
@@ -3573,7 +3569,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	size_t der_len;
 	int splice_funding_index = -1;
 	int chan_output_index;
-	u32 their_feerate;
 
 	if (!fromwire_channeld_splice_signed(tmpctx, inmsg, &signed_psbt, &peer->splice_force_sign_first))
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -3593,7 +3588,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 			      		     &current_psbt_txid));
 
 	peer->current_psbt = tal_free(peer->current_psbt);
-	their_feerate = channel_feerate(peer->channel, REMOTE);
 
 	wit_script = bitcoin_redeem_2of2(tmpctx,
 					 &peer->channel->funding_pubkey[REMOTE],
@@ -3611,7 +3605,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	msg = towire_channeld_add_inflight(tmpctx,
 					   &outpoint.txid,
 					   outpoint.n,
-					   their_feerate,
+					   peer->splice_feerate_per_kw,
 					   funding_sats,
 					   peer->splice_opener_funding,
 					   signed_psbt);
