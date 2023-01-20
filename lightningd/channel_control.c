@@ -338,46 +338,17 @@ struct send_splice_info
 	struct channel *channel;
 	const struct bitcoin_tx *final_tx;
 	u32 output_index;
+	const char *err_msg;
 };
 
-/* Callback for after the splice tx is sent to bitcoind */
-static void send_splice_tx_done(struct bitcoind *bitcoind UNUSED,
-				bool success, const char *msg,
-				struct send_splice_info *info)
+static void handle_tx_broadcast(struct send_splice_info *info)
 {
-	/* A NULL value of `cc` means we got here without user intiation.
-	 * This means we are the ACCEPTER side of the splice */
-	struct splice_command *cc = info->cc;
 	struct lightningd *ld = info->channel->peer->ld;
+	struct amount_sat unused;
 	struct json_stream *response;
 	struct bitcoin_txid txid;
-	struct amount_sat unused;
-	int num_utxos;
 	u8 *tx_bytes;
-
-	if (!success) {
-		if (cc)
-			was_pending(command_fail(cc->cmd,
-						 SPLICE_BROADCAST_FAIL,
-						 "Error broadcasting splice "
-						 "tx: %s. Unsent tx discarded "
-						 "%s.",
-						 msg,
-						 type_to_string(tmpctx,
-								struct wally_tx,
-								info->final_tx->wtx)));
-
-		log_unusual(info->channel->log,
-			    "Error broadcasting splice "
-			    "tx: %s. Unsent tx discarded "
-			    "%s.",
-			    msg,
-			    type_to_string(tmpctx,
-			    		   struct wally_tx,
-			    		   info->final_tx->wtx));
-		tal_free(info);
-		return;
-	}
+	int num_utxos;
 
 	tx_bytes = linearize_tx(tmpctx, info->final_tx);
 	bitcoin_txid(info->final_tx, &txid);
@@ -389,19 +360,74 @@ static void send_splice_tx_done(struct bitcoind *bitcoind UNUSED,
 	if (num_utxos)
 		wallet_transaction_add(ld->wallet, info->final_tx->wtx, 0, 0);
 
-	if (cc) {
-		response = json_stream_success(cc->cmd);
+	if (info->cc) {
+		response = json_stream_success(info->cc->cmd);
 
 		json_add_string(response, "message", "Splice confirmed");
 		json_add_hex(response, "tx", tx_bytes, tal_bytelen(tx_bytes));
 		json_add_txid(response, "txid", &txid);
 
-		was_pending(command_success(cc->cmd, response));
+		was_pending(command_success(info->cc->cmd, response));
 
-		list_del(&cc->list);
+		list_del(&info->cc->list);
 	}
+}
+
+/* Succeeds if the utxo was found in the mempool or in the utxo set. If it's in
+ * a block and spent it will fail but we're okay with that here. */
+static void check_utxo_block(struct bitcoind *bitcoind UNUSED,
+			     const struct bitcoin_tx_output *txout,
+			     void *arg)
+{
+	struct send_splice_info *info = arg;
+
+	if(!txout) {
+		if (info->cc)
+			was_pending(command_fail(info->cc->cmd,
+						 SPLICE_BROADCAST_FAIL,
+						 "Error broadcasting splice "
+						 "tx: %s. Unsent tx discarded "
+						 "%s.",
+						 info->err_msg,
+						 type_to_string(tmpctx,
+								struct wally_tx,
+								info->final_tx->wtx)));
+
+		log_unusual(info->channel->log,
+			    "Error broadcasting splice "
+			    "tx: %s. Unsent tx discarded "
+			    "%s.",
+			    info->err_msg,
+			    type_to_string(tmpctx, struct wally_tx,
+			    		   info->final_tx->wtx));
+	}
+	else
+		handle_tx_broadcast(info);
 
 	tal_free(info);
+}
+
+/* Callback for after the splice tx is sent to bitcoind */
+static void send_splice_tx_done(struct bitcoind *bitcoind UNUSED,
+				bool success, const char *msg,
+				struct send_splice_info *info)
+{
+	/* A NULL value of `info->cc` means we got here without user intiation.
+	 * This means we are the ACCEPTER side of the splice */
+	struct lightningd *ld = info->channel->peer->ld;
+	struct bitcoin_outpoint outpoint;
+	
+	bitcoin_txid(info->final_tx, &outpoint.txid);
+	outpoint.n = info->output_index;
+
+	if (!success) {
+		info->err_msg = tal_strdup(info, msg);
+		bitcoind_getutxout(ld->topology->bitcoind, &outpoint,
+				   check_utxo_block, info);
+	} else {
+		handle_tx_broadcast(info);
+		tal_free(info);
+	}
 }
 
 /* Where the splice tx gets finally transmitted to the chain */
@@ -424,6 +450,7 @@ static void send_splice_tx(struct channel *channel,
 	info->channel = channel;
 	info->final_tx = tal_steal(info, tx);
 	info->output_index = output_index;
+	info->err_msg = NULL;
 
 	bitcoind_sendrawtx(ld->topology->bitcoind,
 			   cc ? cc->cmd->id : NULL,
