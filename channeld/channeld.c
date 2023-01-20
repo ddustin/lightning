@@ -2931,10 +2931,12 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 {
 	const u8 *wit_script;
 	const u8 *msg, *sigmsg;
+	u8 **wit_stack;
 	enum peer_wire type;
 	struct interactivetx_context *ictx;
 	struct witness_stack **inws, **outws;
 	struct channel_id cid;
+	struct bitcoin_tx *final_tx;
 	struct bitcoin_txid txid;
 	int splice_funding_index = -1;
 	struct bitcoin_blkid genesis_blockhash;
@@ -2950,9 +2952,8 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	struct bitcoin_signature splice_sig;
 	u8 der[73];
 	size_t der_len;
-	struct tlv_txsigs_tlvs *our_txsigs_tlvs, *their_txsigs_tlvs;	
-	int chan_output_index = 0;
-	int final_sigs_cnt = 0;
+	struct tlv_txsigs_tlvs *our_txsigs_tlvs, *their_txsigs_tlvs;
+	int chan_output_index;
 	struct bitcoin_signature their_sig;
 	struct pubkey *their_pubkey;
 
@@ -3212,9 +3213,6 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 				 splice_funding_index,
 				 wit_script);
 
-	final_sigs_cnt = psbt_finalize_multisig_signatures(ictx->current_psbt,
-							&ictx->current_psbt->inputs[splice_funding_index]);
-
 	if (tal_count(inws) > ictx->current_psbt->num_inputs)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "%lu too many witness elements received",
@@ -3251,6 +3249,14 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		psbt_finalize_input(ictx->current_psbt, in, elem);
 	}
 
+	final_tx = bitcoin_tx_with_psbt(tmpctx, ictx->current_psbt);
+
+	wit_stack = bitcoin_witness_2of2(ictx->current_psbt, &splice_sig, &their_sig,
+					 &peer->channel->funding_pubkey[LOCAL],
+					 their_pubkey);
+
+	bitcoin_tx_input_set_witness(final_tx, splice_funding_index, wit_stack);
+
 	/* DTODO: validate our peer's signatures are correct */
 
 	msg = towire_channeld_update_inflight(NULL, ictx->current_psbt);
@@ -3260,12 +3266,6 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		status_debug("Splice accepter: we sign second");
 		peer_write(peer->pps, sigmsg);
 	}
-
-	struct bitcoin_tx *final_tx = bitcoin_tx_with_psbt(tmpctx,
-							   ictx->current_psbt);
-
-	/* DTODO: Assert final_sigs_cnt is correct value? */
-	(void)final_sigs_cnt;
 
 	msg = towire_channeld_splice_confirmed_signed(tmpctx, final_tx, chan_output_index);
 	wire_sync_write(MASTER_FD, take(msg));
@@ -3594,6 +3594,7 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	const struct witness_stack **ws;
 	const u8 *wit_script;
 	const u8 *msg;
+	u8 **wit_stack;
 	u8 *sigout_msg, *outmsg;
 	u8 der[73];
 	size_t der_len;
@@ -3674,9 +3675,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 			      type_to_string(tmpctx, struct bitcoin_signature, &splice_sig),
 			      type_to_string(tmpctx, struct wally_psbt, signed_psbt));
 
-	psbt_finalize_multisig_signatures(signed_psbt,
-					  &signed_psbt->inputs[splice_funding_index]);
-	
 	txsig_tlvs = tlv_txsigs_tlvs_new(tmpctx);
 	der_len = signature_to_der(der, &splice_sig);
 	txsig_tlvs->funding_outpoint_sig = tal_dup_arr(tmpctx, u8, der,
@@ -3746,7 +3744,16 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 				 splice_funding_index,
 				 wit_script);
 
-	/* DTODO: validate our peer's signatures are correct */
+	final_tx = bitcoin_tx_with_psbt(tmpctx, signed_psbt);
+
+	wit_stack = bitcoin_witness_2of2(signed_psbt, &splice_sig, &their_sig,
+					 &peer->channel->funding_pubkey[LOCAL],
+					 their_pubkey);
+
+	bitcoin_tx_input_set_witness(final_tx, splice_funding_index, wit_stack);
+
+	/* DTODO: validate our peer's signatures are correct
+	 * see closingd.c receive_offer close_tx / check_tx_sig */
 
 	outmsg = towire_channeld_update_inflight(NULL, signed_psbt);
 	wire_sync_write(MASTER_FD, take(outmsg));
@@ -3759,17 +3766,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 	/* Sending of TX_SIGNATURE implies the end of stfu mode */
 	end_stfu_mode(peer);
 
-	// Look at closingd to see how they order & put signatures
-	// closingd.c
-	// channel_set_last_tx
-	//  bitcoin_witness_2of2 (in sign_last_transaction)
-
-	// wallet.h add splicing type to transaction annotation
-	// wallet_transaction_annotate
-
-	psbt_finalize_multisig_signatures(signed_psbt,
-					  &signed_psbt->inputs[splice_funding_index]);
-
 	outmsg = towire_channeld_update_inflight(NULL, signed_psbt);
 	wire_sync_write(MASTER_FD, take(outmsg));
 
@@ -3777,7 +3773,6 @@ static void splice_intiator_user_signed(struct peer *peer, const u8 *inmsg)
 		status_failed(STATUS_FAIL_INTERNAL_ERROR,
 			      "Splice psbt_finalize failed");
 
-	final_tx = bitcoin_tx_with_psbt(tmpctx, signed_psbt);
 	outmsg = towire_channeld_splice_confirmed_signed(tmpctx, final_tx,
 							 chan_output_index);
 	wire_sync_write(MASTER_FD, take(outmsg));
