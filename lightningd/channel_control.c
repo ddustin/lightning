@@ -1212,7 +1212,8 @@ bool peer_start_channeld(struct channel *channel,
 				  | HSM_CAP_ECDH
 				  | HSM_CAP_COMMITMENT_POINT
 				  | HSM_CAP_SIGN_REMOTE_TX
-				  | HSM_CAP_SIGN_ONCHAIN_TX);
+				  | HSM_CAP_SIGN_ONCHAIN_TX
+				  | HSM_CAP_SIGN_CLOSING_TX);
 
 	channel_set_owner(channel,
 			  new_channel_subd(channel, ld,
@@ -1758,13 +1759,11 @@ static struct command_result *splice_load_channel(struct command *cmd,
 				    type_to_string(tmpctx, struct channel_id,
 						   cid));
 
-	/* DTODO: Register splicing feature bits and change check below */
 	if (!feature_negotiated(cmd->ld->our_features,
 			        (*channel)->peer->their_features,
-				OPT_DUAL_FUND))
-		return command_fail(cmd, FUNDING_V2_NOT_SUPPORTED,
-				    "v2 openchannel not supported "
-				    "by peer");
+				OPT_SPLICE))
+		return command_fail(cmd, SPLICE_NOT_SUPPORTED,
+				    "splicing not supported");
 
 	if (!(*channel)->owner)
 		return command_fail(cmd, SPLICE_WRONG_OWNER,
