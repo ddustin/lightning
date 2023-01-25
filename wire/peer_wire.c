@@ -51,6 +51,7 @@ static bool unknown_type(enum peer_wire t)
 	case WIRE_SPLICE:
 	case WIRE_SPLICE_ACK:
 	case WIRE_SPLICE_LOCKED:
+	case WIRE_SPLICE_LOCKED_ACK:
 #endif
 		return false;
 	}
@@ -107,6 +108,7 @@ bool is_msg_for_gossipd(const u8 *cursor)
 	case WIRE_SPLICE:
 	case WIRE_SPLICE_ACK:
 	case WIRE_SPLICE_LOCKED:
+	case WIRE_SPLICE_LOCKED_ACK:
 #endif
 		break;
 	}
@@ -367,7 +369,14 @@ bool extract_channel_id(const u8 *in_pkt, struct channel_id *channel_id)
 		 */
 	case WIRE_SPLICE_LOCKED:
 		/* BOLT-splice #2:
-		 * 1. type: 76 (`splice_locked`)
+		 * 1. type: 78 (`splice_locked`)
+		 * 2. data:
+		 *     * [`chain_hash`:`chain_hash`]
+		 *     * [`channel_id`:`channel_id`]
+		 */
+	case WIRE_SPLICE_LOCKED_ACK:
+		/* BOLT-splice #2:
+		 * 1. type: 79 (`splice_locked_ack`)
 		 * 2. data:
 		 *     * [`chain_hash`:`chain_hash`]
 		 *     * [`channel_id`:`channel_id`]

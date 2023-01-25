@@ -97,6 +97,7 @@ static bool public_msg_type(enum peer_wire type)
 	case WIRE_SPLICE:
 	case WIRE_SPLICE_ACK:
 	case WIRE_SPLICE_LOCKED:
+	case WIRE_SPLICE_LOCKED_ACK:
 #endif
 		return false;
 	case WIRE_CHANNEL_ANNOUNCEMENT:

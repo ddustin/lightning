@@ -373,6 +373,9 @@ const char *channel_state_str(enum channel_state state);
 /* Is the channel in NORMAL or AWAITING_SPLICE state? */
 bool channel_state_normalish(const struct channel *channel);
 
+/* Is the channel in AWAITING_*? */
+bool channel_state_awaitish(const struct channel *channel);
+
 void channel_set_owner(struct channel *channel, struct subd *owner);
 
 /* Channel has failed, but can try again. */

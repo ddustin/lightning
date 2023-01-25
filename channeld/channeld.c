@@ -58,7 +58,8 @@
 
 #define VALID_STFU_MESSAGE(msg) \
 	((msg) == WIRE_SPLICE || \
-	(msg) == WIRE_SPLICE_ACK)
+	(msg) == WIRE_SPLICE_ACK || \
+	(msg) == WIRE_SPLICE_LOCKED_ACK)
 
 struct peer {
 	struct per_peer_state *pps;
@@ -273,6 +274,11 @@ const u8 *hsm_req(const tal_t *ctx, const u8 *req TAKES)
 }
 
 #if EXPERIMENTAL_FEATURES
+static bool is_stfu_active(const struct peer *peer)
+{
+	return peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE];
+}
+
 static void end_stfu_mode(struct peer *peer)
 {
 	peer->stfu_request = false;
@@ -379,7 +385,7 @@ static void handle_stfu(struct peer *peer, const u8 *stfu)
 /* Returns true if we queued this for later handling (steals if true) */
 static bool handle_master_request_later(struct peer *peer, const u8 *msg)
 {
-	if (peer->stfu_request) {
+	if (is_stfu_active(peer)) {
 		msg_enqueue(peer->update_queue, take(msg));
 		return true;
 	}
@@ -591,9 +597,9 @@ static void check_short_ids_match(struct peer *peer)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "We disagree on short_channel_ids:"
 				 " I have %s, you say %s",
-				 type_to_string(peer, struct short_channel_id,
+				 type_to_string(tmpctx, struct short_channel_id,
 						&peer->short_channel_ids[LOCAL]),
-				 type_to_string(peer, struct short_channel_id,
+				 type_to_string(tmpctx, struct short_channel_id,
 						&peer->short_channel_ids[REMOTE]));
 }
 
@@ -618,6 +624,10 @@ static void channel_announcement_negotiate(struct peer *peer)
 
 	/* Can't do anything until funding is locked. */
 	if (!peer->channel_ready[LOCAL] || !peer->channel_ready[REMOTE])
+		return;
+
+	/* Don't announce channel if we're in stfu mode */
+	if (peer->stfu_request || is_stfu_active(peer))
 		return;
 
 	if (!peer->channel_local_active) {
@@ -680,28 +690,47 @@ static void channel_announcement_negotiate(struct peer *peer)
 	}
 }
 
-/* Call this method when splice_locked status are changed. If both sides have
- * splice_locked'ed than this function consumes the `splice_locked_ready` values
- * and moves the channel to a post-splice state */
-static void check_mutual_splice_locked(struct peer *peer)
+static void handle_peer_splice_locked_ack(struct peer *peer, const u8 *msg)
 {
-	u8 *msg;
+	int type;
 	char *error;
 	struct inflight *inflight;
 	struct amount_msat local_funding_msat;
+	struct channel_id chanid;
 
-	/* If both sides haven't splice_locked we're not ready */
-	if (!peer->splice_locked_ready[LOCAL]
-	    || !peer->splice_locked_ready[REMOTE])
+	peer_write(peer->pps,
+		   take(towire_splice_locked_ack(NULL, &peer->channel_id)));
+
+	if (!msg)
+		msg = peer_read(tmpctx, peer->pps);
+
+	type = fromwire_peektype(msg);
+	if (handle_peer_error(peer->pps, &peer->channel_id, msg))
 		return;
+	if (type != WIRE_SPLICE_LOCKED_ACK)
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				"Splicing got incorrect message from peer: %s "
+				"(should be WIRE_SPLICE_LOCKED_ACK)",
+				peer_wire_name(type));
 
-	/* This splice_locked event is used, so reset the flags to false */
-	peer->splice_locked_ready[LOCAL] = false;
-	peer->splice_locked_ready[REMOTE] = false;
+	if (!fromwire_splice_locked_ack(msg, &chanid))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "wire_splice_locked_ack %s",
+				 tal_hex(msg, msg));
+
+	if (!channel_id_eq(&chanid, &peer->channel_id))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "wire_splice_locked_ack mismatched channelid");
+
 	peer->have_sigs[LOCAL] = false;
 	peer->have_sigs[REMOTE] = false;
 
 	peer->short_channel_ids[LOCAL] = peer->splice_short_channel_id;
+	peer->short_channel_ids[REMOTE] = peer->splice_short_channel_id;
+
+	status_debug("mutual splice_locked, scid LOCAL & REMOTE updated to: %s",
+		     type_to_string(tmpctx, struct short_channel_id,
+				    &peer->splice_short_channel_id));
 
 	inflight = NULL;
 	for (size_t i = 0; i < tal_count(peer->inflights); i++)
@@ -717,14 +746,6 @@ static void check_mutual_splice_locked(struct peer *peer)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Uabled to convert local funding to msats.");
 
-	msg = towire_channeld_got_splice_locked(NULL, inflight->amnt,
-						peer->channel->starting_local_msats,
-						local_funding_msat);
-	wire_sync_write(MASTER_FD, take(msg));
-	channel_announcement_negotiate(peer);
-	billboard_update(peer);
-	send_channel_update(peer, 0);
-
 	status_debug("mutual splice_locked, updating change from: %s",
 		     type_to_string(tmpctx, struct channel, peer->channel));
 
@@ -732,7 +753,6 @@ static void check_mutual_splice_locked(struct peer *peer)
 				       inflight->amnt,
 				       peer->channel->starting_local_msats,
 				       inflight->local_funding);
-
 	if (error)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Splice lock unable to update funding. %s",
@@ -741,7 +761,50 @@ static void check_mutual_splice_locked(struct peer *peer)
 	status_debug("mutual splice_locked, channel updated to: %s",
 		     type_to_string(tmpctx, struct channel, peer->channel));
 
+	msg = towire_channeld_got_splice_locked(NULL, inflight->amnt,
+						peer->channel->starting_local_msats,
+						local_funding_msat);
+	wire_sync_write(MASTER_FD, take(msg));
+
+	end_stfu_mode(peer);
+
+	channel_announcement_negotiate(peer);
+	billboard_update(peer);
+	send_channel_update(peer, 0);
+
 	peer->inflights = tal_free(peer->inflights);
+	peer->splice_count = 0;
+	peer->revoked_splice_count = 0;
+	peer->committed_splice_count = 0;
+}
+
+static void mutual_splice_lock_and_stfu(struct peer *peer)
+{
+	handle_peer_splice_locked_ack(peer, NULL);
+}
+
+/* Call this method when splice_locked status are changed. If both sides have
+ * splice_locked'ed than this function consumes the `splice_locked_ready` values
+ * and moves the channel to STFU and then a post-splice state */
+static void check_mutual_splice_locked(struct peer *peer)
+{
+	/* If both sides haven't splice_locked we're not ready */
+	if (!peer->splice_locked_ready[LOCAL]
+	    || !peer->splice_locked_ready[REMOTE])
+		return;
+
+	/* This splice_locked event is used, so reset the flags to false */
+	peer->splice_locked_ready[LOCAL] = false;
+	peer->splice_locked_ready[REMOTE] = false;
+
+	/* Intiate STFU mode to send the ACK */
+	if (pubkey_cmp(&peer->channel->funding_pubkey[LOCAL],
+		       &peer->channel->funding_pubkey[REMOTE]) < 0) {
+		peer->on_stfu_success = mutual_splice_lock_and_stfu;
+		peer->stfu_request = true;
+		peer->stfu_initiator = LOCAL;
+		maybe_send_stfu(peer);
+	}
 }
 
 /* Our peer told us they saw our splice confirm on chain with `splice_locked`.
@@ -1315,7 +1378,7 @@ static bool want_fee_update(const struct peer *peer, u32 *target)
 
 #if EXPERIMENTAL_FEATURES
 	/* No fee update while quiescing! */
-	if (peer->stfu_request)
+	if (is_stfu_active(peer))
 		return false;
 #endif
 	current = channel_feerate(peer->channel, REMOTE);
@@ -1355,7 +1418,7 @@ static bool want_blockheight_update(const struct peer *peer, u32 *height)
 
 #if EXPERIMENTAL_FEATURES
 	/* No fee update while quiescing! */
-	if (peer->stfu_request)
+	if (is_stfu_active(peer))
 		return false;
 #endif
 	/* What's the current blockheight */
@@ -1607,6 +1670,8 @@ static void send_commit(struct peer *peer)
 
 	peer->next_index[REMOTE]++;
 
+
+
 #if EXPERIMENTAL_FEATURES
 	msg = towire_commitment_signed(NULL, &peer->channel_id,
 				       &commit_sig.s,
@@ -1626,6 +1691,12 @@ static void send_commit(struct peer *peer)
 	start_commit_timer(peer);
 }
 
+static void send_commit_timer_cb(struct peer *peer)
+{
+	if (!peer->stfu_request && !is_stfu_active(peer))
+		send_commit(peer);
+}
+
 static void start_commit_timer(struct peer *peer)
 {
 	/* Already armed? */
@@ -1635,7 +1706,7 @@ static void start_commit_timer(struct peer *peer)
 	peer->commit_timer_attempts = 0;
 	peer->commit_timer = new_reltimer(&peer->timers, peer,
 					  time_from_msec(peer->commit_msec),
-					  send_commit, peer);
+					  send_commit_timer_cb, peer);
 }
 
 /* If old_secret is NULL, we don't care, otherwise it is filled in. */
@@ -1977,6 +2048,10 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 					 " be %d",
 					 tal_count(cs_tlv->splice_commitsigs),
 					 peer->splice_count);
+		if (tal_count(peer->inflights) != peer->splice_count)
+			peer_failed_warn(peer->pps, &peer->channel_id,
+					 "Internal splice inflight counting "
+					 "error");
 	}
 
 	/* DTODO: lnprototest for commit messages with invalid htlc splice data
@@ -2033,6 +2108,8 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 					 channel_feerate(peer->channel, LOCAL));
 		}
 
+		status_debug("SPLICE check_tx_sig passes!");
+
 		/* BOLT #2:
 		 *
 		 * A receiving node:
@@ -2070,6 +2147,8 @@ static void handle_peer_commit_sig(struct peer *peer, const u8 *msg)
 						 type_to_string(msg, struct pubkey,
 								&remote_htlckey));
 		}
+
+		status_debug("SPLICE commitment check passes");
 	}
 
 	/* Validate the counterparty's signatures, returns prior per_commitment_secret. */
@@ -2846,7 +2925,12 @@ static struct amount_sat check_balances(struct peer *peer,
 							   true);
 		wire_sync_write(MASTER_FD, take(msg));
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Initiator funding is less than commited amount");
+				 "Initiator funding is less than commited "
+				 "amount. Accepter adding %s and taking %s out "
+				 " and they committed to %s.",
+				 fmt_amount_sat(tmpctx, opener_in),
+				 fmt_amount_sat(tmpctx, opener_out),
+				 fmt_amount_sat(tmpctx, peer->splice_opener_funding));
 	}
 	if (!amount_sat_sub(&initiator_fee, initiator_fee,
 			    peer->splice_opener_funding))
@@ -2864,7 +2948,12 @@ static struct amount_sat check_balances(struct peer *peer,
 							   false);
 		wire_sync_write(MASTER_FD, take(msg));
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Accepter funding is less than commited amount");
+				 "Accepter funding is less than commited "
+				 "amount. Accepter adding %s and taking %s out "
+				 " and they committed to %s.",
+				 fmt_amount_sat(tmpctx, accepter_in),
+				 fmt_amount_sat(tmpctx, accepter_out),
+				 fmt_amount_sat(tmpctx, peer->splice_accepter_funding));
 	}
 	if (!amount_sat_sub(&accepter_fee, accepter_fee,
 			    peer->splice_accepter_funding))
@@ -2915,9 +3004,6 @@ static void reset_splice(struct peer *peer)
 	peer->splice_force_feerate = false;
 	peer->splice_force_sign_first = false;
 	peer->on_stfu_success = NULL;
-	peer->committed_splice_count = 0;
-	peer->revoked_splice_count = 0;
-	peer->splice_count = 0;
 	peer->tx_add_input_count = 0;
 	peer->tx_add_output_count = 0;
 	peer->current_psbt = NULL;
@@ -2970,7 +3056,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Bad wire_splice %s", tal_hex(tmpctx, inmsg));
 
-	if (!peer->stfu_sent[LOCAL] || !peer->stfu_sent[REMOTE])
+	if (!is_stfu_active(peer))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Must be in STFU mode before intiating splice");
 
@@ -3901,6 +3987,9 @@ static void peer_in(struct peer *peer, const u8 *msg)
 		return;
 	case WIRE_SPLICE_LOCKED:
 		handle_peer_splice_locked(peer, msg);
+		return;
+	case WIRE_SPLICE_LOCKED_ACK:
+		handle_peer_splice_locked_ack(peer, msg);
 		return;
 #endif
 	case WIRE_INIT:
@@ -4896,6 +4985,14 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 		 * splice lock */
 		if (splicing) {
 			peer->splice_short_channel_id = *scid;
+			status_debug("Current channel id is %s, "
+				     "splice_short_channel_id now set to %s",
+				      type_to_string(tmpctx,
+				      		     struct short_channel_id, 
+				      		     &peer->short_channel_ids[LOCAL]),
+				      type_to_string(tmpctx,
+				      		     struct short_channel_id, 
+				      		     &peer->splice_short_channel_id));
 		} else {
 			/* If we know an actual short_channel_id prefer to use
 			 * that, otherwise fill in the alias. From channeld's
@@ -4927,15 +5024,8 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 
 			peer->channel_ready[LOCAL] = true;
 		}
-		else {
+		else if(splicing && !peer->splice_locked_ready[LOCAL]) {
 			assert(scid);
-			assert(splicing);
-			status_debug("splice_locked ready, channeld changing "
-				     "idenity from %s to %s",
-				     short_channel_id_to_str(tmpctx,
-				     			     &peer->short_channel_ids[LOCAL]),
-				     short_channel_id_to_str(tmpctx,
-				     			     scid));
 
 			msg = towire_splice_locked(NULL, &peer->channel_id);
 
@@ -5697,6 +5787,9 @@ int main(int argc, char *argv[])
 	peer->stfu_wait_single_msg = false;
 	peer->update_queue = msg_queue_new(peer, false);
 	reset_splice(peer);
+	peer->committed_splice_count = 0;
+	peer->revoked_splice_count = 0;
+	peer->splice_count = 0;
 	peer->splice_locked_ready[LOCAL] = false;
 	peer->splice_locked_ready[REMOTE] = false;
 	peer->inflights = NULL;
@@ -5764,8 +5857,7 @@ int main(int argc, char *argv[])
 
 		/* If we're in STFU mode and aren't waiting for a STFU mode
 		 * specific message, don't read from the peer. */
-		if (!peer->stfu_wait_single_msg &&
-			peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE])
+		if (!peer->stfu_wait_single_msg && is_stfu_active(peer))
 			FD_CLR(peer->pps->peer_fd, &rfds);
 
 		if (select(nfds, &rfds, NULL, NULL, tptr) < 0) {

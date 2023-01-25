@@ -1782,7 +1782,8 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 
 		/* Update the channel's info to the correct tx, if needed to
 		 * It's possible an 'inflight' has reached depth */
-		if (!list_empty(&channel->inflights)) {
+		if (channel_state_awaitish(channel)
+		    && !list_empty(&channel->inflights)) {
 			inf = channel_inflight_find(channel, txid);
 			if (!inf) {
 				channel_fail_permanent(channel,
@@ -1817,7 +1818,8 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 		/* If we restart, we could already have peer->scid from database,
 		 * we don't need to update scid for stub channels(1x1x1) */
 		if (!channel->scid || channel->state == CHANNELD_AWAITING_SPLICE) {
-			channel->scid = tal(channel, struct short_channel_id);
+			if(!channel->scid)
+				channel->scid = tal(channel, struct short_channel_id);
 			*channel->scid = scid;
 			wallet_channel_save(ld->wallet, channel);
 
