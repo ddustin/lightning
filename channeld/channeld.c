@@ -1691,12 +1691,6 @@ static void send_commit(struct peer *peer)
 	start_commit_timer(peer);
 }
 
-static void send_commit_timer_cb(struct peer *peer)
-{
-	if (!peer->stfu_request && !is_stfu_active(peer))
-		send_commit(peer);
-}
-
 static void start_commit_timer(struct peer *peer)
 {
 	/* Already armed? */
@@ -1706,7 +1700,7 @@ static void start_commit_timer(struct peer *peer)
 	peer->commit_timer_attempts = 0;
 	peer->commit_timer = new_reltimer(&peer->timers, peer,
 					  time_from_msec(peer->commit_msec),
-					  send_commit_timer_cb, peer);
+					  send_commit, peer);
 }
 
 /* If old_secret is NULL, we don't care, otherwise it is filled in. */
