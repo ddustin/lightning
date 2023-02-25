@@ -154,8 +154,11 @@ new_inflight(struct channel *channel,
 	inflight->funding_psbt = tal_steal(inflight, psbt);
 
 	/* Make a 'clone' of this tx */
-	last_tx_psbt_clone = clone_psbt(inflight, last_tx->psbt);
-	inflight->last_tx = bitcoin_tx_with_psbt(inflight, last_tx_psbt_clone);
+	inflight->last_tx = NULL;
+	if (last_tx) {
+		last_tx_psbt_clone = clone_psbt(inflight, last_tx->psbt);
+		inflight->last_tx = bitcoin_tx_with_psbt(inflight, last_tx_psbt_clone);
+	}
 	inflight->last_sig = last_sig;
 	inflight->tx_broadcast = false;
 

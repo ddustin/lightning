@@ -389,7 +389,6 @@ static bool is_urgent(enum peer_wire type)
 	case WIRE_SPLICE:
 	case WIRE_SPLICE_ACK:
 	case WIRE_SPLICE_LOCKED:
-	case WIRE_SPLICE_LOCKED_ACK:
 #endif
 		return false;
 

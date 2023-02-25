@@ -1052,7 +1052,10 @@ void wallet_inflight_add(struct wallet *w, struct channel_inflight *inflight)
 	db_bind_amount_sat(stmt, 5, &inflight->funding->our_funds);
 	db_bind_psbt(stmt, 6, inflight->funding_psbt);
 	db_bind_int(stmt, 7, inflight->remote_tx_sigs ? 1 : 0);
-	db_bind_psbt(stmt, 8, inflight->last_tx->psbt);
+	if (inflight->last_tx)
+		db_bind_psbt(stmt, 8, inflight->last_tx->psbt);
+	else
+		db_bind_null(stmt, 8);
 	db_bind_signature(stmt, 9, &inflight->last_sig.s);
 
 	if (inflight->lease_expiry != 0) {
@@ -1082,21 +1085,27 @@ void wallet_inflight_save(struct wallet *w,
 	struct db_stmt *stmt;
 	/* The *only* thing you can update on an
 	 * inflight is the funding PSBT (to add sigs)
-	 * ((and maybe later the last_tx/last_sig if this is for
-	 * a splice */
+	 * and the last_tx/last_sig if this is for a splice */
 	stmt = db_prepare_v2(w->db,
 			     SQL("UPDATE channel_funding_inflights SET"
 				 "  funding_psbt=?" // 0
 				 ", funding_tx_remote_sigs_received=?" // 1
+				 ", last_tx=?" // 2
+				 ", last_sig=?" // 3
 				 " WHERE"
-				 "  channel_id=?" // 2
-				 " AND funding_tx_id=?" // 3
-				 " AND funding_tx_outnum=?")); // 4
+				 "  channel_id=?" // 4
+				 " AND funding_tx_id=?" // 5
+				 " AND funding_tx_outnum=?")); // 6
 	db_bind_psbt(stmt, 0, inflight->funding_psbt);
 	db_bind_int(stmt, 1, inflight->remote_tx_sigs);
-	db_bind_u64(stmt, 2, inflight->channel->dbid);
-	db_bind_txid(stmt, 3, &inflight->funding->outpoint.txid);
-	db_bind_int(stmt, 4, inflight->funding->outpoint.n);
+	if (inflight->last_tx)
+		db_bind_psbt(stmt, 2, inflight->last_tx->psbt);
+	else
+		db_bind_null(stmt, 2);
+	db_bind_signature(stmt, 3, &inflight->last_sig.s);
+	db_bind_u64(stmt, 4, inflight->channel->dbid);
+	db_bind_txid(stmt, 5, &inflight->funding->outpoint.txid);
+	db_bind_int(stmt, 6, inflight->funding->outpoint.n);
 
 	db_exec_prepared_v2(take(stmt));
 }
@@ -1855,6 +1864,27 @@ void wallet_announcement_save(struct wallet *w, u64 id,
 	db_bind_signature(stmt, 0, remote_ann_node_sig);
 	db_bind_signature(stmt, 1, remote_ann_bitcoin_sig);
 	db_bind_u64(stmt, 2, id);
+	db_exec_prepared_v2(take(stmt));
+}
+
+
+void wallet_htlcsigs_confirm_inflight(struct wallet *w, struct channel *chan,
+				      struct bitcoin_txid confirmed_txid)
+{
+	struct db_stmt *stmt;
+
+	stmt = db_prepare_v2(w->db, SQL("DELETE FROM htlc_sigs"
+					" WHERE channelid=?"
+					" AND (inflight_id is NULL"
+					" OR inflight_id!=?)"));
+	db_bind_u64(stmt, 0, chan->dbid);
+	db_bind_txid(stmt, 1, &confirmed_txid);
+	db_exec_prepared_v2(take(stmt));
+
+	stmt = db_prepare_v2(w->db, SQL("UPDATE htlc_sigs"
+					" SET inflight_id=NULL"
+					" WHERE channelid=?"));
+	db_bind_u64(stmt, 0, chan->dbid);
 	db_exec_prepared_v2(take(stmt));
 }
 
@@ -3695,6 +3725,24 @@ void wallet_htlc_sigs_save(struct wallet *w, u64 channel_id,
 					 "signature) VALUES (?, ?)"));
 		db_bind_u64(stmt, 0, channel_id);
 		db_bind_signature(stmt, 1, &htlc_sigs[i].s);
+		db_exec_prepared_v2(take(stmt));
+	}
+}
+
+void wallet_htlc_sigs_add(struct wallet *w, u64 channel_id,
+			  struct bitcoin_txid inflight_id,
+			  const struct bitcoin_signature *htlc_sigs)
+{
+	struct db_stmt *stmt;
+	
+	/* Now insert the new ones */
+	for (size_t i=0; i<tal_count(htlc_sigs); i++) {
+		stmt = db_prepare_v2(w->db,
+				     SQL("INSERT INTO htlc_sigs (channelid, "
+					 "inflight_id, signature) VALUES (?, ?, ?)"));
+		db_bind_u64(stmt, 0, channel_id);
+		db_bind_txid(stmt, 1, &inflight_id);
+		db_bind_signature(stmt, 2, &htlc_sigs[i].s);
 		db_exec_prepared_v2(take(stmt));
 	}
 }

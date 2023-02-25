@@ -131,6 +131,7 @@ msgtype,channeld_got_splice_locked,1119
 msgdata,channeld_got_splice_locked,funding_sats,amount_sat,
 msgdata,channeld_got_splice_locked,old_local_funding_msats,amount_msat,
 msgdata,channeld_got_splice_locked,new_local_funding_sats,amount_msat,
+msgdata,channeld_got_splice_locked,locked_txid,bitcoin_txid,
 
 #include <common/penalty_base.h>
 
@@ -170,8 +171,14 @@ msgdata,channeld_got_commitsig,failed,failed_htlc,num_failed
 msgdata,channeld_got_commitsig,num_changed,u16,
 msgdata,channeld_got_commitsig,changed,changed_htlc,num_changed
 msgdata,channeld_got_commitsig,tx,bitcoin_tx,
-msgdata,channeld_got_commitsig,num_splice_sigs,u16,
-msgdata,channeld_got_commitsig,splice_commit_sig,bitcoin_signature,num_splice_sigs
+# Inflight splice commitments
+msgdata,channeld_got_commitsig,num_inflight_commitsigs,u16,
+msgdata,channeld_got_commitsig,inflight_commitsigs,commitsig,num_inflight_commitsigs
+subtype,commitsig
+subtypedata,commitsig,tx,bitcoin_tx,
+subtypedata,commitsig,commit_signature,bitcoin_signature,
+subtypedata,commitsig,num_htlcs,u16,
+subtypedata,commitsig,htlc_signatures,bitcoin_signature,num_htlcs
 
 # Wait for reply, to make sure it's on disk before we send revocation.
 msgtype,channeld_got_commitsig_reply,1121

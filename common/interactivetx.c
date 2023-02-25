@@ -187,7 +187,6 @@ static u8 *read_next_msg(const tal_t *ctx,
 		case WIRE_SPLICE:
 		case WIRE_SPLICE_ACK:
 		case WIRE_SPLICE_LOCKED:
-		case WIRE_SPLICE_LOCKED_ACK:
 #endif
 		*error = tal_fmt(ctx,
 				 "Received invalid message from peer: %d", t);
@@ -215,13 +214,14 @@ static char *send_next(const tal_t *ctx,
 		u8 *prevtx;
 
 		if (!psbt_get_serial_id(&in->input.unknowns, &serial_id))
-			return "interactivetx ADD_INPUT PSBT has invalid serial_id.";
+			return "interactivetx ADD_INPUT PSBT has invalid"
+			       " serial_id.";
 
 		if (in->input.utxo)
-			prevtx = linearize_wtx(ctx,
-					       in->input.utxo);
+			prevtx = linearize_wtx(ctx, in->input.utxo);
 		else
-			return "interactivetx ADD_INPUT PSBT needs the previous transaction set.";
+			return "interactivetx ADD_INPUT PSBT needs the previous"
+			       " transaction set.";
 
 		memcpy(outpoint.txid.shad.sha.u.u8,
 		       in->tx_input.txhash,
@@ -239,7 +239,8 @@ static char *send_next(const tal_t *ctx,
 	else if (tal_count(set->rm_ins) != 0) {
 		if (!psbt_get_serial_id(&set->rm_ins[0].input.unknowns,
 					&serial_id))
-			return "interactivetx RM_INPUT PSBT has invalid serial_id.";
+			return "interactivetx RM_INPUT PSBT has invalid"
+			       " serial_id.";
 
 		msg = towire_tx_remove_input(NULL, cid, serial_id);
 
@@ -254,7 +255,8 @@ static char *send_next(const tal_t *ctx,
 		out = &set->added_outs[0];
 
 		if (!psbt_get_serial_id(&out->output.unknowns, &serial_id))
-			return "interactivetx ADD_OUTPUT PSBT has invalid serial_id.";
+			return "interactivetx ADD_OUTPUT PSBT has invalid"
+			       " serial_id.";
 
 		asset_amt = wally_tx_output_get_amount(&out->tx_output);
 		sats = amount_asset_to_sat(&asset_amt);
@@ -720,7 +722,6 @@ char *process_interactivetx_updates(const tal_t *ctx,
 		case WIRE_SPLICE_ACK:
 		case WIRE_STFU:
 		case WIRE_SPLICE_LOCKED:
-		case WIRE_SPLICE_LOCKED_ACK:
 #endif
 			return tal_fmt(ctx, "Unexpected wire message %s",
 				       tal_hex(ctx, msg));

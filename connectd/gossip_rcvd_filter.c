@@ -99,7 +99,6 @@ static bool is_msg_gossip_broadcast(const u8 *cursor)
 	case WIRE_SPLICE:
 	case WIRE_SPLICE_ACK:
 	case WIRE_SPLICE_LOCKED:
-	case WIRE_SPLICE_LOCKED_ACK:
 #endif
 		break;
 	}

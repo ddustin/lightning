@@ -1,6 +1,6 @@
 --- wire/peer_exp_wire.csv	2021-10-18 11:43:51.851963867 -0500
 +++ -	2021-10-18 11:43:56.623816578 -0500
-@@ -127,6 +85,22 @@
+@@ -127,6 +85,20 @@
  msgtype,stfu,2
  msgdata,stfu,channel_id,channel_id,
  msgdata,stfu,initiator,u8,
@@ -18,22 +18,16 @@
 +msgdata,splice_ack,funding_pubkey,point,
 +msgtype,splice_locked,78,
 +msgdata,splice_locked,channel_id,channel_id,
-+msgtype,splice_locked_ack,79,
-+msgdata,splice_locked_ack,channel_id,channel_id,
  msgtype,shutdown,38
  msgdata,shutdown,channel_id,channel_id,
  msgdata,shutdown,len,u16,
-@@ -164,6 +128,13 @@
+@@ -164,6 +128,9 @@
  msgdata,commitment_signed,signature,signature,
  msgdata,commitment_signed,num_htlcs,u16,
  msgdata,commitment_signed,htlc_signature,signature,num_htlcs
-+msgdata,commitment_signed,tlvs,commitment_signed_tlvs,
-+tlvtype,commitment_signed_tlvs,splice_commitsigs,0
-+tlvdata,commitment_signed_tlvs,splice_commitsigs,sigs,commitsigs,...
-+subtype,commitsigs
-+subtypedata,commitsigs,commit_signature,signature,
-+subtypedata,commitsigs,num_htlcs,u16,
-+subtypedata,commitsigs,htlc_signature,signature,num_htlcs
++msgdata,commitment_signed,splice_channel_id,commitment_signed_tlvs,
++tlvtype,commitment_signed_tlvs,splice_info,0
++tlvdata,commitment_signed_tlvs,splice_info,splice_channel_id,channel_id,
  msgtype,revoke_and_ack,133
  msgdata,revoke_and_ack,channel_id,channel_id,
  msgdata,revoke_and_ack,per_commitment_secret,byte,32

@@ -1706,9 +1706,9 @@ static bool check_funding_tx(const struct bitcoin_tx *tx,
 	return false;
 }
 
-static void update_channel_from_inflight(struct lightningd *ld,
-					 struct channel *channel,
-					 const struct channel_inflight *inflight)
+void update_channel_from_inflight(struct lightningd *ld,
+				  struct channel *channel,
+				  const struct channel_inflight *inflight)
 {
 	struct wally_psbt *psbt_copy;
 
@@ -1782,8 +1782,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 
 		/* Update the channel's info to the correct tx, if needed to
 		 * It's possible an 'inflight' has reached depth */
-		if (channel_state_awaitish(channel)
-		    && !list_empty(&channel->inflights)) {
+		if (!list_empty(&channel->inflights)) {
 			inf = channel_inflight_find(channel, txid);
 			if (!inf) {
 				channel_fail_permanent(channel,
@@ -1798,7 +1797,8 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 						       &channel->peer->id));
 				return DELETE_WATCH;
 			}
-			update_channel_from_inflight(ld, channel, inf);
+			if(channel->state != CHANNELD_AWAITING_SPLICE)
+				update_channel_from_inflight(ld, channel, inf);
 		}
 
 		wallet_annotate_txout(ld->wallet, &channel->funding,

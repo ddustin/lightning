@@ -524,16 +524,15 @@ static void handle_add_inflight(struct lightningd *ld,
 	struct wally_psbt *psbt;
 	struct channel_inflight *inflight;
 	struct bitcoin_signature last_sig;
-	struct bitcoin_tx *bitcoin_tx;
 
 	if (!fromwire_channeld_add_inflight(tmpctx,
-					   msg,
-					   &outpoint.txid,
-					   &outpoint.n,
-					   &feerate,
-					   &satoshis,
-					   &our_funding_satoshis,
-					   &psbt)) {
+					    msg,
+					    &outpoint.txid,
+					    &outpoint.n,
+					    &feerate,
+					    &satoshis,
+					    &our_funding_satoshis,
+					    &psbt)) {
 		channel_internal_error(channel,
 				       "bad channel_add_inflight %s",
 				       tal_hex(channel, msg));
@@ -542,15 +541,13 @@ static void handle_add_inflight(struct lightningd *ld,
 
 	memset(&last_sig, 0, sizeof(last_sig));
 
-	bitcoin_tx = bitcoin_tx_with_psbt(tmpctx, psbt);
-
 	inflight = new_inflight(channel,
 				&outpoint,
 				feerate,
 				satoshis,
 				our_funding_satoshis,
 				psbt,
-				bitcoin_tx,
+				NULL,
 				last_sig,
 				channel->lease_expiry,
 				channel->lease_commit_sig,
@@ -726,12 +723,15 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 	struct amount_sat funding_sats;
 	struct amount_msat old_local_funding_msats, new_local_funding_msats;
 	struct amount_msat local_change;
+	struct channel_inflight *inflight;
+	struct bitcoin_txid locked_txid;
 	bool local_negative;
 	bool res;
 
 	if (!fromwire_channeld_got_splice_locked(msg, &funding_sats,
 						 &old_local_funding_msats,
-						 &new_local_funding_msats)) {
+						 &new_local_funding_msats,
+						 &locked_txid)) {
 		channel_internal_error(channel,
 				       "bad channel_got_funding_locked %s",
 				       tal_hex(channel, msg));
@@ -785,6 +785,14 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 			channel_internal_error(channel, "Unable to update "
 					       "msat_to_us_max");
 	}
+
+	inflight = channel_inflight_find(channel, &locked_txid);
+	assert(inflight);
+
+	wallet_htlcsigs_confirm_inflight(channel->peer->ld->wallet, channel,
+					 inflight->funding->outpoint.txid);
+
+	update_channel_from_inflight(channel->peer->ld, channel, inflight);
 
 	/* Remember that we got the lockin */
 	wallet_channel_save(channel->peer->ld->wallet, channel);
