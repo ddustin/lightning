@@ -40,8 +40,11 @@ enum channel_state {
 
 	/* Dual-funded channel, waiting for lock-in */
 	DUALOPEND_AWAITING_LOCKIN,
+
+	/* Channel has started splice and is awaiting lock-in */
+	CHANNELD_AWAITING_SPLICE,
 };
-#define CHANNEL_STATE_MAX DUALOPEND_AWAITING_LOCKIN
+#define CHANNEL_STATE_MAX CHANNELD_AWAITING_SPLICE
 
 enum state_change {
 	/* Anything other than the reasons below. Should not happen. */
