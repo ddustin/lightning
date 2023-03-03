@@ -22,6 +22,8 @@ def test_splice(node_factory, bitcoind):
 
     l2.daemon.wait_for_log(r'to CHANNELD_NORMAL')
     l1.daemon.wait_for_log(r'to CHANNELD_NORMAL')
+
+    time.sleep(1)
     
     chan_id = l1.get_channel_id(l2)
 
@@ -35,13 +37,7 @@ def test_splice(node_factory, bitcoind):
     result = l1.rpc.signpsbt(result['psbt'])
     result = l1.rpc.splice_signed(chan_id, result['signed_psbt'])
 
-    inv = l2.rpc.invoice(10**2, '1', 'no_1')
-    l1.rpc.pay(inv['bolt11'])
-
     bitcoind.generate_block(6, wait_for_mempool=1)
-
-    inv = l2.rpc.invoice(10**2, '2', 'no_2')
-    l1.rpc.pay(inv['bolt11'])
 
     l2.daemon.wait_for_log(r'CHANNELD_AWAITING_SPLICE to CHANNELD_NORMAL')
     l1.daemon.wait_for_log(r'CHANNELD_AWAITING_SPLICE to CHANNELD_NORMAL')

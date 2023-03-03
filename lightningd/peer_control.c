@@ -1782,12 +1782,12 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 
 		/* Update the channel's info to the correct tx, if needed to
 		 * It's possible an 'inflight' has reached depth */
-		if (!list_empty(&channel->inflights)) {
+		if (channel->state != CHANNELD_AWAITING_SPLICE
+		    && !list_empty(&channel->inflights)) {
 			inf = channel_inflight_find(channel, txid);
 			if (!inf) {
-				channel_fail_permanent(channel,
-						       REASON_LOCAL,
-					"Txid %s for channel"
+				log_debug(channel->log,
+					"Ignoring event for txid %s for channel"
 					" not found in inflights. (peer %s)",
 					type_to_string(tmpctx,
 						       struct bitcoin_txid,
@@ -1797,8 +1797,7 @@ static enum watch_result funding_depth_cb(struct lightningd *ld,
 						       &channel->peer->id));
 				return DELETE_WATCH;
 			}
-			if(channel->state != CHANNELD_AWAITING_SPLICE)
-				update_channel_from_inflight(ld, channel, inf);
+			update_channel_from_inflight(ld, channel, inf);
 		}
 
 		wallet_annotate_txout(ld->wallet, &channel->funding,

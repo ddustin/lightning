@@ -556,6 +556,11 @@ static void handle_add_inflight(struct lightningd *ld,
 				0,
 				channel->push);
 
+	
+	log_debug(channel->log, "lightningd adding inflight with txid %s",
+		  type_to_string(tmpctx, struct bitcoin_txid,
+		  		 &inflight->funding->outpoint.txid));
+
 	wallet_inflight_add(ld->wallet, inflight);
 	channel_watch_inflight(ld, channel, inflight);
 
@@ -787,7 +792,13 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 	}
 
 	inflight = channel_inflight_find(channel, &locked_txid);
-	assert(inflight);
+
+	if(!inflight)
+		channel_internal_error(channel, "Unable to load inflight for"
+				       " locked_txid %s",
+				       type_to_string(tmpctx,
+				       		      struct bitcoin_txid,
+				       		      &locked_txid));
 
 	wallet_htlcsigs_confirm_inflight(channel->peer->ld->wallet, channel,
 					 inflight->funding->outpoint.txid);
@@ -798,6 +809,7 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 	wallet_channel_save(channel->peer->ld->wallet, channel);
 
 	/* Empty out the inflights */
+	log_debug(channel->log, "lightningd, splice_locked clearing inflights");
 	wallet_channel_clear_inflights(channel->peer->ld->wallet, channel);
 
 	lockin_complete(channel, CHANNELD_AWAITING_SPLICE);
@@ -1465,12 +1477,9 @@ bool channel_tell_depth(struct lightningd *ld,
 	if (channel->state == CHANNELD_AWAITING_SPLICE
 	    && depth >= channel->minimum_depth) {
 		if (!get_inflight_outpoint_index(channel, &outnum, txid)) {
-			channel_fail_permanent(channel,
-					       REASON_LOCAL,
-					       "Can't locate splice inflight "
-					       "txid %s",
-					       txidstr);
-			return false;
+			log_debug(channel->log, "Can't locate splice inflight"
+				  " txid %s", txidstr);
+			false;
 		}
 
 		loc = wallet_transaction_locate(tmpctx, ld->wallet, txid);

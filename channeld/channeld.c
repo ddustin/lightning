@@ -818,6 +818,11 @@ static void check_mutual_splice_locked(struct peer *peer)
 	    || !peer->splice_locked_ready[REMOTE])
 		return;
 
+	if (short_channel_id_eq(&peer->short_channel_ids[LOCAL],
+				&peer->splice_short_channel_id))
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				 "Duplicate splice_locked events detected");
+
 	peer->splice_await_commitment_succcess = true;
 
 	/* This splice_locked event is used, so reset the flags to false */
@@ -845,7 +850,11 @@ static void check_mutual_splice_locked(struct peer *peer)
 
 	if (!inflight)
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Unable to find inflight txid.");
+				 "Unable to find inflight txid amoung %zu"
+				 " inflights. new funding txid: %s",
+				 tal_count(peer->inflights),
+				 type_to_string(tmpctx, struct bitcoin_txid,
+		     		    &peer->splice_locked_txid));
 
 	if (!amount_sat_to_msat(&local_funding_msat, inflight->local_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
@@ -854,6 +863,8 @@ static void check_mutual_splice_locked(struct peer *peer)
 	status_debug("mutual splice_locked, updating change from: %s",
 		     type_to_string(tmpctx, struct channel, peer->channel));
 
+	/* DTODO: Payments during splice lock appeara to be off by precisely the
+	 * amount of channel increase on the intiator side */
 	error = channel_update_funding(peer->channel, &inflight->outpoint,
 				       inflight->amnt,
 				       peer->channel->starting_local_msats,
@@ -1973,8 +1984,11 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Bad commit_sig %s", tal_hex(msg, msg));
 
-	if (!tal_count(peer->inflights) && cs_tlv && cs_tlv->splice_info) {
-		derive_channel_id(&active_id, &peer->channel->funding);
+	/* Until we have a valid commitment signed, we safely drop commitments
+	 * we don't recognize. */
+	derive_channel_id(&active_id, &peer->channel->funding);
+	if (peer->splice_await_commitment_succcess
+	    && !tal_count(peer->inflights) && cs_tlv && cs_tlv->splice_info) {
 		if (!channel_id_eq(&active_id, cs_tlv->splice_info)) {
 			status_info("Ignoring stale commit_sig for channel_id"
 				    " %s, as %s is locked in now.",
@@ -2071,7 +2085,10 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 			  &peer->channel->funding_pubkey[REMOTE], &commit_sig)) {
 		dump_htlcs(peer->channel, "receiving commit_sig");
 		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Bad commit_sig signature %"PRIu64" %s for tx %s wscript %s key %s feerate %u",
+				 "Bad commit_sig signature %"PRIu64" %s for tx"
+				 " %s wscript %s key %s feerate %u. Cur funding"
+				 " %s, splice_info: %s, race_await_commit: %s,"
+				 " inflight splice count: %zu",
 				 peer->next_index[LOCAL],
 				 type_to_string(msg, struct bitcoin_signature,
 						&commit_sig),
@@ -2080,7 +2097,15 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 				 type_to_string(msg, struct pubkey,
 						&peer->channel->funding_pubkey
 						[REMOTE]),
-				 channel_feerate(peer->channel, LOCAL));
+				 channel_feerate(peer->channel, LOCAL),
+				 type_to_string(tmpctx, struct channel_id,
+				 		&active_id),
+				 type_to_string(tmpctx, struct channel_id,
+				 		(cs_tlv ? cs_tlv->splice_info
+				 		       : NULL)),
+				 peer->splice_await_commitment_succcess ? "yes"
+				 					: "no",
+				 tal_count(peer->inflights));
 	}
 
 	/* BOLT #2:
@@ -2979,11 +3004,13 @@ static struct amount_sat check_balances(struct peer *peer,
 		bool res;
 		if (!amount.satoshis)
 			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Input %d of splice does not have an input amount",
+					 "Input %d of splice does not have an"
+					 " input amount",
 					 i);
 		if (!amount_sat_add(&total_in, total_in, amount))
 			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Unable to amount_sat_add input amounts");
+					 "Unable to amount_sat_add input"
+					 " amounts");
 		/* amount_sat_add would have failed above so no need to check */
 		if (is_openers(&psbt->inputs[i].unknowns))
 			res = amount_sat_add(&opener_in, opener_in, amount);
@@ -3015,8 +3042,8 @@ static struct amount_sat check_balances(struct peer *peer,
 
 	/* Calculate total channel output amount */
 	if (!amount_sat_add(&funding_amount,
-			   peer->splice_opener_funding,
-			   peer->splice_accepter_funding))
+			    peer->splice_opener_funding,
+			    peer->splice_accepter_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate channel amount");
 
@@ -3092,6 +3119,7 @@ static struct amount_sat check_balances(struct peer *peer,
 		msg = towire_channeld_splice_feerate_error(NULL, initiator_fee,
 							   true);
 		wire_sync_write(MASTER_FD, take(msg));
+		/* DTODO: Swap `peer_failed_warn` out for `tx_abort` */
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Our own fee was too high");
 	}
@@ -3108,6 +3136,7 @@ static struct amount_sat check_balances(struct peer *peer,
 		msg = towire_channeld_splice_feerate_error(NULL, accepter_fee,
 							   true);
 		wire_sync_write(MASTER_FD, take(msg));
+		/* DTODO: Swap `peer_failed_warn` out for `tx_abort` */
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Our own fee was too high");
 	}
