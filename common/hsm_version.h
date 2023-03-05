@@ -6,7 +6,7 @@
  * some API adaptation. */
 
 /* wire/hsmd_wire.csv contents version:
- *    409cffa355ab6cc76bd298910adca9936a68223267ddc4815ba16aeac5d0acc3
+ *    1f715becc3b647a8ad032120e9a06218e36b8d6f6d9bc33982514a442ed576c0
  */
 #define HSM_MIN_VERSION 1
 

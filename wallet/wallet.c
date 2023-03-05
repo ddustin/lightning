@@ -3766,7 +3766,7 @@ void wallet_htlc_sigs_add(struct wallet *w, u64 channel_id,
 			  const struct bitcoin_signature *htlc_sigs)
 {
 	struct db_stmt *stmt;
-	
+
 	/* Now insert the new ones */
 	for (size_t i=0; i<tal_count(htlc_sigs); i++) {
 		stmt = db_prepare_v2(w->db,
