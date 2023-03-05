@@ -60,6 +60,8 @@ WARN_UNUSED_RESULT bool amount_msat_to_sat(struct amount_sat *sat,
 /* You can always truncate millisatoshis->satoshis. */
 struct amount_sat amount_msat_to_sat_round_down(struct amount_msat msat);
 
+struct amount_sat amount_msat_to_sat_round(struct amount_msat msat);
+
 /* Simple operations: val = a + b, val = a - b. */
 WARN_UNUSED_RESULT bool amount_msat_add(struct amount_msat *val,
 					struct amount_msat a,
