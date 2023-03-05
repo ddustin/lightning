@@ -953,6 +953,10 @@ static struct migration dbmigrations[] = {
     {SQL("ALTER TABLE channels ADD require_confirm_inputs_remote INTEGER DEFAULT 0;"), NULL},
     {SQL("ALTER TABLE channels ADD require_confirm_inputs_local INTEGER DEFAULT 0;"), NULL},
     {NULL, fillin_missing_lease_satoshi},
+    /* Splicing requires us to store HTLC sigs for inflight splices and allows us to discard old sigs after splice confirmation. */
+    {SQL("ALTER TABLE htlc_sigs ADD inflight_tx_id BLOB"), NULL},
+    {SQL("ALTER TABLE htlc_sigs ADD inflight_tx_outnum INTEGER DEFAULT 0"), NULL},
+    {SQL("ALTER TABLE channel_funding_inflights ADD starting_htlc_id INTEGER DEFAULT 0"), NULL},
 };
 
 /**
