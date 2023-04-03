@@ -114,7 +114,7 @@ start_nodes() {
 
 		# Start the lightning nodes
 		test -f "/tmp/l$i-$network/lightningd-$network.pid" || \
-			$EATMYDATA "$LIGHTNINGD" "--lightning-dir=/tmp/l$i-$network" &
+			$EATMYDATA "$LIGHTNINGD" "--lightning-dir=/tmp/l$i-$network" "--database-upgrade=true" &
 		# shellcheck disable=SC2139 disable=SC2086
 		alias l$i-cli="$LCLI --lightning-dir=/tmp/l$i-$network"
 		# shellcheck disable=SC2139 disable=SC2086
@@ -122,7 +122,7 @@ start_nodes() {
 	done
 
 	if [ -z "$EATMYDATA" ]; then
-	    echo "WARNING: eatmydata not found: instal it for faster testing"
+	    echo "WARNING: `eatmydata` not found: install it for faster testing"
 	fi
 	# Give a hint.
 	echo "Commands: "
