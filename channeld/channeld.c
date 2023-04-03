@@ -2766,7 +2766,8 @@ static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
 static struct amount_sat check_balances(struct peer *peer,
 					enum tx_role our_role,
 					struct wally_psbt *psbt,
-					int chan_output_index)
+					int chan_output_index,
+					int chan_input_index)
 {
 	struct amount_sat funding_amount, total_in, change_out,
 			  opener_in, opener_out,
@@ -2778,12 +2779,16 @@ static struct amount_sat check_balances(struct peer *peer,
 	u8 *msg;
 
 	total_in = AMOUNT_SAT(0);
-	opener_in = AMOUNT_SAT(0);
-	accepter_in = AMOUNT_SAT(0);
+	opener_in = peer->splice_opener_funding;
+	accepter_in = peer->splice_accepter_funding;
 
 	for (int i = 0; i < psbt->tx->num_inputs; i++) {
 		struct amount_sat amount = psbt_input_get_amount(psbt, i);
 		bool res;
+
+		if (i == chan_input_index)
+			continue;
+
 		if (amount_sat_zero(amount))
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Input %d of splice does not have an"
@@ -2940,6 +2945,24 @@ static void reset_splice(struct peer *peer)
 	peer->received_tx_complete = false;
 }
 
+static int find_channel_funding_input(struct wally_psbt *psbt,
+				      struct bitcoin_outpoint *funding)
+{
+	for (size_t i = 0; i < psbt->num_inputs; i++) {
+		struct wally_tx_input *in =
+			&psbt->tx->inputs[i];
+
+		if (0 != memcmp(in->txhash, &funding->txid,
+			       sizeof(in->txhash)))
+			continue;
+
+		if (funding->n == in->index)
+			return i;
+	}
+
+	return -1;
+}
+
 /* ACCEPTER side of the splice. Here we handle all the accepter's steps for the
  * splice. Since the channel must be in STFU mode we block the daemon here until
  * the splice is finished or aborted. */
@@ -3037,20 +3060,8 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 					 &peer->channel->funding_pubkey[1],
 					 &peer->channel->funding_pubkey[0]);
 
-	for (int i = 0; i < ictx->current_psbt->num_inputs; i++) {
-		struct wally_tx_input *in =
-			&ictx->current_psbt->tx->inputs[i];
-
-		if (0 != memcmp(in->txhash,
-			       &peer->channel->funding.txid,
-			       sizeof(in->txhash)))
-			continue;
-
-		if (peer->channel->funding.n == in->index) {
-			splice_funding_index = i;
-			break;
-		}
-	}
+	splice_funding_index = find_channel_funding_input(ictx->current_psbt,
+							  &peer->channel->funding);
 
 	if (splice_funding_index == -1)
 		status_failed(STATUS_FAIL_INTERNAL_ERROR,
@@ -3060,7 +3071,8 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 						&chan_output_index);
 
 	both_amount = check_balances(peer, TX_ACCEPTER, ictx->current_psbt,
-				     chan_output_index);
+				     chan_output_index, splice_funding_index);
+
 	new_chan_outpoint->satoshi = both_amount.satoshis; /* Raw: type conv */
 
 	psbt_elements_normalize_fees(ictx->current_psbt);
@@ -3460,7 +3472,7 @@ static void splice_initiator_user_finalized(struct peer *peer)
 	u8 *outmsg;
 	struct interactivetx_context *ictx;
 	char *error;
-	int chan_output_index;
+	int chan_output_index, splice_funding_index;
 	struct wally_tx_output *new_chan_outpoint;
 	struct inflight new_inflight;
 	struct bitcoin_txid current_psbt_txid;
@@ -3489,9 +3501,17 @@ static void splice_initiator_user_finalized(struct peer *peer)
 	new_chan_outpoint = find_channel_output(peer, ictx->current_psbt,
 						&chan_output_index);
 
+	splice_funding_index = find_channel_funding_input(ictx->current_psbt,
+							  &peer->channel->funding);
+
+	if (splice_funding_index == -1)
+		status_failed(STATUS_FAIL_INTERNAL_ERROR,
+			      "Unable to find splice funding tx");
+
 	new_chan_outpoint->satoshi = check_balances(peer, TX_INITIATOR,
 						    ictx->current_psbt,
-						    chan_output_index).satoshis; /* Raw: type conv */
+						    chan_output_index,
+						    splice_funding_index).satoshis; /* Raw: type conv */
 
 	psbt_elements_normalize_fees(ictx->current_psbt);
 
