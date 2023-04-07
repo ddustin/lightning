@@ -2772,6 +2772,7 @@ static struct amount_sat check_balances(struct peer *peer,
 	struct amount_sat funding_amount, total_in, change_out,
 			  opener_in, opener_out,
 			  accepter_in, accepter_out,
+			  initiator_contrib, accepter_contrib,
 			  initiator_fee, accepter_fee,
 			  min_initiator_fee, min_accepter_fee,
 			  max_initiator_fee, max_accepter_fee;
@@ -2779,8 +2780,18 @@ static struct amount_sat check_balances(struct peer *peer,
 	u8 *msg;
 
 	total_in = AMOUNT_SAT(0);
-	opener_in = peer->splice_opener_funding;
-	accepter_in = peer->splice_accepter_funding;
+	/* DTODO: This method assumes any msats are rounded off and given to miners.
+	 * This could lead to fee calculations being off by 1 sat and allowing a tx
+	 * through that actually has too low a fee rate.
+	 * When relative splice amounts are implemented this should be redone. */
+	if (!amount_msat_to_sat(&opener_in,
+				peer->channel->view->owed[opener ? LOCAL : REMOTE]))
+		peer_failed_warn(peer->pps, &peer->channel_id, "Unable to"
+				 " calculate initial opener balance");
+	if (!amount_msat_to_sat(&accepter_in,
+				peer->channel->view->owed[opener ? REMOTE : LOCAL]))
+		peer_failed_warn(peer->pps, &peer->channel_id, "Unable to"
+				 " calculate initial accepter balance");
 
 	for (int i = 0; i < psbt->tx->num_inputs; i++) {
 		struct amount_sat amount = psbt_input_get_amount(psbt, i);
@@ -2847,13 +2858,13 @@ static struct amount_sat check_balances(struct peer *peer,
 	max_initiator_fee = amount_tx_fee(peer->feerate_max,
 					  calc_weight(TX_INITIATOR, psbt));
 
-	/* Calculate intiator fee contribution */
-	if (!amount_sat_sub(&initiator_fee, opener_in, opener_out))
+	/* Calculate intiator contribution */
+	if (!amount_sat_sub(&initiator_contrib, opener_in, opener_out))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate intiator fee");
 	/* An extra check for cleaner log messages */
-	if (amount_sat_less(initiator_fee, peer->splice_opener_funding)) {
-		msg = towire_channeld_splice_funding_error(NULL, initiator_fee,
+	if (amount_sat_less(initiator_contrib, peer->splice_opener_funding)) {
+		msg = towire_channeld_splice_funding_error(NULL, initiator_contrib,
 							   peer->splice_opener_funding,
 							   true);
 		wire_sync_write(MASTER_FD, take(msg));
@@ -2865,18 +2876,18 @@ static struct amount_sat check_balances(struct peer *peer,
 				 fmt_amount_sat(tmpctx, opener_out),
 				 fmt_amount_sat(tmpctx, peer->splice_opener_funding));
 	}
-	if (!amount_sat_sub(&initiator_fee, initiator_fee,
+	if (!amount_sat_sub(&initiator_fee, initiator_contrib,
 			    peer->splice_opener_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate intiator fee.");
 
-	/* Calculate accepter fee contribution */
-	if (!amount_sat_sub(&accepter_fee, accepter_in, accepter_out))
+	/* Calculate accepter contribution */
+	if (!amount_sat_sub(&accepter_contrib, accepter_in, accepter_out))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate accepter fee");
 	/* An extra check for cleaner log messages */
-	if (amount_sat_less(accepter_fee, peer->splice_accepter_funding)) {
-		msg = towire_channeld_splice_funding_error(NULL, accepter_fee,
+	if (amount_sat_less(accepter_contrib, peer->splice_accepter_funding)) {
+		msg = towire_channeld_splice_funding_error(NULL, accepter_contrib,
 							   peer->splice_accepter_funding,
 							   false);
 		wire_sync_write(MASTER_FD, take(msg));
@@ -2888,7 +2899,7 @@ static struct amount_sat check_balances(struct peer *peer,
 				 fmt_amount_sat(tmpctx, accepter_out),
 				 fmt_amount_sat(tmpctx, peer->splice_accepter_funding));
 	}
-	if (!amount_sat_sub(&accepter_fee, accepter_fee,
+	if (!amount_sat_sub(&accepter_fee, accepter_contrib,
 			    peer->splice_accepter_funding))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Unable to calculate accepter fee.");
