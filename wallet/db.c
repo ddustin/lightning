@@ -965,6 +965,9 @@ static struct migration dbmigrations[] = {
     {NULL, migrate_initialize_wait_indexes},
     {SQL("ALTER TABLE invoices ADD updated_index BIGINT DEFAULT 0"), NULL},
     {SQL("CREATE INDEX invoice_update_idx ON invoices (updated_index)"), NULL},
+    /* Splicing requires us to store HTLC sigs for inflight splices and allows us to discard old sigs after splice confirmation. */
+    {SQL("ALTER TABLE htlc_sigs ADD inflight_tx_id BLOB"), NULL},
+    {SQL("ALTER TABLE htlc_sigs ADD inflight_tx_outnum INTEGER"), NULL},
 };
 
 /**
