@@ -212,6 +212,7 @@ static struct lightningd *new_lightningd(const tal_t *ctx)
 	list_head_init(&ld->close_commands);
 	list_head_init(&ld->ping_commands);
 	list_head_init(&ld->disconnect_commands);
+	list_head_init(&ld->splice_commands);
 	list_head_init(&ld->waitblockheight_commands);
 	list_head_init(&ld->wait_commands);
 
@@ -878,6 +879,12 @@ static struct feature_set *default_features(const tal_t *ctx)
 		OPTIONAL_FEATURE(OPT_ZEROCONF),
 		OPTIONAL_FEATURE(OPT_CHANNEL_TYPE),
 		OPTIONAL_FEATURE(OPT_ROUTE_BLINDING),
+#if EXPERIMENTAL_FEATURES
+		OPTIONAL_FEATURE(OPT_ANCHOR_OUTPUTS),
+		OPTIONAL_FEATURE(OPT_QUIESCE),
+		OPTIONAL_FEATURE(OPT_ONION_MESSAGES),
+		OPTIONAL_FEATURE(OPT_SPLICE),
+#endif
 	};
 
 	for (size_t i = 0; i < ARRAY_SIZE(features); i++) {

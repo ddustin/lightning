@@ -37,6 +37,15 @@ def hex_bits(features):
 def expected_peer_features(wumbo_channels=False, extra=[]):
     """Return the expected peer features hexstring for this configuration"""
     features = [1, 5, 7, 8, 11, 13, 14, 17, 25, 27, 45, 47, 51]
+    if EXPERIMENTAL_FEATURES:
+        # OPT_ONION_MESSAGES
+        features += [39]
+        # option_anchor_outputs
+        features += [21]
+        # option_quiesce
+        features += [35]
+        # option_splice
+        features += [63]
     if wumbo_channels:
         features += [19]
     if EXPERIMENTAL_DUAL_FUND:
@@ -50,6 +59,15 @@ def expected_peer_features(wumbo_channels=False, extra=[]):
 def expected_node_features(wumbo_channels=False, extra=[]):
     """Return the expected node features hexstring for this configuration"""
     features = [1, 5, 7, 8, 11, 13, 14, 17, 25, 27, 45, 47, 51, 55]
+    if EXPERIMENTAL_FEATURES:
+        # OPT_ONION_MESSAGES
+        features += [39]
+        # option_anchor_outputs
+        features += [21]
+        # option_quiesce
+        features += [35]
+        # option_splice
+        features += [63]
     if wumbo_channels:
         features += [19]
     if EXPERIMENTAL_DUAL_FUND:
