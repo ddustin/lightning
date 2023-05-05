@@ -3020,6 +3020,30 @@ static int find_channel_funding_input(struct wally_psbt *psbt,
 	return -1;
 }
 
+static void update_view_from_inflights(struct peer *peer)
+{
+	struct inflight *inflights = peer->splice_state.inflights;
+	s64 orig_sats = peer->channel->funding_sats.satoshis;
+
+	for (size_t i = 0; i < tal_count(inflights); i++) {
+		s64 splice_amnt = inflights[i].amnt.satoshis;
+		s64 funding_diff = splice_amnt - orig_sats;
+		s64 remote_splice_amnt = funding_diff - inflights[i].splice_amnt;
+
+		if (splice_amnt < peer->channel->view[LOCAL].lowest_splice_amnt[LOCAL])
+			peer->channel->view[LOCAL].lowest_splice_amnt[LOCAL] = splice_amnt;
+
+		if (splice_amnt < peer->channel->view[REMOTE].lowest_splice_amnt[REMOTE])
+			peer->channel->view[REMOTE].lowest_splice_amnt[LOCAL] = splice_amnt;
+
+		if (remote_splice_amnt < peer->channel->view[LOCAL].lowest_splice_amnt[REMOTE])
+			peer->channel->view[LOCAL].lowest_splice_amnt[REMOTE] = remote_splice_amnt;
+
+		if (remote_splice_amnt < peer->channel->view[REMOTE].lowest_splice_amnt[LOCAL])
+			peer->channel->view[REMOTE].lowest_splice_amnt[REMOTE] = remote_splice_amnt;
+	}
+}
+
 /* ACCEPTER side of the splice. Here we handle all the accepter's steps for the
  * splice. Since the channel must be in STFU mode we block the daemon here until
  * the splice is finished or aborted. */
