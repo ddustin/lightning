@@ -2872,8 +2872,8 @@ static struct amount_sat check_balances(struct peer *peer,
 				 "Initiator funding is less than commited"
 				 " amount. Initiator contributing %s but they"
 				 " committed to %s.",
-				 fmt_amount_msat(tmpctx, opener_out),
-				 fmt_amount_msat(tmpctx, opener_in));
+				 fmt_amount_msat(tmpctx, opener_in),
+				 fmt_amount_msat(tmpctx, opener_out));
 	}
 
 	if (!amount_msat_sub(&initiator_fee, opener_in, opener_out))
@@ -2889,8 +2889,8 @@ static struct amount_sat check_balances(struct peer *peer,
 				 "Accepter funding is less than commited"
 				 " amount. Accepter contributing %s but they"
 				 " committed to %s.",
-				 fmt_amount_msat(tmpctx, opener_out),
-				 fmt_amount_msat(tmpctx, opener_in));
+				 fmt_amount_msat(tmpctx, opener_in),
+				 fmt_amount_msat(tmpctx, opener_out));
 	}
 
 	if (!amount_msat_sub(&accepter_fee, accepter_in, accepter_out))
