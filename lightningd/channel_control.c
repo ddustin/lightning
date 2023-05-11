@@ -1470,7 +1470,7 @@ bool peer_start_channeld(struct channel *channel,
 				       pbases,
 				       reestablish_only,
 				       channel->channel_update,
-				       ld->experimental_upgrade_protocol);
+				       ld->experimental_upgrade_protocol,
 				       inflights);
 
 	/* We don't expect a response: we are triggered by funding_depth_cb. */
