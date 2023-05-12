@@ -1216,7 +1216,7 @@ class LightningRpc(UnixDomainSocketRpc):
         """ Initiate a splice """
         payload = {
             "channel_id": chan_id,
-            "amount": amount,
+            "relative_amount": amount,
             "initialpsbt": initialpsbt,
             "feerate_per_kw": feerate_per_kw,
         }
