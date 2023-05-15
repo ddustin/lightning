@@ -1433,7 +1433,7 @@ static u8 *send_commit_part(struct peer *peer,
 				 direct_outputs, &funding_wscript,
 				 peer->channel, &peer->remote_per_commit,
 				 peer->next_index[REMOTE], REMOTE,
-				 remote_splice_amnt, splice_amnt);
+				 splice_amnt, remote_splice_amnt);
 	htlc_sigs =
 	    calc_commitsigs(tmpctx, peer, txs, funding_wscript, htlc_map,
 			    peer->next_index[REMOTE], &commit_sig);

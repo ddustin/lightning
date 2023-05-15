@@ -331,7 +331,7 @@ struct bitcoin_tx **channel_splice_txs(const tal_t *ctx,
 	struct bitcoin_tx **txs;
 	const struct htlc **committed;
 	struct keyset keyset;
-	struct amount_msat self_pay, other_pay;
+	struct amount_msat side_pay, other_side_pay;
 
 	if (!derive_keyset(per_commitment_point,
 			   &channel->basepoints[side],
@@ -349,16 +349,21 @@ struct bitcoin_tx **channel_splice_txs(const tal_t *ctx,
 					      &channel->funding_pubkey[side],
 					      &channel->funding_pubkey[!side]);
 
-	self_pay = channel->view[side].owed[side];
-	other_pay = channel->view[side].owed[!side];
+	side_pay = channel->view[side].owed[side];
+	other_side_pay = channel->view[side].owed[!side];
 
-	self_pay.millisatoshis += splice_amnt * 1000;
-	other_pay.millisatoshis += remote_splice_amnt * 1000;
+	if (side == LOCAL) {
+		side_pay.millisatoshis += splice_amnt * 1000;
+		other_side_pay.millisatoshis += remote_splice_amnt * 1000;
+	} else if (side == REMOTE) {
+		side_pay.millisatoshis += remote_splice_amnt * 1000;
+		other_side_pay.millisatoshis += splice_amnt * 1000;
+	}
 
 	txs = tal_arr(ctx, struct bitcoin_tx *, 1);
 	txs[0] = commit_tx(
-	    ctx, &channel->funding,
-	    channel->funding_sats,
+	    ctx, funding,
+	    funding_sats,
 	    &channel->funding_pubkey[side],
 	    &channel->funding_pubkey[!side],
 	    channel->opener,
@@ -366,8 +371,8 @@ struct bitcoin_tx **channel_splice_txs(const tal_t *ctx,
 	    channel->lease_expiry,
 	    channel_blockheight(channel, side),
 	    &keyset, channel_feerate(channel, side),
-	    channel->config[side].dust_limit, self_pay,
-	    other_pay, committed, htlcmap, direct_outputs,
+	    channel->config[side].dust_limit, side_pay,
+	    other_side_pay, committed, htlcmap, direct_outputs,
 	    commitment_number ^ channel->commitment_number_obscurer,
 	    channel_has(channel, OPT_ANCHOR_OUTPUTS),
 	    channel_has(channel, OPT_ANCHORS_ZERO_FEE_HTLC_TX),
