@@ -103,7 +103,8 @@ def check_balance_snaps(n, expected_bals):
     snaps = n.rpc.listsnapshots()['balance_snapshots']
     for snap, exp in zip(snaps, expected_bals):
         assert snap['blockheight'] == exp['blockheight']
-        assert _dictify(snap) == _dictify(exp)
+        if _dictify(snap) != _dictify(exp):
+            raise Exception('Unexpected balance snap: {} vs {}'.format(_dictify(snap), _dictify(exp)))
 
 
 def check_coin_moves(n, account_id, expected_moves, chainparams):

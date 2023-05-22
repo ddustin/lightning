@@ -789,6 +789,8 @@ pub mod requests {
 	pub enum NewaddrAddresstype {
 	    #[serde(rename = "bech32")]
 	    BECH32,
+	    #[serde(rename = "p2tr")]
+	    P2TR,
 	    #[serde(rename = "all")]
 	    ALL,
 	}
@@ -798,7 +800,8 @@ pub mod requests {
 	    fn try_from(c: i32) -> Result<NewaddrAddresstype, anyhow::Error> {
 	        match c {
 	    0 => Ok(NewaddrAddresstype::BECH32),
-	    1 => Ok(NewaddrAddresstype::ALL),
+	    1 => Ok(NewaddrAddresstype::P2TR),
+	    2 => Ok(NewaddrAddresstype::ALL),
 	            o => Err(anyhow::anyhow!("Unknown variant {} for enum NewaddrAddresstype", o)),
 	        }
 	    }
@@ -2969,6 +2972,8 @@ pub mod responses {
 
 	#[derive(Clone, Debug, Deserialize, Serialize)]
 	pub struct NewaddrResponse {
+	    #[serde(skip_serializing_if = "Option::is_none")]
+	    pub p2tr: Option<String>,
 	    #[serde(skip_serializing_if = "Option::is_none")]
 	    pub bech32: Option<String>,
 	    #[deprecated]

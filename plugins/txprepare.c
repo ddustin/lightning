@@ -1,5 +1,6 @@
 #include "config.h"
 #include <bitcoin/psbt.h>
+#include <bitcoin/script.h>
 #include <ccan/array_size/array_size.h>
 #include <common/addr.h>
 #include <common/json_param.h>
@@ -245,7 +246,8 @@ static struct command_result *newaddr_done(struct command *cmd,
 					   struct txprepare *txp)
 {
 	size_t num = tal_count(txp->outputs), pos;
-	const jsmntok_t *addr = json_get_member(buf, result, "bech32");
+	const jsmntok_t *addr = json_get_member(buf, result, chainparams->is_elements ? "bech32" : "p2tr");
+	assert(addr);
 
 	/* Insert change in random position in outputs */
 	tal_resize(&txp->outputs, num+1);
@@ -353,6 +355,7 @@ static struct command_result *psbt_created(struct command *cmd,
 				     * but probably won't happen. */
 				    forward_error,
 				    txp);
+	json_add_string(req->js, "addresstype", "all");
 	return send_outreq(cmd->plugin, req);
 }
 

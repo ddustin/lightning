@@ -465,7 +465,7 @@ def test_bookkeeping_missed_chans_pushed(node_factory, bitcoind):
 
     # l1 events
     exp_events = [('channel_open', open_amt * 1000, 0),
-                  ('onchain_fee', 4567000, 0),
+                  ('onchain_fee', 4927000, 0),
                   ('pushed', 0, push_amt),
                   ('journal_entry', 0, invoice_msat)]
     _check_events(l1, channel_id, exp_events)
@@ -538,7 +538,7 @@ def test_bookkeeping_missed_chans_pay_after(node_factory, bitcoind):
 
     # l1 events
     exp_events = [('channel_open', open_amt * 1000, 0),
-                  ('onchain_fee', 4567000, 0),
+                  ('onchain_fee', 4927000, 0),
                   ('invoice', 0, invoice_msat)]
     _check_events(l1, channel_id, exp_events)
 

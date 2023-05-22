@@ -1219,17 +1219,17 @@ after_newaddr(struct command *cmd,
 {
 	const jsmntok_t *field;
 
-	field = json_get_member(buf, result, "bech32");
+	field = json_get_member(buf, result, chainparams->is_elements ? "bech32" : "p2tr");
 	if (!field)
 		plugin_err(cmd->plugin,
-			   "No bech32 field in newaddr result: %.*s",
+			   "No p2tr field in newaddr result: %.*s",
 			   json_tok_full_len(result),
 			   json_tok_full(buf, result));
 	if (json_to_address_scriptpubkey(mfc, chainparams, buf, field,
 					 &mfc->change_scriptpubkey)
 	 != ADDRESS_PARSE_SUCCESS)
 		plugin_err(cmd->plugin,
-			   "Unparseable bech32 field in newaddr result: %.*s",
+			   "Unparseable p2tr field in newaddr result: %.*s",
 			   json_tok_full_len(result),
 			   json_tok_full(buf, result));
 
@@ -1244,7 +1244,7 @@ acquire_change_address(struct multifundchannel_command *mfc)
 				    "newaddr",
 				    &after_newaddr, &mfc_forward_error,
 				    mfc);
-	json_add_string(req->js, "addresstype", "bech32");
+	json_add_string(req->js, "addresstype", chainparams->is_elements ? "bech32" : "p2tr");
 	return send_outreq(mfc->cmd->plugin, req);
 }
 
@@ -1260,7 +1260,7 @@ handle_mfc_change(struct multifundchannel_command *mfc)
 	 * costs.
 	 */
 	change_weight = bitcoin_tx_output_weight(
-				BITCOIN_SCRIPTPUBKEY_P2WPKH_LEN);
+				chainparams->is_elements ? BITCOIN_SCRIPTPUBKEY_P2WPKH_LEN : BITCOIN_SCRIPTPUBKEY_P2TR_LEN);
 
 	/* To avoid 'off-by-one' errors due to rounding down
 	 * (which we do in `amount_tx_fee`), we find the total calculated

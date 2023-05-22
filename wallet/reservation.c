@@ -385,8 +385,17 @@ static struct command_result *finish_psbt(struct command *cmd,
 					    "Failed to generate change address."
 					    " Keys exhausted.");
 
-		bip32_pubkey(cmd->ld, &pubkey, keyidx);
-		b32script = scriptpubkey_p2wpkh(tmpctx, &pubkey);
+		if (chainparams->is_elements) {
+			bip32_pubkey(cmd->ld, &pubkey, keyidx);
+			b32script = scriptpubkey_p2wpkh(tmpctx, &pubkey);
+		} else {
+			b32script = p2tr_for_keyidx(tmpctx, cmd->ld, keyidx);
+		}
+		if (!b32script) {
+			return command_fail(cmd, LIGHTNINGD,
+					    "Failed to generate change address."
+					    " Keys generation failure");
+		}
 		txfilter_add_scriptpubkey(cmd->ld->owned_txfilter, b32script);
 
 		change_outnum = psbt->num_outputs;
@@ -395,7 +404,7 @@ static struct command_result *finish_psbt(struct command *cmd,
 		excess = AMOUNT_SAT(0);
 		/* Add additional weight of output */
 		weight += bitcoin_tx_output_weight(
-				BITCOIN_SCRIPTPUBKEY_P2WPKH_LEN);
+				chainparams->is_elements ? BITCOIN_SCRIPTPUBKEY_P2WPKH_LEN : BITCOIN_SCRIPTPUBKEY_P2TR_LEN);
 	}
 
 fee_calc:
