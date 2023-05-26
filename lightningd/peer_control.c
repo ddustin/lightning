@@ -1772,7 +1772,7 @@ void update_channel_from_inflight(struct lightningd *ld,
 
 	channel->funding = inflight->funding->outpoint;
 	channel->funding_sats = inflight->funding->total_funds;
-	
+
 	channel->our_funds = inflight->funding->our_funds;
 	channel->our_funds.satoshis += inflight->funding->splice_amnt;
 
