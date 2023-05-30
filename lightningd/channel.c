@@ -393,6 +393,10 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 	struct channel *channel = tal(peer->ld, struct channel);
 	struct amount_msat htlc_min, htlc_max;
 
+	bool anysegwit = !chainparams->is_elements && feature_negotiated(peer->ld->our_features,
+                        peer->their_features,
+                        OPT_SHUTDOWN_ANYSEGWIT);
+
 	assert(dbid != 0);
 	channel->peer = peer;
 	channel->dbid = dbid;
@@ -475,7 +479,7 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 	if (local_shutdown_scriptpubkey) {
 		channel->shutdown_scriptpubkey[LOCAL]
 			= tal_steal(channel, local_shutdown_scriptpubkey);
-	} else if (!chainparams->is_elements && channel_type_has(type, OPT_SHUTDOWN_ANYSEGWIT)) {
+	} else if (anysegwit) {
 		channel->shutdown_scriptpubkey[LOCAL]
 			= p2tr_for_keyidx(channel, channel->peer->ld,
 						channel->final_key_idx);
@@ -535,7 +539,7 @@ struct channel *new_channel(struct peer *peer, u64 dbid,
 
 	/* Make sure we see any spends using this key */
 	if (!local_shutdown_scriptpubkey) {
-		if (!chainparams->is_elements && channel_type_has(type, OPT_SHUTDOWN_ANYSEGWIT)) {
+		if (anysegwit) {
 			txfilter_add_scriptpubkey(peer->ld->owned_txfilter,
 						  take(p2tr_for_keyidx(NULL, peer->ld,
 									 channel->final_key_idx)));
