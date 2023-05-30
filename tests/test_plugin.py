@@ -2074,6 +2074,9 @@ def test_coin_movement_notices(node_factory, bitcoind, chainparams):
     chanid_1 = first_channel_id(l2, l1)
     chanid_3 = first_channel_id(l2, l3)
 
+    # Wait until we have the expected features loaded before sending to taproot address
+    wait_for(lambda: len(l2.rpc.listpeers()['peers']) == 2)
+    wait_for(lambda: [x.get("features", None) for x in l2.rpc.listpeers()['peers']] == [expected_peer_features()] * 2)
     l2.rpc.close(chan1)
     l2.daemon.wait_for_logs([
         ' to CLOSINGD_COMPLETE',

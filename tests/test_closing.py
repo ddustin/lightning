@@ -8,7 +8,7 @@ from utils import (
     scriptpubkey_addr, calc_lease_fee,
     check_utxos_channel, anchor_expected, check_coin_moves,
     check_balance_snaps, mine_funding_to_announce, check_inspect_channel,
-    first_scid
+    first_scid, expected_peer_features
 )
 
 import os
@@ -1064,6 +1064,9 @@ def test_channel_lease_lessor_cheat(node_factory, bitcoind, chainparams):
     # start l2 and force close channel with l1 while l1 is still offline
     l2.start()
     sync_blockheight(bitcoind, [l2])
+    # wait for reconnect, otherwise anysegwit feature bits won't be known
+    wait_for(lambda: len(l2.rpc.listpeers()['peers']) == 1)
+    wait_for(lambda: l2.rpc.listpeers()['peers'][0].get('features', "") == expected_peer_features())
     l2.rpc.close(l1.info['id'], 1, force_lease_closed=True)
     bitcoind.generate_block(1, wait_for_mempool=1)
 
@@ -1141,6 +1144,9 @@ def test_channel_lease_lessee_cheat(node_factory, bitcoind, chainparams):
     # start l1 and force close channel with l2 while l2 is still offline
     l1.start()
     sync_blockheight(bitcoind, [l1])
+    # wait for reconnect, otherwise anysegwit feature bits won't be known
+    wait_for(lambda: len(l1.rpc.listpeers()['peers']) == 1)
+    wait_for(lambda: l1.rpc.listpeers()['peers'][0].get('features', "") == expected_peer_features())
     l1.rpc.close(l2.info['id'], 1, force_lease_closed=True)
     bitcoind.generate_block(1, wait_for_mempool=1)
 
