@@ -2,8 +2,7 @@ from fixtures import *  # noqa: F401,F403
 from fixtures import TEST_NETWORK
 from pyln.client import RpcError, Millisatoshi
 from utils import (
-    only_one, wait_for, sync_blockheight, first_channel_id,
-    calc_lease_fee, check_coin_moves, anchor_expected, expected_peer_features
+    only_one, wait_for, sync_blockheight, first_channel_id, calc_lease_fee, check_coin_moves, anchor_expected
 )
 
 from pathlib import Path
@@ -1635,8 +1634,6 @@ def test_v2_replay_bookkeeping(node_factory, bitcoind):
     ev_tags = [e['tag'] for e in l1.rpc.bkpr_listaccountevents(chan_id)['events']]
     assert 'lease_fee' in ev_tags
 
-    wait_for(lambda: len(l1.rpc.listpeers()['peers']) == 1)
-    wait_for(lambda: l1.rpc.listpeers()['peers'][0].get('features', "") == expected_peer_features())
     l1.rpc.close(l2.info['id'], 1)
     bitcoind.generate_block(6, wait_for_mempool=1)
 

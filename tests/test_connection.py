@@ -792,10 +792,6 @@ def test_reconnect_no_update(node_factory, executor, bitcoind):
 
     # For closingd reconnection
     l1.daemon.start()
-    # wait for reconnect, otherwise anysegwit feature bits won't be known
-    wait_for(lambda: len(l1.rpc.listpeers()['peers']) == 1)
-    wait_for(lambda: l1.rpc.listpeers()['peers'][0].get('features', "") == expected_peer_features())
-
     # Close will trigger the -WIRE_SHUTDOWN and we then wait for the
     # automatic reconnection to trigger the retransmission.
     l1.rpc.close(l2.info['id'], 0)
