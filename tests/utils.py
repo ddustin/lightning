@@ -415,7 +415,8 @@ def basic_fee(feerate):
 
 def closing_fee(feerate, num_outputs):
     assert num_outputs == 1 or num_outputs == 2
-    weight = 428 + 124 * num_outputs
+    # Assumes p2tr outputs
+    weight = 428 + (8 + 1 + 1 + 1 + 32) * 4 * num_outputs
     return (weight * feerate) // 1000
 
 
