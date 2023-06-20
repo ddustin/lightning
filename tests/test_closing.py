@@ -3509,8 +3509,8 @@ def test_close_feerate_range(node_factory, bitcoind, chainparams):
         l1.rpc.close(l2.info['id'], feerange=['253perkw', 'normal'])
 
     if not chainparams['elements']:
-        l1_range = [139, 4140]
-        l2_range = [1035, 1000000]
+        l1_range = [151, 4500]
+        l2_range = [1125, 1000000]
     else:
         # That fee output is a little chunky.
         l1_range = [221, 6577]
