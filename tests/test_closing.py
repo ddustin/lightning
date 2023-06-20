@@ -3185,6 +3185,7 @@ def test_option_upfront_shutdown_script(node_factory, bitcoind, executor):
     # Expect 1 for change address, plus 1 for the funding address of the actual
     # funding tx.
     addr = l1.rpc.call('dev-listaddrs', [keyidx + 2])['addresses'][-1]
+
     # the above used to be keyidx + 3, but that was when `fundchannel`
     # used the `txprepare`-`txdiscard`-`txprepare` trick, which skipped
     # one address in the discarded tx.
@@ -3192,8 +3193,7 @@ def test_option_upfront_shutdown_script(node_factory, bitcoind, executor):
 
     # Now, if we specify upfront and it's OK, all good.
     l1.stop()
-    # We need to prepend the segwit version (0) and push opcode (14).
-    l1.daemon.env["DEV_OPENINGD_UPFRONT_SHUTDOWN_SCRIPT"] = '0014' + addr['bech32_redeemscript']
+    l1.daemon.env["DEV_OPENINGD_UPFRONT_SHUTDOWN_SCRIPT"] = bitcoind.rpc.getaddressinfo(addr['p2tr'])['scriptPubKey']
     l1.start()
 
     l1.rpc.connect(l2.info['id'], 'localhost', l2.port)
