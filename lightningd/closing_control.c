@@ -672,7 +672,7 @@ static struct command_result *json_close(struct command *cmd,
 	final_index = &index_val;
 
 	/* Don't send a scriptpubkey peer won't accept */
-	anysegwit = feature_negotiated(cmd->ld->our_features,
+	anysegwit = !chainparams->is_elements && feature_negotiated(cmd->ld->our_features,
 				       channel->peer->their_features,
 				       OPT_SHUTDOWN_ANYSEGWIT);
 

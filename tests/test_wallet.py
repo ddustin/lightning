@@ -316,7 +316,10 @@ def test_txprepare(node_factory, bitcoind, chainparams):
             assert o['scriptPubKey']['type'] == 'witness_v0_keyhash'
             assert scriptpubkey_addr(o['scriptPubKey']) == addr
         else:
-            assert o['scriptPubKey']['type'] in ['witness_v1_taproot', 'fee']
+            if chainparams['elements']:
+                o['scriptPubKey']['type'] in ['witness_v0_keyhash', 'fee']
+            else:
+                assert o['scriptPubKey']['type'] in ['witness_v1_taproot', 'fee']
 
     # Now prepare one with no change.
     prep2 = l1.rpc.txprepare([{addr: 'all'}])
@@ -438,7 +441,10 @@ def test_txprepare(node_factory, bitcoind, chainparams):
     assert decode['vout'][outnum2]['scriptPubKey']['type'] == 'witness_v0_keyhash'
     assert scriptpubkey_addr(decode['vout'][outnum2]['scriptPubKey']) == addr
 
-    assert decode['vout'][changenum]['scriptPubKey']['type'] == 'witness_v1_taproot'
+    if chainparams['elements']:
+        assert decode['vout'][changenum]['scriptPubKey']['type'] == 'witness_v0_keyhash'
+    else:
+        assert decode['vout'][changenum]['scriptPubKey']['type'] == 'witness_v1_taproot'
 
 
 def test_reserveinputs(node_factory, bitcoind, chainparams):
