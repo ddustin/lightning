@@ -3139,7 +3139,7 @@ def test_shutdown(node_factory):
 
 
 @pytest.mark.developer("needs to set upfront_shutdown_script")
-def test_option_upfront_shutdown_script(node_factory, bitcoind, executor):
+def test_option_upfront_shutdown_script(node_factory, bitcoind, executor, chainparams):
     l1 = node_factory.get_node(start=False, allow_warning=True)
     # Insist on upfront script we're not going to match.
     # '0014' + l1.rpc.call('dev-listaddrs', [10])['addresses'][-1]['bech32_redeemscript']
