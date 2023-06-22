@@ -582,23 +582,22 @@ static void announce_channel(struct peer *peer)
 	send_channel_update(peer, 0);
 }
 
-static void channel_announcement_negotiate(struct peer *peer,
-					   bool *sent_announcement)
+/* Returns true if an announcement was sent */
+static bool channel_announcement_negotiate(struct peer *peer)
 {
-	if (sent_announcement)
-		*sent_announcement = false;
+	bool sent_announcement = false;
 
 	/* Don't do any announcement work if we're shutting down */
 	if (peer->shutdown_sent[LOCAL])
-		return;
+		return false;
 
 	/* Can't do anything until funding is locked. */
 	if (!peer->channel_ready[LOCAL] || !peer->channel_ready[REMOTE])
-		return;
+		return false;
 
 	/* Don't announce channel if we're in stfu mode */
 	if (peer->stfu_request || is_stfu_active(peer))
-		return;
+		return false;
 
 	if (!peer->channel_local_active) {
 		peer->channel_local_active = true;
@@ -624,7 +623,7 @@ static void channel_announcement_negotiate(struct peer *peer,
 	 *     - MUST NOT send the `announcement_signatures` message.
 	 */
 	if (!(peer->channel_flags & CHANNEL_FLAGS_ANNOUNCE_CHANNEL))
-		return;
+		return false;
 
 	/* BOLT #7:
 	 *
@@ -639,8 +638,7 @@ static void channel_announcement_negotiate(struct peer *peer,
 		send_announcement_signatures(peer);
 		peer->have_sigs[LOCAL] = true;
 		billboard_update(peer);
-		if (sent_announcement)
-			*sent_announcement = true;
+		sent_announcement = true;
 	}
 
 	/* If we've completed the signature exchange, we can send a real
@@ -660,6 +658,8 @@ static void channel_announcement_negotiate(struct peer *peer,
 				     time_from_sec(GOSSIP_ANNOUNCE_DELAY(peer->dev_fast_gossip)),
 				     announce_channel, peer));
 	}
+
+	return sent_announcement;
 }
 
 /* Call this method when splice_locked status are changed. If both sides have
@@ -737,7 +737,7 @@ static void check_mutual_splice_locked(struct peer *peer)
 						&inflight->outpoint.txid);
 	wire_sync_write(MASTER_FD, take(msg));
 
-	channel_announcement_negotiate(peer, NULL);
+	channel_announcement_negotiate(peer);
 	billboard_update(peer);
 	send_channel_update(peer, 0);
 
@@ -815,7 +815,7 @@ static void handle_peer_channel_ready(struct peer *peer, const u8 *msg)
 			take(towire_channeld_got_channel_ready(
 			    NULL, &peer->remote_per_commit, tlvs->short_channel_id)));
 
-	channel_announcement_negotiate(peer, NULL);
+	channel_announcement_negotiate(peer);
 	billboard_update(peer);
 	peer->send_duplicate_announce_sigs = true;
 }
@@ -823,7 +823,6 @@ static void handle_peer_channel_ready(struct peer *peer, const u8 *msg)
 static void handle_peer_announcement_signatures(struct peer *peer, const u8 *msg)
 {
 	struct channel_id chanid;
-	bool sent_announcement;
 	struct short_channel_id remote_scid;
 
 	if (!fromwire_announcement_signatures(msg,
@@ -864,8 +863,8 @@ static void handle_peer_announcement_signatures(struct peer *peer, const u8 *msg
 	peer->have_sigs[REMOTE] = true;
 	billboard_update(peer);
 
-	channel_announcement_negotiate(peer, &sent_announcement);
-	if (!sent_announcement && peer->send_duplicate_announce_sigs
+	if (!channel_announcement_negotiate(peer)
+	    && peer->send_duplicate_announce_sigs
 	    && peer->have_sigs[LOCAL]) {
 		peer->send_duplicate_announce_sigs = false;
 		send_announcement_signatures(peer);
@@ -5080,7 +5079,7 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 		peer->announce_depth_reached = (depth >= ANNOUNCE_MIN_DEPTH);
 
 		/* Send temporary or final announcements */
-		channel_announcement_negotiate(peer, NULL);
+		channel_announcement_negotiate(peer);
 	}
 
 	billboard_update(peer);
@@ -5792,7 +5791,7 @@ static void init_channel(struct peer *peer)
 		peer_write(peer->pps, take(fwd_msg));
 
 	/* Reenable channel */
-	channel_announcement_negotiate(peer, NULL);
+	channel_announcement_negotiate(peer);
 
 	billboard_update(peer);
 }
