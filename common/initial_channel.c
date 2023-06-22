@@ -152,10 +152,10 @@ struct bitcoin_tx *initial_channel_tx(const tal_t *ctx,
 	return init_tx;
 }
 
-char *channel_update_funding(struct channel *channel,
-			     const struct bitcoin_outpoint *funding,
-			     struct amount_sat funding_sats,
-			     s64 splice_amnt)
+const char *channel_update_funding(struct channel *channel,
+				   const struct bitcoin_outpoint *funding,
+				   struct amount_sat funding_sats,
+				   s64 splice_amnt)
 {
 	s64 funding_diff = (s64)funding_sats.satoshis - (s64)channel->funding_sats.satoshis;
 	s64 remote_splice_amnt = funding_diff - splice_amnt;

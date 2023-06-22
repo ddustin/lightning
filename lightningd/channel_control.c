@@ -159,9 +159,8 @@ static struct splice_command *splice_command_for_chan(struct lightningd *ld,
 						      struct channel *channel)
 {
 	struct splice_command *cc;
-	struct splice_command *n;
 
-	list_for_each_safe(&ld->splice_commands, cc, n, list)
+	list_for_each(&ld->splice_commands, cc, list)
 		if (channel == cc->channel)
 			return cc;
 
@@ -272,8 +271,6 @@ static void handle_splice_feerate_error(struct lightningd *ld,
 						fmt_amount_msat(tmpctx, fee)));
 
 		was_pending(command_success(cc->cmd, response));
-
-		list_del(&cc->list);
 		tal_free(cc);
 	}
 	else
@@ -307,12 +304,9 @@ static void handle_splice_confirmed_init(struct lightningd *ld,
 	}
 
 	struct json_stream *response = json_stream_success(cc->cmd);
-	json_add_string(response, "message", "Splice intiated");
 	json_add_string(response, "psbt", psbt_to_b64(tmpctx, psbt));
 
 	was_pending(command_success(cc->cmd, response));
-
-	list_del(&cc->list);
 	tal_free(cc);
 }
 
@@ -344,7 +338,6 @@ static void handle_splice_confirmed_update(struct lightningd *ld,
 	}
 
 	struct json_stream *response = json_stream_success(cc->cmd);
-	json_add_string(response, "message", "Splice updated");
 	json_add_string(response, "psbt", psbt_to_b64(tmpctx, psbt));
 	json_add_bool(response, "commitments_secured", commitments_secured);
 
@@ -418,7 +411,6 @@ static void handle_tx_broadcast(struct send_splice_info *info)
 	if (info->cc) {
 		response = json_stream_success(info->cc->cmd);
 
-		json_add_string(response, "message", "Splice confirmed");
 		json_add_hex(response, "tx", tx_bytes, tal_bytelen(tx_bytes));
 		json_add_txid(response, "txid", &txid);
 
@@ -1218,7 +1210,6 @@ static unsigned channel_msg(struct subd *sd, const u8 *msg, const int *fds)
 		handle_peer_splice_locked(sd->channel, msg);
 		break;
 	case WIRE_CHANNELD_UPGRADED:
-#if EXPERIMENTAL_FEATURES
 		handle_channel_upgrade(sd->channel, msg);
 		break;
 	/* And we never get these from channeld. */
@@ -1475,7 +1466,8 @@ bool peer_start_channeld(struct channel *channel,
 				       reestablish_only,
 				       channel->channel_update,
 				       ld->experimental_upgrade_protocol,
-				       inflights);
+				       cast_const2(const struct inflight **,
+				       		   inflights));
 
 	/* We don't expect a response: we are triggered by funding_depth_cb. */
 	subd_send_msg(channel->owner, take(initmsg));
@@ -1522,7 +1514,7 @@ bool channel_tell_depth(struct lightningd *ld,
 		if (!get_inflight_outpoint_index(channel, txid, &outnum)) {
 			log_debug(channel->log, "Can't locate splice inflight"
 				  " txid %s", txidstr);
-			false;
+			return false;
 		}
 
 		loc = wallet_transaction_locate(tmpctx, ld->wallet, txid);
@@ -2169,5 +2161,3 @@ static const struct json_command dev_quiesce_command = {
 };
 AUTODATA(json_command, &dev_quiesce_command);
 #endif /* DEVELOPER */
-};
-AUTO

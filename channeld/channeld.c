@@ -195,7 +195,7 @@ struct peer {
 	/* Empty commitments.  Spec violation, but a minor one. */
 	u64 last_empty_commitment;
 
-	/* Penalty bases for this channel / peer-> */
+	/* Penalty bases for this channel / peer. */
 	struct penalty_base **pbases;
 
 	/* We allow a 'tx-sigs' message between reconnect + channel_ready */
@@ -369,7 +369,6 @@ static bool handle_master_request_later(struct peer *peer, const u8 *msg)
 	return false;
 }
 
-#if EXPERIMENTAL_FEATURES
 /* Compare, with false if either is NULL */
 static bool match_type(const u8 *t1, const u8 *t2)
 {
@@ -399,7 +398,6 @@ static void set_channel_type(struct channel *channel, const u8 *type)
 	wire_sync_write(MASTER_FD,
 			take(towire_channeld_upgraded(NULL, channel->type)));
 }
-#endif /* EXPERIMENTAL_FEATURES */
 
 /* Tell gossipd to create channel_update (then it goes into
  * gossip_store, then streams out to peers, or sends it directly if
@@ -560,14 +558,15 @@ static void check_short_ids_match(struct peer *peer)
 {
 	assert(peer->have_sigs[LOCAL]);
 	assert(peer->have_sigs[REMOTE]);
+
 	if (!short_channel_id_eq(&peer->short_channel_ids[LOCAL],
-				      &peer->short_channel_ids[REMOTE]))
+				 &peer->short_channel_ids[REMOTE]))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "We disagree on short_channel_ids:"
 				 " I have %s, you say %s",
-				 type_to_string(tmpctx, struct short_channel_id,
+				 type_to_string(peer, struct short_channel_id,
 						&peer->short_channel_ids[LOCAL]),
-				 type_to_string(tmpctx, struct short_channel_id,
+				 type_to_string(peer, struct short_channel_id,
 						&peer->short_channel_ids[REMOTE]));
 }
 
@@ -580,7 +579,6 @@ static void announce_channel(struct peer *peer)
 	wire_sync_write(MASTER_FD,
 			take(towire_channeld_local_channel_announcement(NULL,
 									cannounce)));
-
 	send_channel_update(peer, 0);
 }
 
@@ -670,7 +668,7 @@ static void channel_announcement_negotiate(struct peer *peer,
 static void check_mutual_splice_locked(struct peer *peer)
 {
 	u8 *msg;
-	char *error;
+	const char *error;
 	struct inflight *inflight;
 
 	/* If both sides haven't `splice_locked` we're not ready */
@@ -2576,7 +2574,7 @@ static void handle_unexpected_reestablish(struct peer *peer, const u8 *msg)
 				       &channel_id));
 }
 
-static bool is_initiators(const struct wally_map *unknowns)
+static bool is_initiators_serial(const struct wally_map *unknowns)
 {
 	/* BOLT-f15b6b0feeffc2acd1a8466537810bbb3f824f9f #2:
 	 * The sending node: ...
@@ -2604,8 +2602,8 @@ static bool do_i_sign_first(struct peer *peer, struct wally_psbt *psbt,
 	struct amount_sat opener_in = AMOUNT_SAT(0);
 	struct amount_sat accepter_in = AMOUNT_SAT(0);
 
-	for (int i = 0; i < psbt->num_inputs; i++) {
-		struct amount_sat *in = is_initiators(&psbt->inputs[i].unknowns)
+	for (size_t i = 0; i < psbt->num_inputs; i++) {
+		struct amount_sat *in = is_initiators_serial(&psbt->inputs[i].unknowns)
 					? &opener_in : &accepter_in;
 		struct amount_sat additional = psbt_input_get_amount(psbt, i);
 		if (!amount_sat_add(in, *in, additional))
@@ -2730,7 +2728,7 @@ static struct wally_psbt_output *find_channel_output(struct peer *peer,
 
 	scriptpubkey = scriptpubkey_p2wsh(psbt, wit_script);
 
-	for (int i = 0; i < psbt->num_outputs; i++) {
+	for (size_t i = 0; i < psbt->num_outputs; i++) {
 		if (memeq(psbt->outputs[i].script,
 			 psbt->outputs[i].script_len,
 			 scriptpubkey,
@@ -2748,7 +2746,7 @@ static struct wally_psbt_output *find_channel_output(struct peer *peer,
 	return NULL;
 }
 
-static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
+static size_t calc_weight(enum tx_role role, const struct wally_psbt *psbt)
 {
 	size_t weight = 0;
 
@@ -2757,7 +2755,7 @@ static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
 						 psbt->num_outputs);
 
 	for (size_t i = 0; i < psbt->num_inputs; i++)
-		if (is_initiators(&psbt->inputs[i].unknowns)) {
+		if (is_initiators_serial(&psbt->inputs[i].unknowns)) {
 			if (role == TX_INITIATOR)
 				weight += psbt_input_weight(psbt, i);
 		}
@@ -2768,10 +2766,11 @@ static size_t calc_weight(enum tx_role role, struct wally_psbt *psbt)
 	return weight;
 }
 
-/* Returns the total channel funding output amount if all checks pass */
+/* Returns the total channel funding output amount if all checks pass.
+ * Otherwise, exits via peer_failed_warn. DTODO: Change to `tx_abort`. */
 static struct amount_sat check_balances(struct peer *peer,
 					enum tx_role our_role,
-					struct wally_psbt *psbt,
+					const struct wally_psbt *psbt,
 					int chan_output_index,
 					int chan_input_index)
 {
@@ -2790,7 +2789,7 @@ static struct amount_sat check_balances(struct peer *peer,
 	opener_in = peer->channel->view->owed[opener ? LOCAL : REMOTE];
 	accepter_in = peer->channel->view->owed[opener ? REMOTE : LOCAL];
 
-	for (int i = 0; i < psbt->num_inputs; i++) {
+	for (size_t i = 0; i < psbt->num_inputs; i++) {
 		struct amount_sat amount = psbt_input_get_amount(psbt, i);
 		bool res;
 
@@ -2799,14 +2798,14 @@ static struct amount_sat check_balances(struct peer *peer,
 
 		if (amount_sat_zero(amount))
 			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Input %d of splice does not have an"
-					 " input amount", i);
+					 "Input %lu of splice does not "
+					 "have an input amount", i);
 		if (!amount_sat_add(&total_in, total_in, amount))
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Unable to amount_sat_add input"
 					 " amounts");
 		/* amount_sat_add would have failed above so no need to check */
-		if (is_initiators(&psbt->inputs[i].unknowns))
+		if (is_initiators_serial(&psbt->inputs[i].unknowns))
 			res = amount_msat_add_sat(&opener_in, opener_in, amount);
 		else
 			res = amount_msat_add_sat(&accepter_in, accepter_in, amount);
@@ -2820,7 +2819,7 @@ static struct amount_sat check_balances(struct peer *peer,
 	opener_out = peer->channel->view->owed[opener ? LOCAL : REMOTE];
 	accepter_out = peer->channel->view->owed[opener ? REMOTE : LOCAL];
 
-	for (int i = 0; i < psbt->num_outputs; i++) {
+	for (size_t i = 0; i < psbt->num_outputs; i++) {
 		struct amount_sat amount = psbt_output_get_amount(psbt, i);
 		bool res;
 		if (i == chan_output_index)
@@ -2830,7 +2829,7 @@ static struct amount_sat check_balances(struct peer *peer,
 			peer_failed_warn(peer->pps, &peer->channel_id,
 					 "Unable to amount_sat_add output amounts");
 		/* amount_sat_add would have already failed above */
-		if (is_initiators(&psbt->outputs[i].unknowns))
+		if (is_initiators_serial(&psbt->outputs[i].unknowns))
 			res = amount_msat_add_sat(&opener_out, opener_out, amount);
 		else
 			res = amount_msat_add_sat(&accepter_out, accepter_out, amount);
@@ -3393,7 +3392,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	/* TODO: Add plugin hook for user to adjust accepter amount */
 	peer->splice.accepter_relative = 0;
 
-	msg = towire_splice_ack(tmpctx,
+	msg = towire_splice_ack(NULL,
 				&peer->channel_id,
 				&chainparams->genesis_blockhash,
 				peer->splice.accepter_relative,
@@ -4493,7 +4492,7 @@ static void peer_reconnect(struct peer *peer,
 	const u8 **premature_msgs = tal_arr(peer, const u8 *, 0);
 	struct inflight *inflight;
 	bool next_matches_current, next_matches_inflight;
-#if EXPERIMENTAL_FEATURES
+
 	struct tlv_channel_reestablish_tlvs *send_tlvs, *recv_tlvs;
 
 	dataloss_protect = feature_negotiated(peer->our_features,
@@ -4513,37 +4512,12 @@ static void peer_reconnect(struct peer *peer,
 		/* Subtle: we free tmpctx below as we loop, so tal off peer */
 		send_tlvs = tlv_channel_reestablish_tlvs_new(peer);
 
-	inflight = last_inflight(peer);
+		inflight = last_inflight(peer);
 
-	/* If inflight with no sigs on it, send next_funding */
-	if (inflight && !inflight->last_tx)
-		send_tlvs->next_funding = &inflight->outpoint.txid;
+		/* If inflight with no sigs on it, send next_funding */
+		if (inflight && !inflight->last_tx)
+			send_tlvs->next_funding = &inflight->outpoint.txid;
 
-	/* FIXME: v0.10.1 would send a different tlv set, due to older spec.
-	 * That did *not* offer OPT_QUIESCE, so in that case don't send tlvs. */
-	if (!feature_negotiated(peer->our_features,
-				peer->their_features,
-				OPT_QUIESCE))
-		goto skip_tlvs;
-
-	/* BOLT-upgrade_protocol #2:
-	 * A node sending `channel_reestablish`, if it supports upgrading channels:
-	 *   - MUST set `next_to_send` the commitment number of the next
-	 *     `commitment_signed` it expects to send.
-	 */
-	send_tlvs->next_to_send = tal_dup(send_tlvs, u64, &peer->next_index[REMOTE]);
-
-	/* BOLT-upgrade_protocol #2:
-	 * - if it initiated the channel:
-	 *   - MUST set `desired_type` to the channel_type it wants for the
-	 *     channel.
-	 */
-	if (peer->channel->opener == LOCAL)
-		send_tlvs->desired_channel_type =
-			to_bytearr(send_tlvs,
-				   take(channel_desired_type(NULL,
-							     peer->channel)));
-	else {
 		/* BOLT-upgrade_protocol #2:
 		 * A node sending `channel_reestablish`, if it supports upgrading channels:
 		 *   - MUST set `next_to_send` the commitment number of the next
@@ -5041,8 +5015,9 @@ static void handle_funding_depth(struct peer *peer, const u8 *msg)
 	if (peer->shutdown_sent[LOCAL])
 		return;
 
-	if (depth < peer->channel->minimum_depth)
+	if (depth < peer->channel->minimum_depth) {
 		peer->depth_togo = peer->channel->minimum_depth - depth;
+	}
 	else {
 		peer->depth_togo = 0;
 
@@ -5161,7 +5136,7 @@ static void handle_offer_htlc(struct peer *peer, const u8 *inmsg)
 
 	switch (e) {
 	case CHANNEL_ERR_ADD_OK:
-		/* Tell the peer-> */
+		/* Tell the peer. */
 		msg = towire_update_add_htlc(NULL, &peer->channel_id,
 					     peer->htlc_id, amount,
 					     &payment_hash, cltv_expiry,
@@ -5916,7 +5891,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* If we're in STFU mode and aren't waiting for a STFU mode
-		 * specific message, don't read from the peer-> */
+		 * specific message, don't read from the peer. */
 		if (!peer->stfu_wait_single_msg && is_stfu_active(peer))
 			FD_CLR(peer->pps->peer_fd, &rfds);
 

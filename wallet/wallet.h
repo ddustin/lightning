@@ -614,9 +614,6 @@ void wallet_inflight_add(struct wallet *w, struct channel_inflight *inflight);
 void wallet_inflight_save(struct wallet *w,
 			  struct channel_inflight *inflight);
 
-void wallet_promote_splice_candidate(struct wallet *w,
-				     struct channel *chan);
-
 /**
  * Remove all the inflights from a channel. Also cleans up
  * the channel's inflight list

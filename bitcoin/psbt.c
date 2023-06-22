@@ -325,6 +325,7 @@ void psbt_input_set_utxo(struct wally_psbt *psbt, size_t in,
 void psbt_input_set_outpoint(struct wally_psbt *psbt, size_t in,
 			     struct bitcoin_outpoint outpoint)
 {
+	assert(in < psbt->num_inputs);
 	psbt->inputs[in].index = outpoint.n;
 	memcpy(psbt->inputs[in].txhash, &outpoint.txid,
 	       sizeof(struct bitcoin_txid));

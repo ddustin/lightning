@@ -166,7 +166,7 @@ psbt_to_witnesses(const tal_t *ctx,
 	return witnesses;
 }
 
-size_t psbt_input_weight(struct wally_psbt *psbt,
+size_t psbt_input_weight(const struct wally_psbt *psbt,
 				size_t in)
 {
 	size_t weight;

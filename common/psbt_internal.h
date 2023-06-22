@@ -36,7 +36,7 @@ psbt_to_witnesses(const tal_t *ctx,
                   int input_index_to_ignore);
 
 /* psbt_input_weight - Calculate the tx weight for input index `in` */
-size_t psbt_input_weight(struct wally_psbt *psbt,
+size_t psbt_input_weight(const struct wally_psbt *psbt,
                                 size_t in);
 
 /* psbt_output_weight - Calculate the tx weight for output index `outnum` */

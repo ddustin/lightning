@@ -152,10 +152,10 @@ struct bitcoin_tx *initial_channel_tx(const tal_t *ctx,
  *
  * Returns NULL on success or an error on failure.
  */
-char *channel_update_funding(struct channel *channel,
-			    const struct bitcoin_outpoint *funding,
-			    struct amount_sat funding_sats,
-			    s64 splice_amnt);
+const char *channel_update_funding(struct channel *channel,
+				   const struct bitcoin_outpoint *funding,
+				   struct amount_sat funding_sats,
+				   s64 splice_amnt);
 
 /**
  * channel_feerate: Get fee rate for this side of channel.
