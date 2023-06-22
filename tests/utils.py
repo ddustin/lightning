@@ -2,7 +2,7 @@ from pyln.testing.utils import TEST_NETWORK, TIMEOUT, VALGRIND, DEVELOPER, DEPRE
 from pyln.testing.utils import env, only_one, wait_for, write_config, TailableProc, sync_blockheight, wait_channel_quiescent, get_tx_p2wsh_outnum, mine_funding_to_announce, scid_to_int  # noqa: F401
 import bitstring
 from pyln.client import Millisatoshi
-from pyln.testing.utils import EXPERIMENTAL_DUAL_FUND
+from pyln.testing.utils import EXPERIMENTAL_DUAL_FUND, EXPERIMENTAL_SPLICING
 import time
 
 COMPAT = env("COMPAT", "1") == "1"
@@ -37,20 +37,14 @@ def hex_bits(features):
 def expected_peer_features(wumbo_channels=False, extra=[]):
     """Return the expected peer features hexstring for this configuration"""
     features = [1, 5, 7, 8, 11, 13, 14, 17, 25, 27, 45, 47, 51]
-    if EXPERIMENTAL_FEATURES:
-        # OPT_ONION_MESSAGES
-        features += [39]
-        # option_anchor_outputs
-        features += [21]
-        # option_quiesce
-        features += [35]
-        # option_splice
-        features += [63]
     if wumbo_channels:
         features += [19]
     if EXPERIMENTAL_DUAL_FUND:
         # option_dual_fund
         features += [29]
+    if EXPERIMENTAL_SPLICING:
+        # option_splice
+        features += [63]
     return hex_bits(features + extra)
 
 
@@ -59,20 +53,14 @@ def expected_peer_features(wumbo_channels=False, extra=[]):
 def expected_node_features(wumbo_channels=False, extra=[]):
     """Return the expected node features hexstring for this configuration"""
     features = [1, 5, 7, 8, 11, 13, 14, 17, 25, 27, 45, 47, 51, 55]
-    if EXPERIMENTAL_FEATURES:
-        # OPT_ONION_MESSAGES
-        features += [39]
-        # option_anchor_outputs
-        features += [21]
-        # option_quiesce
-        features += [35]
-        # option_splice
-        features += [63]
     if wumbo_channels:
         features += [19]
     if EXPERIMENTAL_DUAL_FUND:
         # option_dual_fund
         features += [29]
+    if EXPERIMENTAL_SPLICING:
+        # option_splice
+        features += [63]
     return hex_bits(features + extra)
 
 
