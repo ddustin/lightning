@@ -1612,8 +1612,8 @@ static void send_commit(struct peer *peer)
 	 *     feerate order.
 	 */
 	for (u32 i = 0; i < tal_count(peer->splice_state.inflights); i++) {
-		s64 funding_diff = (s64)peer->splice_state.inflights[i]->amnt.satoshis
-					- peer->channel->funding_sats.satoshis;
+		s64 funding_diff = (s64)peer->splice_state.inflights[i]->amnt.satoshis /* Raw: splicing */
+					- peer->channel->funding_sats.satoshis; /* Raw: splicing */
 		s64 remote_splice_amnt = funding_diff
 					- peer->splice_state.inflights[i]->splice_amnt;
 
@@ -2073,8 +2073,8 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 	 * inflight splices. Since consequtive is requred, we recurse for
 	 * each expected message, blocking until all are received. */
 	for (i = 0; i < tal_count(peer->splice_state.inflights); i++) {
-		s64 funding_diff = (s64)peer->splice_state.inflights[i]->amnt.satoshis
-					- peer->channel->funding_sats.satoshis;
+		s64 funding_diff = (s64)peer->splice_state.inflights[i]->amnt.satoshis /* Raw: splicing */
+					- peer->channel->funding_sats.satoshis; /* Raw: splicing */
 		s64 sub_splice_amnt = peer->splice_state.inflights[i]->splice_amnt;
 
 		splice_msg = peer_read(tmpctx, peer->pps);
@@ -3057,10 +3057,10 @@ static int find_channel_funding_input(struct wally_psbt *psbt,
 static void update_view_from_inflights(struct peer *peer)
 {
 	struct inflight **inflights = peer->splice_state.inflights;
-	s64 orig_sats = peer->channel->funding_sats.satoshis;
+	s64 orig_sats = peer->channel->funding_sats.satoshis; /* Raw: splicing */
 
 	for (size_t i = 0; i < tal_count(inflights); i++) {
-		s64 splice_amnt = inflights[i]->amnt.satoshis;
+		s64 splice_amnt = inflights[i]->amnt.satoshis; /* Raw: splicing */
 		s64 funding_diff = splice_amnt - orig_sats;
 		s64 remote_splice_amnt = funding_diff - inflights[i]->splice_amnt;
 

@@ -157,25 +157,25 @@ const char *channel_update_funding(struct channel *channel,
 				   struct amount_sat funding_sats,
 				   s64 splice_amnt)
 {
-	s64 funding_diff = (s64)funding_sats.satoshis - (s64)channel->funding_sats.satoshis;
+	s64 funding_diff = (s64)funding_sats.satoshis - (s64)channel->funding_sats.satoshis; /* Raw: splicing */
 	s64 remote_splice_amnt = funding_diff - splice_amnt;
 
 	channel->funding = *funding;
 	channel->funding_sats = funding_sats;
 
-	if (splice_amnt * 1000 + channel->view[LOCAL].owed[LOCAL].millisatoshis < 0)
+	if (splice_amnt * 1000 + channel->view[LOCAL].owed[LOCAL].millisatoshis < 0) /* Raw: splicing */
 		return tal_fmt(tmpctx, "Channel funding update would make local"
 			       " balance negative.");
 
-	channel->view[LOCAL].owed[LOCAL].millisatoshis += splice_amnt * 1000;
-	channel->view[REMOTE].owed[LOCAL].millisatoshis += splice_amnt * 1000;
+	channel->view[LOCAL].owed[LOCAL].millisatoshis += splice_amnt * 1000; /* Raw: splicing */
+	channel->view[REMOTE].owed[LOCAL].millisatoshis += splice_amnt * 1000; /* Raw: splicing */
 
-	if (remote_splice_amnt * 1000 + channel->view[LOCAL].owed[REMOTE].millisatoshis < 0)
+	if (remote_splice_amnt * 1000 + channel->view[LOCAL].owed[REMOTE].millisatoshis < 0) /* Raw: splicing */
 		return tal_fmt(tmpctx, "Channel funding update would make"
 			       " remote balance negative.");
 
-	channel->view[LOCAL].owed[REMOTE].millisatoshis += remote_splice_amnt * 1000;
-	channel->view[REMOTE].owed[REMOTE].millisatoshis += remote_splice_amnt * 1000;
+	channel->view[LOCAL].owed[REMOTE].millisatoshis += remote_splice_amnt * 1000; /* Raw: splicing */
+	channel->view[REMOTE].owed[REMOTE].millisatoshis += remote_splice_amnt * 1000; /* Raw: splicing */
 
 	return NULL;
 }

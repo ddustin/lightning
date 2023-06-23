@@ -353,11 +353,11 @@ struct bitcoin_tx **channel_splice_txs(const tal_t *ctx,
 	other_side_pay = channel->view[side].owed[!side];
 
 	if (side == LOCAL) {
-		side_pay.millisatoshis += splice_amnt * 1000;
-		other_side_pay.millisatoshis += remote_splice_amnt * 1000;
+		side_pay.millisatoshis += splice_amnt * 1000; /* Raw: splicing */
+		other_side_pay.millisatoshis += remote_splice_amnt * 1000; /* Raw: splicing */
 	} else if (side == REMOTE) {
-		side_pay.millisatoshis += remote_splice_amnt * 1000;
-		other_side_pay.millisatoshis += splice_amnt * 1000;
+		side_pay.millisatoshis += remote_splice_amnt * 1000; /* Raw: splicing */
+		other_side_pay.millisatoshis += splice_amnt * 1000; /* Raw: splicing */
 	}
 
 	txs = tal_arr(ctx, struct bitcoin_tx *, 1);
@@ -405,13 +405,13 @@ static bool get_room_above_reserve(const struct channel *channel,
 	struct amount_msat owed = view->owed[side];
 
 	/* `lowest_splice_amnt` will always be negative or 0 */
-	if (-view->lowest_splice_amnt[side] > owed.millisatoshis) {
+	if (-view->lowest_splice_amnt[side] > owed.millisatoshis) { /* Raw: splicing */
 		status_debug("Relative splice balance invalid");
 		return false;
 	}
 
 	/* `lowest_splice_amnt` is a relative amount */
-	owed.millisatoshis -= -view->lowest_splice_amnt[side];
+	owed.millisatoshis -= -view->lowest_splice_amnt[side]; /* Raw: splicing */
 
 	to_balance(&balance, owed);
 

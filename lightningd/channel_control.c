@@ -811,9 +811,9 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 		return;
 	}
 
-	channel->our_msat.millisatoshis += splice_amnt * 1000;
-	channel->msat_to_us_min.millisatoshis += splice_amnt * 1000;
-	channel->msat_to_us_max.millisatoshis += splice_amnt * 1000;
+	channel->our_msat.millisatoshis += splice_amnt * 1000; /* Raw: splicing */
+	channel->msat_to_us_min.millisatoshis += splice_amnt * 1000; /* Raw: splicing */
+	channel->msat_to_us_max.millisatoshis += splice_amnt * 1000; /* Raw: splicing */
 
 	inflight = channel_inflight_find(channel, &locked_txid);
 	if(!inflight)
