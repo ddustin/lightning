@@ -4491,6 +4491,7 @@ static void peer_reconnect(struct peer *peer,
 	const u8 **premature_msgs = tal_arr(peer, const u8 *, 0);
 	struct inflight *inflight;
 	bool next_matches_current, next_matches_inflight;
+	struct bitcoin_txid *local_next_funding, *remote_next_funding;
 
 	struct tlv_channel_reestablish_tlvs *send_tlvs, *recv_tlvs;
 
@@ -4911,22 +4912,25 @@ static void peer_reconnect(struct peer *peer,
 				"Channel is already closed");
 	}
 
-	if (send_tlvs->next_funding || recv_tlvs->next_funding) {
-		if (recv_tlvs->next_funding) {
-			next_matches_current = bitcoin_txid_eq(recv_tlvs->next_funding,
+	local_next_funding = (send_tlvs ? send_tlvs->next_funding : NULL);
+	remote_next_funding = (recv_tlvs ? recv_tlvs->next_funding : NULL);
+
+	if (local_next_funding || remote_next_funding) {
+		if (remote_next_funding) {
+			next_matches_current = bitcoin_txid_eq(remote_next_funding,
 							       &peer->channel->funding.txid);
 			if (inflight)
-				next_matches_inflight = bitcoin_txid_eq(recv_tlvs->next_funding,
+				next_matches_inflight = bitcoin_txid_eq(remote_next_funding,
 									&inflight->outpoint.txid);
 		}
-		if (recv_tlvs->next_funding && !next_matches_current
+		if (remote_next_funding && !next_matches_current
 		    && !next_matches_inflight) {
 			peer_failed_err(peer->pps,
 					&peer->channel_id,
 					"Unrecognized next_funding txid %s",
 					type_to_string(tmpctx,
 						       struct bitcoin_txid,
-						       recv_tlvs->next_funding));
+						       remote_next_funding));
 		} else if (inflight && !next_matches_inflight) {
 			/* DTODO: tx_abort */
 			peer_failed_warn(peer->pps, &peer->channel_id,
@@ -4945,7 +4949,7 @@ static void peer_reconnect(struct peer *peer,
 					 " our confirmed funding txid %s",
 					 type_to_string(tmpctx,
 					 		struct bitcoin_txid,
-					 		recv_tlvs->next_funding),
+					 		remote_next_funding),
 					 type_to_string(tmpctx,
 					 		struct bitcoin_txid,
 					 		&peer->channel->funding.txid));
