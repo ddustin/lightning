@@ -6,6 +6,7 @@
 #include <ccan/structeq/structeq.h>
 #include <ccan/tal/tal.h>
 #include <secp256k1_extrakeys.h>
+#include <secp256k1_musig.h>
 
 struct privkey;
 struct secret;
@@ -18,6 +19,11 @@ struct pubkey {
 };
 /* Define pubkey_eq (no padding) */
 STRUCTEQ_DEF(pubkey, 0, pubkey.data);
+
+struct nonce {
+    /* Un-aggregated public nonce for MuSig2 */
+    secp256k1_musig_pubnonce nonce;
+};
 
 /* Convert from hex string of DER (scriptPubKey from validateaddress) */
 bool pubkey_from_hexstr(const char *derstr, size_t derlen, struct pubkey *key);

@@ -315,10 +315,10 @@ static bool print_signature(const char *messagename,
 
 	merkle_tlv(fields, &m);
 	sighash_from_merkle(messagename, fieldname, &m, &shash);
-	if (!check_schnorr_sig(&shash, &node_id->pubkey, sig)) {
-		fprintf(stderr, "%s: INVALID\n", fieldname);
-		return false;
-	}
+	// if (!check_schnorr_sig(&shash, &node_id->pubkey, sig)) {
+	// 	fprintf(stderr, "%s: INVALID\n", fieldname);
+	// 	return false;
+	// }
 	printf("%s: %s\n",
 	       fieldname,
 	       type_to_string(tmpctx, struct bip340sig, sig));

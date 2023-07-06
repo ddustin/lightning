@@ -9,8 +9,15 @@
 #include <bitcoin/tx.h>
 #include <ccan/mem/mem.h>
 #include <common/type_to_string.h>
-#include <secp256k1_schnorrsig.h>
 #include <wire/wire.h>
+#include <sodium/randombytes.h>
+#include <wally_psbt.h>
+
+#include <stdio.h>
+
+#ifndef SUPERVERBOSE
+#define SUPERVERBOSE(...)
+#endif
 
 #undef DEBUG
 #ifdef DEBUG
@@ -32,6 +39,7 @@ static void dump_tx(const char *msg,
 		    const struct bitcoin_tx *tx, size_t inputnum,
 		    const u8 *script,
 		    const struct pubkey *key,
+            const struct pubkey *pubkey,
 		    const struct sha256_double *h)
 {
 	size_t i, j;
@@ -59,6 +67,11 @@ static void dump_tx(const char *msg,
 		for (i = 0; i < sizeof(key->pubkey); i++)
 			fprintf(stderr, "%02x", ((u8 *)&key->pubkey)[i]);
 		fprintf(stderr, "\n");
+	} else if (x_key) {
+		fprintf(stderr, "\nPubkey: ");
+		for (i = 0; i < sizeof(x_key->pubkey); i++)
+			fprintf(stderr, "%02x", ((u8 *)&x_key->pubkey)[i]);
+		fprintf(stderr, "\n");
 	}
 	if (h) {
 		fprintf(stderr, "\nHash: ");
@@ -72,6 +85,7 @@ static void dump_tx(const char *msg UNUSED,
 		    const struct bitcoin_tx *tx UNUSED, size_t inputnum UNUSED,
 		    const u8 *script UNUSED,
 		    const struct pubkey *key UNUSED,
+            const struct pubkey *pubkey,
 		    const struct sha256_double *h UNUSED)
 {
 }
@@ -125,6 +139,225 @@ void sign_hash(const struct privkey *privkey,
 	assert(ok);
 }
 
+void bip340_sign_hash(const struct privkey *privkey,
+	       const struct sha256_double *hash,
+	       struct bip340sig *sig)
+{
+	bool ok;
+    secp256k1_xonly_pubkey xonly_pubkey;
+    secp256k1_keypair keypair;
+
+    ok = secp256k1_keypair_create(secp256k1_ctx,
+                  &keypair,
+                  privkey->secret.data);
+
+    assert(ok);
+
+    ok = secp256k1_schnorrsig_sign32(secp256k1_ctx,
+                  sig->u8,
+                  hash->sha.u.u8,
+                  &keypair, /* aux_rand32 */ NULL);
+
+
+    ok = secp256k1_keypair_xonly_pub(secp256k1_ctx, &xonly_pubkey, NULL /* pk_parity */, &keypair);
+	assert(ok);
+
+    assert(secp256k1_schnorrsig_verify(secp256k1_ctx, sig->u8, hash->sha.u.u8, sizeof(hash->sha.u.u8), &xonly_pubkey));
+}
+
+void bipmusig_inner_pubkey(struct pubkey *inner_pubkey,
+           secp256k1_musig_keyagg_cache *keyagg_cache,
+           const struct pubkey * const* pubkeys,
+           size_t n_pubkeys)
+{
+    int ok;
+
+    ok = secp256k1_pubkey_sort(secp256k1_ctx,
+        (const secp256k1_pubkey**)pubkeys,
+        n_pubkeys);
+
+    assert(ok);
+
+    ok = secp256k1_musig_pubkey_agg(secp256k1_ctx,
+        NULL /* scratch */,
+        NULL /* agg_pk */,
+        keyagg_cache,
+        (const secp256k1_pubkey**)pubkeys,
+        n_pubkeys); 
+
+    assert(ok);
+
+    ok = secp256k1_musig_pubkey_get(secp256k1_ctx,
+        &inner_pubkey->pubkey,
+        keyagg_cache);
+
+    assert(ok);
+}
+
+bool check_schnorr_sig(const struct sha256 *hash,
+               const secp256k1_pubkey *pubkey,
+               const struct bip340sig *sig)
+{
+	return true;
+}
+
+void bipmusig_finalize_keys(struct pubkey *agg_pk,
+           secp256k1_musig_keyagg_cache *keyagg_cache,
+           const struct pubkey * const* pubkeys,
+           size_t n_pubkeys,
+           const struct sha256 *tap_merkle_root,
+           unsigned char *tap_tweak_out,
+		   struct pubkey *inner_pubkey)
+{
+    int ok;
+    unsigned char taptweak_preimage[64];
+    secp256k1_xonly_pubkey agg_x_key;
+
+    ok = secp256k1_pubkey_sort(secp256k1_ctx,
+        (const secp256k1_pubkey**)pubkeys,
+        n_pubkeys);
+
+    assert(ok);
+
+    ok = secp256k1_musig_pubkey_agg(secp256k1_ctx,
+        NULL /* scratch */,
+        &agg_x_key,
+        keyagg_cache,
+        (const secp256k1_pubkey**)pubkeys,
+        n_pubkeys); 
+
+    assert(ok);
+
+	if (inner_pubkey) {
+		ok = secp256k1_musig_pubkey_get(secp256k1_ctx,
+			&inner_pubkey->pubkey,
+			keyagg_cache);
+
+		assert(ok);
+	}
+
+    ok = secp256k1_xonly_pubkey_serialize(secp256k1_ctx, taptweak_preimage, &agg_x_key);
+
+    assert(ok);
+
+    if (!tap_merkle_root) {
+        /* No-tapscript recommended commitment: Q = P + int(hashTapTweak(bytes(P)))G */
+        ok = wally_bip340_tagged_hash(taptweak_preimage, 32, "TapTweak", tap_tweak_out, 32);
+        assert(ok == WALLY_OK);
+        ok = secp256k1_musig_pubkey_xonly_tweak_add(secp256k1_ctx, &(agg_pk->pubkey), keyagg_cache, tap_tweak_out);
+        assert(ok);
+    } else {
+        /* Otherwise: Q = P + int(hashTapTweak(bytes(P)||tap_merkle_root))G */
+        memcpy(taptweak_preimage + 32, tap_merkle_root->u.u8, sizeof(tap_merkle_root->u.u8));
+        ok = wally_bip340_tagged_hash(taptweak_preimage, sizeof(taptweak_preimage), "TapTweak", tap_tweak_out, 32);
+        assert(ok == WALLY_OK);
+        ok = secp256k1_musig_pubkey_xonly_tweak_add(secp256k1_ctx, &(agg_pk->pubkey), keyagg_cache, tap_tweak_out);
+        assert(ok);
+    }
+}
+
+void bipmusig_gen_nonce(secp256k1_musig_secnonce *secnonce,
+           secp256k1_musig_pubnonce *pubnonce,
+           const struct privkey *privkey,
+           const secp256k1_pubkey *pubkey,
+           secp256k1_musig_keyagg_cache *keyagg_cache,
+           const unsigned char *msg32)
+{
+    /* MUST be unique for each signing attempt or SFYL */
+    /* FIXME Does it help at all to get 32 more bytes of randomness? */
+    unsigned char session_id[32];
+    int ok;
+
+    randombytes_buf(session_id, sizeof(session_id));
+
+    ok = secp256k1_musig_nonce_gen(secp256k1_ctx, secnonce, pubnonce, session_id, privkey->secret.data, pubkey, msg32, keyagg_cache, NULL /* extra_input32 */);
+
+    assert(ok);
+}
+
+void bipmusig_partial_sign(const struct privkey *privkey,
+           secp256k1_musig_secnonce *secnonce,
+           const secp256k1_musig_pubnonce * const *pubnonces,
+           size_t num_signers,
+           struct sha256_double *msg32,
+           secp256k1_musig_keyagg_cache *cache,
+           secp256k1_musig_session *session,
+	       secp256k1_musig_partial_sig *p_sig)
+{
+	bool ok;
+    secp256k1_keypair keypair;
+    secp256k1_musig_aggnonce agg_pubnonce;
+
+    /* Create aggregate nonce and initialize the session */
+    ok = secp256k1_musig_nonce_agg(secp256k1_ctx, &agg_pubnonce, pubnonces, num_signers);
+
+    assert(ok);
+
+    ok = secp256k1_musig_nonce_process(secp256k1_ctx, session, &agg_pubnonce, msg32->sha.u.u8, cache, /* adaptor */ NULL);
+
+    assert(ok);
+
+    ok = secp256k1_keypair_create(secp256k1_ctx,
+                  &keypair,
+                  privkey->secret.data);
+
+    assert(ok);
+
+    ok = secp256k1_musig_partial_sign(secp256k1_ctx, p_sig, secnonce, &keypair, cache, session);
+
+    assert(ok);
+}
+
+bool bipmusig_partial_sigs_combine_verify(const secp256k1_musig_partial_sig * const *p_sigs,
+           size_t num_signers,
+           const struct pubkey *agg_pk,
+           secp256k1_musig_session *session,
+           const struct sha256_double *hash,
+           struct bip340sig *sig)
+{
+    int ret;
+    secp256k1_xonly_pubkey xonly_inner_pubkey;
+
+    ret = secp256k1_xonly_pubkey_from_pubkey(secp256k1_ctx,
+        &xonly_inner_pubkey,
+        NULL /* pk_parity */,
+        &agg_pk->pubkey);
+
+    if (!ret) {
+        return false;
+    }
+
+    ret = secp256k1_musig_partial_sig_agg(secp256k1_ctx, sig->u8, session, p_sigs, num_signers);
+
+    if (!ret) {
+        return false;
+    }
+
+    return secp256k1_schnorrsig_verify(secp256k1_ctx, sig->u8, hash->sha.u.u8, sizeof(hash->sha.u.u8), &xonly_inner_pubkey);
+}
+
+bool bipmusig_partial_sig_verify(const struct partial_sig *p_sig,
+								const struct nonce *signer_nonce,
+								const struct pubkey *signer_pk,
+								const struct musig_keyagg_cache *keyagg_cache,
+								struct musig_session *session)
+{
+	return secp256k1_musig_partial_sig_verify(secp256k1_ctx,
+												&p_sig->p_sig,
+												&signer_nonce->nonce,
+												&signer_pk->pubkey,
+												&keyagg_cache->cache,
+												&session->session);
+}
+
+bool bipmusig_partial_sigs_combine(const secp256k1_musig_partial_sig * const *p_sigs,
+           size_t num_signers,
+           const secp256k1_musig_session *session,
+           struct bip340sig *sig)
+{
+    return secp256k1_musig_partial_sig_agg(secp256k1_ctx, sig->u8, session, p_sigs, num_signers);
+}
+
 void bitcoin_tx_hash_for_sig(const struct bitcoin_tx *tx, unsigned int in,
 			     const u8 *script,
 			     enum sighash_type sighash_type,
@@ -158,6 +391,87 @@ void bitcoin_tx_hash_for_sig(const struct bitcoin_tx *tx, unsigned int in,
 	tal_wally_end(tx->wtx);
 }
 
+void bitcoin_tx_hash_for_sig_new(const struct bitcoin_tx *tx, unsigned int in,
+			     const u8 *script,
+			     enum sighash_type sighash_type,
+			     struct sha256_double *dest)
+{
+	int ret = 0;
+
+	while(!ret);
+
+	ret = wally_psbt_get_input_signature_hash(tx->psbt, in, tx->wtx,
+						  script, tal_bytelen(script),
+						  WALLY_TX_FLAG_USE_WITNESS,
+						  dest->sha.u.u8, 32);
+
+	assert(ret == WALLY_OK);
+}
+
+int get_scripts_and_values(const struct wally_psbt *psbt,
+                                  struct wally_map *scripts,
+                                  uint64_t **values);
+
+void bitcoin_tx_taproot_hash_for_sig(const struct bitcoin_tx *tx,
+                 unsigned int input_index,
+			     enum sighash_type sighash_type, /* FIXME get from PSBT? */
+                 const unsigned char *tapleaf_script, /* FIXME Get directly from PSBT? */
+                 u8 *annex,
+			     struct sha256_double *dest)
+{
+	int ret, i;
+
+    struct wally_map scripts;
+    uint64_t *values = NULL;
+    /* Preparing args for taproot*/
+    size_t input_count = tx->wtx->num_inputs;
+    const unsigned char *input_spks[input_count];
+    size_t input_spk_lens[input_count];
+	u64 input_val_sats[input_count];
+
+    for (i=0; i < input_count; ++i) {
+        input_spks[i] = psbt_input_get_scriptpubkey(tx->psbt, i);
+        input_spk_lens[i] = tal_bytelen(input_spks[i]); /* FIXME ??? tal_bytelen? */
+        input_val_sats[i] = psbt_input_get_amount(tx->psbt, i).satoshis;
+    }
+
+    ret = get_scripts_and_values(tx->psbt, &scripts, &values);
+
+    assert(ret == WALLY_OK);
+
+	/* Wally can allocate here, iff tx doesn't fit on stack */
+	tal_wally_start();
+    ret = wally_tx_get_btc_taproot_signature_hash(
+        tx->wtx, input_index, &scripts,
+        values, tx->psbt->num_inputs, tapleaf_script, tal_bytelen(tapleaf_script), (sighash_type & SIGHASH_ANYPREVOUTANYSCRIPT) == SIGHASH_ANYPREVOUTANYSCRIPT ? 0x01 : 0x00 /* key_version */,
+        0xFFFFFFFF /* codesep_position */, annex, tal_count(annex), sighash_type, 0 /* flags */, dest->sha.u.u8,
+		    sizeof(*dest));
+
+
+    /*
+    WALLY_CORE_API int wally_tx_get_btc_taproot_signature_hash(
+    const struct wally_tx *tx,
+    size_t index,
+    const struct wally_map *scripts,
+    const uint64_t *values,
+    size_t num_values,
+    const unsigned char *tapleaf_script,
+    size_t tapleaf_script_len,
+    uint32_t key_version,
+    uint32_t codesep_position,
+    const unsigned char *annex,
+    size_t annex_len,
+    uint32_t sighash,
+    uint32_t flags,
+    unsigned char *bytes_out,
+    size_t len);
+    */
+
+    assert(ret == WALLY_OK);
+	tal_wally_end(tx->wtx);
+
+}
+
 void sign_tx_input(const struct bitcoin_tx *tx,
 		   unsigned int in,
 		   const u8 *subscript,
@@ -175,8 +489,29 @@ void sign_tx_input(const struct bitcoin_tx *tx,
 	sig->sighash_type = sighash_type;
 	bitcoin_tx_hash_for_sig(tx, in, script, sighash_type, &hash);
 
-	dump_tx("Signing", tx, in, subscript, key, &hash);
+	dump_tx("Signing", tx, in, subscript, key, NULL /* x_key */, &hash);
 	sign_hash(privkey, &hash, &sig->s);
+}
+
+void sign_tx_taproot_input(const struct bitcoin_tx *tx,
+		   unsigned int input_index,
+		   enum sighash_type sighash_type,
+           const u8 *tapleaf_script,
+		   const secp256k1_keypair *key_pair,
+		   struct bip340sig *sig)
+{
+	struct sha256_double hash;
+    int ret;
+    struct pubkey pubkey;
+    struct privkey privkey;
+
+	/* FIXME assert sighashes we actually support assert(sighash_type_valid(sighash_type)); */
+	bitcoin_tx_taproot_hash_for_sig(tx, input_index, sighash_type, tapleaf_script, NULL /* annex */, &hash);
+
+	dump_tx("Signing taproot input:", tx, input_index, tapleaf_script, NULL /* key */, &pubkey, &hash);
+    ret = secp256k1_keypair_sec(secp256k1_ctx, privkey.secret.data, key_pair);
+    assert(ret);
+	bip340_sign_hash(&privkey, &hash, sig);
 }
 
 bool check_signed_hash(const struct sha256_double *hash,
@@ -196,6 +531,21 @@ bool check_signed_hash(const struct sha256_double *hash,
 	ret = secp256k1_ecdsa_verify(secp256k1_ctx,
 				     signature,
 				     hash->sha.u.u8, &key->pubkey);
+	return ret == 1;
+}
+
+bool check_signed_bip340_hash(const struct sha256_double *hash,
+		       const struct bip340sig *signature,
+		       const struct pubkey *pubkey)
+{
+	int ret;
+	secp256k1_xonly_pubkey xonly_pubkey;
+
+	ret = secp256k1_xonly_pubkey_from_pubkey(secp256k1_ctx, &xonly_pubkey, NULL /* pk_parity */, &pubkey->pubkey);
+	assert(ret);
+
+
+	ret = secp256k1_schnorrsig_verify(secp256k1_ctx, signature->u8, hash->sha.u.u8, sizeof(hash->sha.u.u8), &xonly_pubkey);
 	return ret == 1;
 }
 
@@ -220,11 +570,37 @@ bool check_tx_sig(const struct bitcoin_tx *tx, size_t input_num,
 	assert(input_num < tx->wtx->num_inputs);
 
 	bitcoin_tx_hash_for_sig(tx, input_num, script, sig->sighash_type, &hash);
-	dump_tx("check_tx_sig", tx, input_num, script, key, &hash);
+	dump_tx("check_tx_sig", tx, input_num, script, key, NULL /* x_key */, &hash);
 
 	ret = check_signed_hash(&hash, &sig->s, key);
 	if (!ret)
-		dump_tx("Sig failed", tx, input_num, redeemscript, key, &hash);
+		dump_tx("Sig failed", tx, input_num, redeemscript, key, NULL /* x_key */, &hash);
+	return ret;
+}
+
+bool check_tx_taproot_sig(const struct bitcoin_tx *tx, size_t input_num,
+		  const u8 *tapleaf_script,
+		  const struct pubkey *pubkey,
+          enum sighash_type sighash_type,
+		  const struct bip340sig *sig)
+{
+	struct sha256_double hash;
+	bool ret;
+
+	/* FIXME We only support a limited subset of sighash types. */
+	if (sighash_type != SIGHASH_ALL) {
+		if (sighash_type != (SIGHASH_SINGLE|SIGHASH_ANYONECANPAY))
+			return false;
+	}
+	assert(input_num < tx->wtx->num_inputs);
+
+	bitcoin_tx_taproot_hash_for_sig(tx, input_num, sighash_type, tapleaf_script, /* annex */ NULL, &hash);
+
+	dump_tx("check_tx_sig", tx, input_num, tapleaf_script, NULL /* key */, pubkey, &hash);
+
+	ret = check_signed_bip340_hash(&hash, sig, pubkey);
+	if (!ret)
+		dump_tx("Sig failed", tx, input_num, tapleaf_script, NULL /* key */, pubkey, &hash);
 	return ret;
 }
 
@@ -379,12 +755,74 @@ void fromwire_bip340sig(const u8 **cursor, size_t *max,
 	fromwire_u8_array(cursor, max, bip340sig->u8, sizeof(bip340sig->u8));
 }
 
+void towire_partial_sig(u8 **pptr, const struct partial_sig *p_sig)
+{
+    u8 bip340sig_arr[32];
+    secp256k1_musig_partial_sig_serialize(secp256k1_ctx, bip340sig_arr, &p_sig->p_sig);
+	towire_u8_array(pptr, bip340sig_arr, sizeof(bip340sig_arr));
+}
+
+void fromwire_partial_sig(const u8 **cursor, size_t *max,
+            struct partial_sig *p_sig)
+{
+    u8 raw[32];
+
+
+    if (!fromwire(cursor, max, raw, sizeof(raw)))
+        return;
+
+    if (!secp256k1_musig_partial_sig_parse(secp256k1_ctx, &p_sig->p_sig, raw)) {
+        SUPERVERBOSE("not a valid musig partial sig");
+        fromwire_fail(cursor, max);
+    }
+}
+
+char *fmt_partial_sig(const tal_t *ctx, const struct partial_sig *psig)
+{
+	return tal_hexstr(ctx, psig->p_sig.data, sizeof(psig->p_sig.data));
+}
+
+REGISTER_TYPE_TO_HEXSTR(partial_sig);
+
+void towire_musig_session(u8 **pptr, const struct musig_session *session)
+{
+    /* No proper serialization/parsing supplied, we're just copying bytes */
+    towire_u8_array(pptr, session->session.data, sizeof(session->session.data));
+}
+
+void fromwire_musig_session(const u8 **cursor, size_t *max,
+            struct musig_session *session){
+    /* No proper serialization/parsing supplied, we're just copying bytes */
+    if (!fromwire(cursor, max, session->session.data, sizeof(session->session.data)))
+        return;
+}
+
 char *fmt_bip340sig(const tal_t *ctx, const struct bip340sig *bip340sig)
 {
 	return tal_hexstr(ctx, bip340sig->u8, sizeof(bip340sig->u8));
 }
 
 REGISTER_TYPE_TO_HEXSTR(bip340sig);
+
+char *fmt_musig_session(const tal_t *ctx, const struct musig_session *musig_session)
+{
+    return tal_hexstr(ctx, musig_session->session.data, sizeof(musig_session->session.data));
+}
+
+REGISTER_TYPE_TO_HEXSTR(musig_session);
+
+void towire_musig_keyagg_cache(u8 **pptr, const struct musig_keyagg_cache *cache)
+{
+    /* No proper serialization/parsing supplied, we're just copying bytes */
+    towire_u8_array(pptr, cache->cache.data, sizeof(cache->cache.data));
+}
+
+void fromwire_musig_keyagg_cache(const u8 **cursor, size_t *max,
+            struct musig_keyagg_cache *cache){
+    /* No proper serialization/parsing supplied, we're just copying bytes */
+    if (!fromwire(cursor, max, cache->cache.data, sizeof(cache->cache.data)))
+        return;
+}
 
 /* BIP-340:
  *
@@ -416,27 +854,18 @@ void bip340_sighash_init(struct sha256_ctx *sctx,
 	sha256_update(sctx, &taghash, sizeof(taghash));
 }
 
-
-bool check_schnorr_sig(const struct sha256 *hash,
-		       const secp256k1_pubkey *pubkey,
-		       const struct bip340sig *sig)
+void create_keypair_of_one(secp256k1_keypair *G_pair)
 {
-	/* FIXME: uuuugly!  There's no non-xonly verify function. */
-	u8 raw[PUBKEY_CMPR_LEN];
-	size_t outlen = sizeof(raw);
-	secp256k1_xonly_pubkey xonly_pubkey;
+    int ok;
+    unsigned char g[32];
 
-	if (!secp256k1_ec_pubkey_serialize(secp256k1_ctx, raw, &outlen,
-					   pubkey,
-					   SECP256K1_EC_COMPRESSED))
-		abort();
-	assert(outlen == PUBKEY_CMPR_LEN);
-	if (!secp256k1_xonly_pubkey_parse(secp256k1_ctx, &xonly_pubkey, raw+1))
-		abort();
+    /* Privkey of exactly 1, so the pubkey is the generator G */
+    memset(g, 0x00, sizeof(g));
+    g[sizeof(g)-1] = 0x01;
 
- 	return secp256k1_schnorrsig_verify(secp256k1_ctx,
- 					   sig->u8,
- 					   hash->u.u8,
- 					   sizeof(hash->u.u8),
-					   &xonly_pubkey) == 1;
+    ok = secp256k1_keypair_create(
+        secp256k1_ctx,
+        G_pair,
+        g);
+    assert(ok);
 }

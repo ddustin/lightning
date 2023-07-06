@@ -45,6 +45,8 @@
 #include <wally_bip32.h>
 #include <wire/peer_wire.h>
 #include <wire/wire_sync.h>
+#include <secp256k1_musig.h>
+#include <bitcoin/signature.h>
 
 /* stdin == requests, 3 == peer, 4 = HSM */
 #define MASTER_FD STDIN_FILENO
@@ -3120,7 +3122,132 @@ static void peer_reconnect(struct peer *peer,
 	for (size_t i = 0; i < tal_count(premature_msgs); i++)
 		peer_in(peer, premature_msgs[i]);
 	tal_free(premature_msgs);
+
+
+	/* Let's do a musig example! */
+
+	char *msgtosign = "Ask not what Musig2 can do for you!";
+	struct sha256_double msghash;
+
+	sha256_double(&msghash, msgtosign, strlen(msgtosign) + 1);
+
+	struct signer_secrets {
+	    secp256k1_keypair keypair;
+	    secp256k1_musig_secnonce secnonce;
+	} signer_secrets[2];
+
+	struct signer {
+	    secp256k1_pubkey pubkey;
+	    secp256k1_musig_pubnonce pubnonce;
+	    secp256k1_musig_partial_sig partial_sig;
+	} signer[2];
+
+	u8 key1[32] =
+	{
+		0x8c, 0xf0, 0x8d, 0x33, 0xeb, 0xa4, 0xc2, 0x48, 0xc2, 0xeb, 0x15, 0x54, 0x48, 0xad, 0x2c, 0x51, 0xe9, 0x44, 0xd2, 0x20, 0xb4, 0x92, 0xaa, 0x75, 0x58, 0xa6, 0x4e, 0xdf, 0x58, 0xb8, 0x59, 0x85
+	};
+	u8 key2[32] =
+	{
+		0x54, 0xb4, 0x92, 0x2d, 0xa7, 0x9c, 0xbd, 0xaf, 0xab, 0x8f, 0x6e, 0x24, 0x7b, 0x0b, 0xa4, 0x39, 0x68, 0x40, 0xd9, 0xb8, 0x24, 0x6b, 0xe5, 0x2b, 0x49, 0x41, 0xa3, 0xe6, 0xd0, 0x81, 0x5d, 0xa1
+	};
+
+	struct privkey privkeys[2];
+
+	memcpy(privkeys[0].secret.data, key1, 32);
+	memcpy(privkeys[1].secret.data, key2, 32);
+
+	if (secp256k1_keypair_create(secp256k1_ctx, &signer_secrets[0].keypair, key1))
+		peer_failed_err(peer->pps, &peer->channel_id,
+				"secp256k1_keypair_create1 failed");
+	if (secp256k1_keypair_create(secp256k1_ctx, &signer_secrets[1].keypair, key2))
+		peer_failed_err(peer->pps, &peer->channel_id,
+				"secp256k1_keypair_create2 failed");
+
+	if (!secp256k1_keypair_pub(secp256k1_ctx, &signer[0].pubkey, &signer_secrets[0].keypair))
+		peer_failed_err(peer->pps, &peer->channel_id,
+				"secp256k1_keypair_pub1 failed");
+	if (!secp256k1_keypair_pub(secp256k1_ctx, &signer[1].pubkey, &signer_secrets[1].keypair))
+		peer_failed_err(peer->pps, &peer->channel_id,
+				"secp256k1_keypair_pub2 failed");
+
+	bipmusig_gen_nonce(&signer_secrets[0].secnonce, &signer[0].pubnonce,
+			   &privkeys[0], &signer[0].pubkey, NULL, NULL);
+
+	/* Pretend Bob sent pubkey and pubnonce to Alice */
+	secp256k1_pubkey pubkey = signer[0].pubkey;
+	secp256k1_musig_pubnonce pubnonce = signer[0].pubnonce;
+
+	bipmusig_gen_nonce(&signer_secrets[1].secnonce, &signer[1].pubnonce,
+			   &privkeys[1], &signer[1].pubkey, NULL, NULL);
+
+	secp256k1_musig_pubnonce *pubnonces[2] = { &pubnonce, &signer[1].pubnonce };
+
+	struct pubkey agg_pk;
+	secp256k1_musig_keyagg_cache keyagg_cache;
+	u8 tap_tweak_out[32];
+	struct pubkey *pubkeys[2];
+
+	pubkeys[0] = (struct pubkey*)&pubkey;
+	pubkeys[1] = (struct pubkey*)&signer[1].pubkey;
+
+	bipmusig_finalize_keys(&agg_pk, &keyagg_cache,
+			      (const struct pubkey *const *)&pubkeys, 2,
+			      NULL, tap_tweak_out, NULL);
+
+	secp256k1_musig_session session;
+	secp256k1_musig_partial_sig partial_sig;
+
+	bipmusig_partial_sign(&privkeys[1], &signer_secrets[1].secnonce,
+			      (const secp256k1_musig_pubnonce *const *)pubnonces, 2, &msghash, &keyagg_cache,
+			      &session, &partial_sig);
+
+	/* Pretend Alice sent signature + nonce + pubkey to Bob */
+	secp256k1_musig_partial_sig their_sig = partial_sig;
+	pubnonce = signer[0].pubnonce;
+	pubkey = signer[1].pubkey;
+
+	pubkeys[0] = (struct pubkey*)&pubkey;
+	pubkeys[1] = (struct pubkey*)&signer[0].pubkey;
+
+	bipmusig_finalize_keys(&agg_pk, &keyagg_cache,
+			      (const struct pubkey *const *)&pubkeys, 2,
+			      NULL, tap_tweak_out, NULL);
+
+	bipmusig_partial_sign(&privkeys[0], &signer_secrets[0].secnonce,
+			      (const secp256k1_musig_pubnonce *const *)pubnonces, 2, &msghash, &keyagg_cache,
+			      &session, &partial_sig);
+
+	const secp256k1_musig_partial_sig * const partial_sigs[] = { &their_sig, &partial_sig};
+
+	struct bip340sig finalsig;
+
+	bool result = bipmusig_partial_sigs_combine_verify(partial_sigs, 2, &agg_pk, &session, &msghash, &finalsig);
+
+	status_unusual("Signature validation attempt result: %s",
+		       result ? "success!" : "failure :(");
 }
+
+/**
+ * bipmusig_partial_sign - produce a partial BIP340 signature.
+ * This assumed an already existing session with pubkeys aggregated
+ * and nonces collected but not aggregated and processed.
+ * This is called after bipmusig_gen_nonce.
+ * @privkey: secret key
+ * @secnonce: secret nonce used *once* to partially sign
+ * @pubnonces: public nonces collected from all signers, including self
+ * @num_signers: number of signers
+ * @msg32: Message hash we are signing
+ * @session: session information for signing attempt
+ * @p_sig: partial signature to fill and return
+ */
+void bipmusig_partial_sign(const struct privkey *privkey,
+           secp256k1_musig_secnonce *secnonce,
+           const secp256k1_musig_pubnonce * const *pubnonces,
+           size_t num_signers,
+           struct sha256_double *msg32,
+           secp256k1_musig_keyagg_cache *cache,
+           secp256k1_musig_session *session,
+           secp256k1_musig_partial_sig *p_sig);
 
 /* ignores the funding_depth unless depth >= minimum_depth
  * (except to update billboard, and set peer->depth_togo). */

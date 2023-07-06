@@ -206,6 +206,14 @@ void psbt_output_set_unknown(const tal_t *ctx,
 struct amount_sat psbt_input_get_amount(const struct wally_psbt *psbt,
 					size_t in);
 
+/* psbt_input_get_scriptpubkey - Returns pointer to the input's scriptPubKey
+ *
+ * @psbt - psbt
+ * in - index of input whose value script returning
+ */
+const unsigned char *psbt_input_get_scriptpubkey(const struct wally_psbt *psbt,
+                    size_t in);
+
 /* psbt_output_get_amount - Returns the value of this output
  *
  * @psbt - psbt
