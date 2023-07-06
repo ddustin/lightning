@@ -882,7 +882,9 @@ static struct feature_set *default_features(const tal_t *ctx)
 		OPTIONAL_FEATURE(OPT_ANCHOR_OUTPUTS),
 		OPTIONAL_FEATURE(OPT_QUIESCE),
 		OPTIONAL_FEATURE(OPT_ONION_MESSAGES),
+#ifndef EXPERIMENTAL_SPLICING
 		OPTIONAL_FEATURE(OPT_SPLICE),
+#endif
 	};
 
 	for (size_t i = 0; i < ARRAY_SIZE(features); i++) {

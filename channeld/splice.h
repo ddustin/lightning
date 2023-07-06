@@ -30,7 +30,7 @@ struct splice_state {
 };
 
 /* Sets `splice_state` items to default values */
-void init_splice_state(struct splice_state *splice_state);
+struct splice_state *splice_state_new(const tal_t *ctx);
 
 /* An active splice negotiation. Born when splice beings and dies when a splice
  * negotation has finished */
@@ -58,9 +58,6 @@ struct splice {
 };
 
 /* Sets `splice` items to default values */
-void init_splice(struct splice *splice);
-
-/* Sets `splice` items to default values */
-void reset_splice(struct splice *splice);
+struct splice *splice_new(const tal_t *ctx);
 
 #endif /* LIGHTNING_CHANNELD_SPLICE_H */

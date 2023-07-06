@@ -2067,7 +2067,7 @@ void wallet_announcement_save(struct wallet *w, u64 id,
 
 
 void wallet_htlcsigs_confirm_inflight(struct wallet *w, struct channel *chan,
-				      struct bitcoin_outpoint confirmed_outpoint)
+				      struct bitcoin_outpoint *confirmed_outpoint)
 {
 	struct db_stmt *stmt;
 
@@ -2083,8 +2083,8 @@ void wallet_htlcsigs_confirm_inflight(struct wallet *w, struct channel *chan,
 						 ")"
 					     ")"));
 	db_bind_u64(stmt, 0, chan->dbid);
-	db_bind_txid(stmt, 1, &confirmed_outpoint.txid);
-	db_bind_int(stmt, 2, confirmed_outpoint.n);
+	db_bind_txid(stmt, 1, &confirmed_outpoint->txid);
+	db_bind_int(stmt, 2, confirmed_outpoint->n);
 	db_exec_prepared_v2(take(stmt));
 
 	stmt = db_prepare_v2(w->db, SQL("UPDATE htlc_sigs"

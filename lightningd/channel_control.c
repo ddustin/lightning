@@ -586,6 +586,7 @@ static void handle_add_inflight(struct lightningd *ld,
 		return;
 	}
 
+	/* FIXME: DTODO: Use a pointer to a sig instead of zero'ing one out. */
 	memset(&last_sig, 0, sizeof(last_sig));
 
 	inflight = new_inflight(channel,
@@ -672,7 +673,7 @@ static void handle_update_inflight(struct lightningd *ld,
 	}
 	tal_wally_end(inflight->funding_psbt);
 
-	psbt_finalize(cast_const(struct wally_psbt *, inflight->funding_psbt));
+	psbt_finalize(inflight->funding_psbt);
 	wallet_inflight_save(ld->wallet, inflight);
 }
 
@@ -824,7 +825,7 @@ static void handle_peer_splice_locked(struct channel *channel, const u8 *msg)
 				       		      &locked_txid));
 
 	wallet_htlcsigs_confirm_inflight(channel->peer->ld->wallet, channel,
-					 inflight->funding->outpoint);
+					 &inflight->funding->outpoint);
 
 	update_channel_from_inflight(channel->peer->ld, channel, inflight);
 
@@ -1480,6 +1481,7 @@ bool peer_start_channeld(struct channel *channel,
 				       get_block_height(ld->topology));
 	}
 
+	/* FIXME: DTODO: Use a pointer to a txid instead of zero'ing one out. */
 	memset(&txid, 0, sizeof(txid));
 
 	/* Artificial confirmation event for zeroconf */
@@ -1832,11 +1834,20 @@ void channel_replace_update(struct channel *channel, u8 *update TAKES)
 							  channel->channel_update)));
 }
 
-/* Returns an error if load fails */
-static struct command_result *splice_load_channel(struct command *cmd,
-						  struct channel_id *cid,
-						  struct channel **channel)
+static struct command_result *param_channel_for_splice(struct command *cmd,
+						       const char *name,
+						       const char *buffer,
+						       const jsmntok_t *tok,
+						       struct channel **channel)
 {
+	struct command_result *result;
+	struct channel_id *cid;
+
+	result = param_channel_id(cmd, name, buffer, tok, &cid);
+
+	if (result != NULL)
+		return result;
+
 	*channel = channel_by_cid(cmd->ld, cid);
 	if (!*channel)
 		return command_fail(cmd, SPLICE_UNKNOWN_CHANNEL,
@@ -1876,9 +1887,7 @@ static struct command_result *json_splice_init(struct command *cmd,
 					       const jsmntok_t *obj UNNEEDED,
 					       const jsmntok_t *params)
 {
-	struct channel_id *cid;
 	struct channel *channel;
-	struct command_result *error;
 	struct splice_command *cc;
 	struct wally_psbt *initialpsbt;
 	s64 *relative_amount;
@@ -1887,7 +1896,7 @@ static struct command_result *json_splice_init(struct command *cmd,
 	u8 *msg;
 
 	if (!param(cmd, buffer, params,
-		  p_req("channel_id", param_channel_id, &cid),
+		  p_req("channel_id", param_channel_for_splice, &channel),
 		  p_req("relative_amount", param_s64, &relative_amount),
 		  p_opt("initialpsbt", param_psbt, &initialpsbt),
 		  p_opt("feerate_per_kw", param_feerate, &feerate_per_kw),
@@ -1900,9 +1909,6 @@ static struct command_result *json_splice_init(struct command *cmd,
 		*feerate_per_kw = opening_feerate(cmd->ld->topology);
 	}
 
-	error = splice_load_channel(cmd, cid, &channel);
-	if (error)
-		return error;
 	if (splice_command_for_chan(cmd->ld, channel))
 		return command_fail(cmd,
 				    SPLICE_BUSY_ERROR,
@@ -1938,21 +1944,16 @@ static struct command_result *json_splice_update(struct command *cmd,
 						 const jsmntok_t *obj UNNEEDED,
 						 const jsmntok_t *params)
 {
-	struct channel_id *cid;
 	struct channel *channel;
 	struct splice_command *cc;
 	struct wally_psbt *psbt;
-	struct command_result *error;
 
 	if (!param(cmd, buffer, params,
-		  p_req("channel_id", param_channel_id, &cid),
+		  p_req("channel_id", param_channel_for_splice, &channel),
 		  p_req("psbt", param_psbt, &psbt),
 		  NULL))
 		return command_param_failed();
 
-	error = splice_load_channel(cmd, cid, &channel);
-	if (error)
-		return error;
 	if (splice_command_for_chan(cmd->ld, channel))
 		return command_fail(cmd,
 				    SPLICE_BUSY_ERROR,
@@ -1983,24 +1984,19 @@ static struct command_result *json_splice_signed(struct command *cmd,
 						 const jsmntok_t *obj UNNEEDED,
 						 const jsmntok_t *params)
 {
-	struct channel_id *cid;
 	u8 *msg;
 	struct channel *channel;
 	struct splice_command *cc;
 	struct wally_psbt *psbt;
-	struct command_result *error;
 	bool *sign_first;
 
 	if (!param(cmd, buffer, params,
-		  p_req("channel_id", param_channel_id, &cid),
+		  p_req("channel_id", param_channel_for_splice, &channel),
 		  p_req("psbt", param_psbt, &psbt),
 		  p_opt_def("sign_first", param_bool, &sign_first, false),
 		  NULL))
 		return command_param_failed();
 
-	error = splice_load_channel(cmd, cid, &channel);
-	if (error)
-		return error;
 	if (splice_command_for_chan(cmd->ld, channel))
 		return command_fail(cmd,
 				    SPLICE_BUSY_ERROR,

@@ -341,9 +341,6 @@ bool interactivetx_has_changes(struct interactivetx_context *ictx,
 {
 	struct psbt_changeset *set = get_changes(tmpctx, ictx, next_psbt);
 
-	if (!set)
-		return false;
-
 	return tal_count(set->added_ins) || tal_count(set->rm_ins)
 	    || tal_count(set->added_outs) || tal_count(set->rm_outs);
 }
