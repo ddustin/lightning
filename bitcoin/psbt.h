@@ -214,6 +214,10 @@ void psbt_output_set_unknown(const tal_t *ctx,
 struct amount_sat psbt_input_get_amount(const struct wally_psbt *psbt,
 					size_t in);
 
+/* psbt_input_get_weight - Calculate the tx weight for input index `in` */
+size_t psbt_input_get_weight(const struct wally_psbt *psbt,
+			     size_t in);
+
 /* psbt_output_get_amount - Returns the value of this output
  *
  * @psbt - psbt
@@ -221,6 +225,10 @@ struct amount_sat psbt_input_get_amount(const struct wally_psbt *psbt,
  */
 struct amount_sat psbt_output_get_amount(const struct wally_psbt *psbt,
 					 size_t out);
+
+/* psbt_output_get_weight - Calculate the tx weight for output index `outnum` */
+size_t psbt_output_get_weight(const struct wally_psbt *psbt,
+			      size_t outnum);
 
 /* psbt_compute_fee - Returns value of fee for PSBT
  *

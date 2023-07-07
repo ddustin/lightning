@@ -584,7 +584,7 @@ bool wallet_shachain_add_hash(struct wallet *wallet,
 u64 wallet_get_channel_dbid(struct wallet *wallet);
 
 void wallet_htlcsigs_confirm_inflight(struct wallet *w, struct channel *chan,
-				      struct bitcoin_outpoint *confirmed_outpoint);
+				      const struct bitcoin_outpoint *confirmed_outpoint);
 
 /**
  * wallet_channel_save -- Upsert the channel into the database

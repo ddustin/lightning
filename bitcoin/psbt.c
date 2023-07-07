@@ -455,6 +455,28 @@ struct amount_sat psbt_input_get_amount(const struct wally_psbt *psbt,
 	return val;
 }
 
+size_t psbt_input_get_weight(const struct wally_psbt *psbt,
+			     size_t in)
+{
+	size_t weight;
+	const struct wally_map_item *redeem_script;
+
+	redeem_script = wally_map_get_integer(&psbt->inputs[in].psbt_fields, /* PSBT_IN_REDEEM_SCRIPT */ 0x04);
+
+	/* txid + txout + sequence */
+	weight = (32 + 4 + 4) * 4;
+	if (redeem_script) {
+		weight +=
+			(redeem_script->value_len +
+				varint_size(redeem_script->value_len)) * 4;
+	} else {
+		/* zero scriptSig length */
+		weight += varint_size(0) * 4;
+	}
+
+	return weight;
+}
+
 struct amount_sat psbt_output_get_amount(const struct wally_psbt *psbt,
 					 size_t out)
 {
@@ -463,6 +485,13 @@ struct amount_sat psbt_output_get_amount(const struct wally_psbt *psbt,
 	asset = wally_psbt_output_get_amount(&psbt->outputs[out]);
 	assert(amount_asset_is_main(&asset));
 	return amount_asset_to_sat(&asset);
+}
+
+size_t psbt_output_get_weight(const struct wally_psbt *psbt,
+			      size_t outnum)
+{
+	return (8 /* amount*/ + varint_size(psbt->outputs[outnum].script_len) +
+		psbt->outputs[outnum].script_len) * 4;
 }
 
 static void add(u8 **key, const void *mem, size_t len)

@@ -788,7 +788,7 @@ class LightningNode(object):
                 self.daemon.opts["dev-no-reconnect"] = None
         if EXPERIMENTAL_DUAL_FUND:
             self.daemon.opts["experimental-dual-fund"] = None
-        if EXPERIMENTAL_DUAL_FUND:
+        if EXPERIMENTAL_SPLICING:
             self.daemon.opts["experimental-splicing"] = None
 
         if options is not None:

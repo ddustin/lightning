@@ -760,14 +760,14 @@ static char *check_balances(const tal_t *ctx,
 			assert(ok);
 
 			initiator_weight +=
-				psbt_input_weight(psbt, i);
+				psbt_input_get_weight(psbt, i);
 		} else {
 			ok = amount_sat_add(&accepter_inputs,
 					    accepter_inputs, amt);
 			assert(ok);
 
 			accepter_weight +=
-				psbt_input_weight(psbt, i);
+				psbt_input_get_weight(psbt, i);
 		}
 	}
 	tot_output_amt = AMOUNT_SAT(0);
@@ -826,13 +826,13 @@ static char *check_balances(const tal_t *ctx,
 			}
 
 			initiator_weight +=
-				psbt_output_weight(psbt, i);
+				psbt_output_get_weight(psbt, i);
 		} else {
 			ok = amount_sat_add(&accepter_outs,
 					    accepter_outs, amt);
 			assert(ok);
 			accepter_weight +=
-				psbt_output_weight(psbt, i);
+				psbt_output_get_weight(psbt, i);
 		}
 	}
 

@@ -2067,7 +2067,7 @@ void wallet_announcement_save(struct wallet *w, u64 id,
 
 
 void wallet_htlcsigs_confirm_inflight(struct wallet *w, struct channel *chan,
-				      struct bitcoin_outpoint *confirmed_outpoint)
+				      const struct bitcoin_outpoint *confirmed_outpoint)
 {
 	struct db_stmt *stmt;
 

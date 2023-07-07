@@ -267,14 +267,16 @@ static void maybe_send_stfu(struct peer *peer)
 	if (!peer->want_stfu)
 		return;
 
-	if (!peer->stfu_sent[LOCAL] && !pending_updates(peer->channel, LOCAL, false)) {
+	if(pending_updates(peer->channel, LOCAL, false)) {
+		status_info("Pending updates prevent us from STFU mode at this"
+			    " time.");
+	}
+	else if (!peer->stfu_sent[LOCAL]) {
 		status_debug("Sending peer that we want to STFU.");
 		u8 *msg = towire_stfu(NULL, &peer->channel_id,
 				      peer->stfu_initiator == LOCAL);
 		peer_write(peer->pps, take(msg));
 		peer->stfu_sent[LOCAL] = true;
-	} else if(pending_updates(peer->channel, LOCAL, false)) {
-		status_info("Pending updates prevent us from STFU mode at this time.");
 	}
 
 	if (peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE]) {
@@ -2656,6 +2658,27 @@ static struct wally_psbt *next_splice_step(const tal_t *ctx,
 	return ictx->desired_psbt;
 }
 
+static const u8 *peer_expect_msg(const tal_t *ctx,
+				 struct peer *peer,
+				 enum peer_wire expect_type,
+				 enum peer_wire second_allowed_type)
+{
+	u8 *msg;
+	enum peer_wire type;
+
+	msg = peer_read(ctx, peer->pps);
+	type = fromwire_peektype(msg);
+	if (type != expect_type && type != second_allowed_type)
+		peer_failed_warn(peer->pps, &peer->channel_id,
+				"Got incorrect message from peer: %s"
+				" (should be %s) [%s]",
+				peer_wire_name(type),
+				peer_wire_name(expect_type),
+				sanitize_error(tmpctx, msg, &peer->channel_id));
+
+	return msg;
+}
+
 /* The question of "who signs splice commitments first" is the same order as the
  * splice `tx_signature`s are. This function handles sending & receiving the
  * required commitments as part of the splicing process. */
@@ -2664,9 +2687,9 @@ static struct commitsig *interactive_send_commitments(struct peer *peer,
 						      enum tx_role our_role)
 {
 	struct commitsig *result;
-	const u8 *msg;
-	enum peer_wire type;
-	bool got_commit = false;
+	const u8 *msg, *commit_msg;
+
+	commit_msg = NULL;
 
 	if (do_i_sign_first(peer, psbt, our_role)) {
 
@@ -2675,35 +2698,30 @@ static struct commitsig *interactive_send_commitments(struct peer *peer,
 
 		send_commit(peer);
 
-		msg = peer_read(tmpctx, peer->pps);
-		type = fromwire_peektype(msg);
 		/* If both sides commit simultaneously, that's fine. */
-		if (type == WIRE_COMMITMENT_SIGNED) {
-			got_commit = true;
-			result = handle_peer_commit_sig(peer, msg, 0, NULL, 0, 0);
-			msg = peer_read(tmpctx, peer->pps);
-			type = fromwire_peektype(msg);
+		msg = peer_expect_msg(tmpctx, peer, WIRE_REVOKE_AND_ACK,
+				      WIRE_COMMITMENT_SIGNED);
+
+		/* If commitments happened simultaneously, we'll get a
+		 * commitment signed message, followed by revoke and ack.
+		 */
+		if (fromwire_peektype(msg) == WIRE_COMMITMENT_SIGNED) {
+			commit_msg = msg;
+			result = handle_peer_commit_sig(peer, commit_msg, 0,
+							NULL, 0, 0);
+
+			msg = peer_expect_msg(tmpctx, peer,
+					      WIRE_REVOKE_AND_ACK, 0);
 		}
-		if (type != WIRE_REVOKE_AND_ACK)
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					"Splicing got incorrect message from peer: %s "
-					"(should be WIRE_REVOKE_AND_ACK) [%s]",
-					peer_wire_name(type),
-					sanitize_error(tmpctx, msg,
-						       &peer->channel_id));
+
 		handle_peer_revoke_and_ack(peer, msg);
 	}
 
-	if (!got_commit) {
-		msg = peer_read(tmpctx, peer->pps);
-		type = fromwire_peektype(msg);
-		if (type != WIRE_COMMITMENT_SIGNED)
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					"Splicing got incorrect message from "
-					"peer: %s (should be "
-					"WIRE_COMMITMENT_SIGNED)",
-					peer_wire_name(type));
-		result = handle_peer_commit_sig(peer, msg, 0, NULL, 0, 0);
+	if (!commit_msg) {
+		commit_msg = peer_expect_msg(tmpctx, peer,
+					     WIRE_COMMITMENT_SIGNED, 0);
+		result = handle_peer_commit_sig(peer, commit_msg, 0,
+						NULL, 0, 0);
 	}
 
 	if (!do_i_sign_first(peer, psbt, our_role)) {
@@ -2713,13 +2731,8 @@ static struct commitsig *interactive_send_commitments(struct peer *peer,
 
 		send_commit(peer);
 
-		msg = peer_read(tmpctx, peer->pps);
-		type = fromwire_peektype(msg);
-		if (type != WIRE_REVOKE_AND_ACK)
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					"Splicing got incorrect message from peer: %s "
-					"(should be WIRE_REVOKE_AND_ACK)",
-					peer_wire_name(type));
+		msg = peer_expect_msg(tmpctx, peer,
+				      WIRE_REVOKE_AND_ACK, 0);
 
 		handle_peer_revoke_and_ack(peer, msg);
 	}
@@ -2776,11 +2789,20 @@ static size_t calc_weight(enum tx_role role, const struct wally_psbt *psbt)
 	for (size_t i = 0; i < psbt->num_inputs; i++)
 		if (is_initiators_serial(&psbt->inputs[i].unknowns)) {
 			if (role == TX_INITIATOR)
-				weight += psbt_input_weight(psbt, i);
+				weight += psbt_input_get_weight(psbt, i);
 		}
 		else
 			if (role != TX_INITIATOR)
-				weight += psbt_input_weight(psbt, i);
+				weight += psbt_input_get_weight(psbt, i);
+
+	for (size_t i = 0; i < psbt->num_outputs; i++)
+		if (is_initiators_serial(&psbt->inputs[i].unknowns)) {
+			if (role == TX_INITIATOR)
+				weight += psbt_output_get_weight(psbt, i);
+		}
+		else
+			if (role != TX_INITIATOR)
+				weight += psbt_output_get_weight(psbt, i);
 
 	return weight;
 }
