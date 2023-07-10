@@ -1,7 +1,10 @@
 from fixtures import *  # noqa: F401,F403
+from pyln.testing.utils import env
 import pytest
+import unittest
 
 
+@unittest.skipIf(env('EXPERIMENTAL_SPLICING') != '1', "Need experimental splicing turned on")
 @pytest.mark.openchannel('v2')
 def test_splice(node_factory, bitcoind):
     l1, l2 = node_factory.line_graph(2, fundamount=1000000, wait_for_announce=True)

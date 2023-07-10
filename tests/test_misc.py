@@ -2182,9 +2182,11 @@ def test_list_features_only(node_factory):
                 'option_shutdown_anysegwit/odd',
                 'option_channel_type/odd',
                 'option_scid_alias/odd',
-                'option_zeroconf/odd',
-                'option_splice/odd',
-                'supports_open_accept_channel_type']
+                'option_zeroconf/odd']
+    if env('EXPERIMENTAL_SPLICING') == '1':
+        expected += ['option_splice/odd']
+    expected += ['supports_open_accept_channel_type']
+
     assert features == expected
 
 
