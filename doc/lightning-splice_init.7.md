@@ -5,7 +5,7 @@ SYNOPSIS
 --------
 **(WARNING: experimental-splicing only)**
 
-**splice\_init** *channel_id* *relative_amount* [*initalpsbt*] [*feerate\_per\_kw*] [*force\_feerate*]
+**splice\_init** *channel\_id* *relative\_amount* [*initalpsbt*] [*feerate\_per\_kw*] [*force\_feerate*]
 
 DESCRIPTION
 -----------
@@ -23,7 +23,7 @@ specified, one will be generated automatically.
 
 *feerate\_per\_kw* is the miner fee we promise our peer to pay for our side of
 the splice transaction. It is calculated by `feerate_per_kw` *
-our_bytes_in_splice_tx / 1000.
+our\_bytes\_in\_splice\_tx / 1000.
 
 *force\_feerate* is a boolean flag. By default splices will fail if the fee
 provided looks too high. This is to protect against accidentally setting your
@@ -72,7 +72,7 @@ SEE ALSO
 AUTHOR
 ------
 
-@dusty_daemon
+@dusty\_daemon
 
 RESOURCES
 ---------
