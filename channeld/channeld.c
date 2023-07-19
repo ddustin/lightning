@@ -750,6 +750,14 @@ static void check_mutual_splice_locked(struct peer *peer)
 	billboard_update(peer);
 	send_channel_update(peer, 0);
 
+	/* valgrind complains last_tx is leaked so we explicitly free it
+	 * DTODO: investigate this more. */
+	for (size_t i = 0; i < tal_count(peer->splice_state->inflights); i++) {
+		inflight = peer->splice_state->inflights[i];
+		tal_free(inflight->last_tx);
+		tal_free(inflight);
+	}
+
 	peer->splice_state->inflights = tal_free(peer->splice_state->inflights);
 	peer->splice_state->count = 0;
 	peer->splice_state->revoked_count = 0;
@@ -2068,16 +2076,16 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 			      tal_hex(tmpctx, msg2));
 
 	result = tal(tmpctx, struct commitsig);
-	result->tx = tal_steal(result, txs[0]);
+	result->tx = clone_bitcoin_tx(result, txs[0]);
 	result->commit_signature = commit_sig;
-	result->htlc_signatures = tal_steal(result, htlc_sigs);
+	result->htlc_signatures = htlc_sigs;
 
 	/* Only the parent call continues from here.
 	 * Return for all child calls. */
 	if(commit_index)
 		return result;
 
-	commitsigs = tal_arr(tmpctx, const struct commitsig*, 0);
+	commitsigs = tal_arr(NULL, const struct commitsig*, 0);
 	/* We expect multiple consequtive commit_sig messages if we have
 	 * inflight splices. Since consequtive is requred, we recurse for
 	 * each expected message, blocking until all are received. */
@@ -2095,16 +2103,21 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 					"WIRE_COMMITMENT_SIGNED but got %s",
 					peer_wire_name(type));
 
+		/* We purposely just store the last commit msg */
 		result = handle_peer_commit_sig(peer, splice_msg, i + 1,
 						changed_htlcs, sub_splice_amnt,
 						funding_diff - sub_splice_amnt);
 		tal_arr_expand(&commitsigs, result);
+		tal_steal(commitsigs, result);
 	}
 
 	peer->splice_state->revoked_count = peer->splice_state->count;
 
 	send_revocation(peer, &commit_sig, htlc_sigs, changed_htlcs, txs[0],
 			old_secret, &next_point, commitsigs);
+
+	tal_steal(tmpctx, result);
+	tal_free(commitsigs);
 
 	/* STFU can't be activated during pending updates.
 	 * With updates finish let's handle a potentially queued stfu request.
@@ -2116,6 +2129,7 @@ static struct commitsig *handle_peer_commit_sig(struct peer *peer,
 	if (want_fee_update(peer, NULL))
 		start_commit_timer(peer);
 
+	/* We return the last commit commit msg */
 	return result;
 }
 
@@ -3137,7 +3151,7 @@ static void resume_splice_negotiation(struct peer *peer,
 		their_commit = interactive_send_commitments(peer, current_psbt,
 							    our_role);
 
-		inflight->last_tx = tal_steal(peer, their_commit->tx);
+		inflight->last_tx = tal_steal(inflight, their_commit->tx);
 		inflight->last_sig = their_commit->commit_signature;
 
 		msg = towire_channeld_update_inflight(NULL, current_psbt,
@@ -3333,16 +3347,18 @@ static void resume_splice_negotiation(struct peer *peer,
 	send_channel_update(peer, 0);
 }
 
-static struct inflight *init_inflights(const tal_t *ctx, struct peer *peer)
+static struct inflight *inflights_new(struct peer *peer)
 {
-	struct inflight *inf;
+	struct inflight *inf = tal(peer->splice_state->inflights, struct inflight);
+	int i = tal_count(peer->splice_state->inflights);
 
-	if (!peer->splice_state->inflights)
-		peer->splice_state->inflights = tal_arr(ctx, struct inflight *, 0);
+	if (i)
+		tal_resize(&peer->splice_state->inflights, i + 1);
+	else
+		peer->splice_state->inflights = tal_arr(peer->splice_state,
+							struct inflight *, 1);
 
-	inf = tal(peer->splice_state->inflights, struct inflight);
-
-	tal_arr_expand(&peer->splice_state->inflights, inf);
+	peer->splice_state->inflights[i] = inf;
 	return inf;
 }
 
@@ -3471,12 +3487,13 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	master_wait_sync_reply(tmpctx, peer, take(msg),
 			       WIRE_CHANNELD_GOT_INFLIGHT);
 
-	new_inflight = init_inflights(peer, peer);
+	new_inflight = inflights_new(peer);
 
-	psbt_txid(tmpctx, ictx->current_psbt, &new_inflight->outpoint.txid, NULL);
+	psbt_txid(new_inflight, ictx->current_psbt,
+		  &new_inflight->outpoint.txid, NULL);
 	new_inflight->outpoint = outpoint;
 	new_inflight->amnt = both_amount;
-	new_inflight->psbt = ictx->current_psbt;
+	new_inflight->psbt = tal_steal(new_inflight, ictx->current_psbt);
 	new_inflight->splice_amnt = peer->splice->accepter_relative;
 	new_inflight->i_am_initiator = false;
 
@@ -3704,11 +3721,11 @@ static void splice_initiator_user_finalized(struct peer *peer)
 	master_wait_sync_reply(tmpctx, peer, take(outmsg),
 			       WIRE_CHANNELD_GOT_INFLIGHT);
 
-	new_inflight = init_inflights(peer, peer);
+	new_inflight = inflights_new(peer);
 
 	psbt_txid(tmpctx, ictx->current_psbt, &new_inflight->outpoint.txid, NULL);
 	new_inflight->outpoint.n = chan_output_index;
-	new_inflight->psbt = ictx->current_psbt;
+	new_inflight->psbt = tal_steal(new_inflight, ictx->current_psbt);
 	new_inflight->amnt = amount_sat(new_chan_output->amount);
 	new_inflight->splice_amnt = peer->splice->opener_relative;
 	new_inflight->i_am_initiator = true;
@@ -3836,6 +3853,7 @@ static void splice_initiator_user_signed(struct peer *peer, const u8 *inmsg)
 {
 	struct wally_psbt *signed_psbt;
 	struct bitcoin_txid current_psbt_txid, signed_psbt_txid;
+	struct inflight *inflight;
 	const u8 *msg;
 
 	if (!peer->splice) {
@@ -3890,9 +3908,10 @@ static void splice_initiator_user_signed(struct peer *peer, const u8 *inmsg)
 
 	peer->splice->current_psbt = tal_free(peer->splice->current_psbt);
 
-	last_inflight(peer)->psbt = signed_psbt;
+	inflight = last_inflight(peer);
+	inflight->psbt = tal_steal(inflight, signed_psbt);
 
-	resume_splice_negotiation(peer, last_inflight(peer), true, TX_INITIATOR);
+	resume_splice_negotiation(peer, inflight, true, TX_INITIATOR);
 }
 
 /* This occurs once our 'stfu' transition was successful. */
@@ -4912,7 +4931,6 @@ static void peer_reconnect(struct peer *peer,
 		if (type)
 			set_channel_type(peer->channel, type);
 	}
-	tal_free(send_tlvs);
 
 	/* Now stop, we've been polite long enough. */
 	if (reestablish_only) {
@@ -4976,6 +4994,7 @@ static void peer_reconnect(struct peer *peer,
 						  	: TX_ACCEPTER);
 		}
 	}
+	tal_free(send_tlvs);
 
 	/* Corner case: we didn't send shutdown before because update_add_htlc
 	 * pending, but now they're cleared by restart, and we're actually

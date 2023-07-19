@@ -3911,6 +3911,8 @@ def test_sql(node_factory, bitcoind):
                          'type': 'string'},
                         {'name': 'total_funding_msat',
                          'type': 'msat'},
+                        {'name': 'splice_amount',
+                         'type': 's64'},
                         {'name': 'our_funding_msat',
                          'type': 'msat'},
                         {'name': 'scratch_txid',
@@ -4048,6 +4050,7 @@ def test_sql(node_factory, bitcoind):
                   'u16': 'INTEGER',
                   'u32': 'INTEGER',
                   'u64': 'INTEGER',
+                  's64': 'INTEGER',
                   'msat': 'INTEGER',
                   'hex': 'BLOB',
                   'hash': 'BLOB',
@@ -4118,7 +4121,7 @@ def test_sql(node_factory, bitcoind):
                 assert len(bytes.fromhex(val)) == 32
             elif col['type'] == "pubkey":
                 assert len(bytes.fromhex(val)) == 33
-            elif col['type'] in ("msat", "integer", "u64", "u32", "u16", "u8", "boolean"):
+            elif col['type'] in ("msat", "integer", "s64", "u64", "u32", "u16", "u8", "boolean"):
                 int(val)
             elif col['type'] == "number":
                 float(val)

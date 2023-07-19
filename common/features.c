@@ -471,7 +471,7 @@ const char *feature_name(const tal_t *ctx, size_t f)
 		"option_trampoline_routing", /* https://github.com/lightning/bolts/pull/836 */
 		NULL,
 		NULL, /* 60/61 */
-		NULL,
+		"option_splice",
 		NULL,
 		NULL,
 		NULL,
