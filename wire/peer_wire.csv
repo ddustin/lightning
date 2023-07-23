@@ -66,6 +66,7 @@ msgdata,tx_signatures,witnesses,witness,num_witnesses
 subtype,witness
 subtypedata,witness,len,u16,
 subtypedata,witness,witness_data,byte,len
+msgdata,tx_signatures,tlvs,txsigs_tlvs,
 tlvtype,txsigs_tlvs,funding_outpoint_sig,0
 tlvdata,txsigs_tlvs,funding_outpoint_sig,sig,byte,...
 msgtype,tx_init_rbf,72

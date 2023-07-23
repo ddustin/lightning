@@ -196,9 +196,6 @@ static void handle_splice_funding_error(struct lightningd *ld,
 					fmt_amount_msat(tmpctx, req_funding)));
 
 		was_pending(command_success(cc->cmd, response));
-
-		list_del(&cc->list);
-		tal_free(cc);
 	}
 	else
 		log_peer_unusual(ld->log, &channel->peer->id,
@@ -230,9 +227,6 @@ static void handle_splice_state_error(struct lightningd *ld,
 		json_add_string(response, "error", error_msg);
 
 		was_pending(command_success(cc->cmd, response));
-
-		list_del(&cc->list);
-		tal_free(cc);
 	}
 	else
 		log_peer_unusual(ld->log, &channel->peer->id,
@@ -271,7 +265,6 @@ static void handle_splice_feerate_error(struct lightningd *ld,
 						fmt_amount_msat(tmpctx, fee)));
 
 		was_pending(command_success(cc->cmd, response));
-		tal_free(cc);
 	}
 	else
 		log_peer_unusual(ld->log, &channel->peer->id, "Peer gave us a"
@@ -307,7 +300,6 @@ static void handle_splice_confirmed_init(struct lightningd *ld,
 	json_add_string(response, "psbt", psbt_to_b64(tmpctx, psbt));
 
 	was_pending(command_success(cc->cmd, response));
-	tal_free(cc);
 }
 
 /* Channeld sends us this in response to a user's `splice_update` request */
@@ -342,9 +334,6 @@ static void handle_splice_confirmed_update(struct lightningd *ld,
 	json_add_bool(response, "commitments_secured", commitments_secured);
 
 	was_pending(command_success(cc->cmd, response));
-
-	list_del(&cc->list);
-	tal_free(cc);
 }
 
 /* Channeld uses this to request the funding transaction for help building the
@@ -415,8 +404,6 @@ static void handle_tx_broadcast(struct send_splice_info *info)
 		json_add_txid(response, "txid", &txid);
 
 		was_pending(command_success(info->cc->cmd, response));
-
-		list_del(&info->cc->list);
 	}
 }
 
@@ -1882,6 +1869,11 @@ static struct command_result *param_channel_for_splice(struct command *cmd,
 	return NULL;
 }
 
+static void destroy_splice_command(struct splice_command *cc)
+{
+	list_del(&cc->list);
+}
+
 static struct command_result *json_splice_init(struct command *cmd,
 					       const char *buffer,
 					       const jsmntok_t *obj UNNEEDED,
@@ -1925,11 +1917,12 @@ static struct command_result *json_splice_init(struct command *cmd,
 	log_debug(cmd->ld->log, "splice_init input PSBT version %d",
 		  initialpsbt->version);
 
-	cc = tal(NULL, struct splice_command);
+	cc = tal(cmd, struct splice_command);
 
 	list_add_tail(&cmd->ld->splice_commands, &cc->list);
+	tal_add_destructor(cc, destroy_splice_command);
 
-	cc->cmd = tal_steal(cc, cmd);
+	cc->cmd = cmd;
 	cc->channel = channel;
 
 	msg = towire_channeld_splice_init(NULL, initialpsbt, *relative_amount,
@@ -1967,11 +1960,12 @@ static struct command_result *json_splice_update(struct command *cmd,
 	log_debug(cmd->ld->log, "splice_update input PSBT version %d",
 		  psbt->version);
 
-	cc = tal(NULL, struct splice_command);
+	cc = tal(cmd, struct splice_command);
 
 	list_add_tail(&cmd->ld->splice_commands, &cc->list);
+	tal_add_destructor(cc, destroy_splice_command);
 
-	cc->cmd = tal_steal(cc, cmd);
+	cc->cmd = cmd;
 	cc->channel = channel;
 
 	subd_send_msg(channel->owner,
@@ -2010,11 +2004,12 @@ static struct command_result *json_splice_signed(struct command *cmd,
 	log_debug(cmd->ld->log, "splice_signed input PSBT version %d",
 		  psbt->version);
 
-	cc = tal(NULL, struct splice_command);
+	cc = tal(cmd, struct splice_command);
 
 	list_add_tail(&cmd->ld->splice_commands, &cc->list);
+	tal_add_destructor(cc, destroy_splice_command);
 
-	cc->cmd = tal_steal(cc, cmd);
+	cc->cmd = cmd;
 	cc->channel = channel;
 
 	msg = towire_channeld_splice_signed(tmpctx, psbt, *sign_first);

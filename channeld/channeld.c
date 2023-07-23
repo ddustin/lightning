@@ -151,7 +151,9 @@ struct peer {
 	/* If master told us to send wrong_funding */
 	struct bitcoin_outpoint *shutdown_wrong_funding;
 
-	/* Do we want quiescence? */
+	/* Do we want quiescence?
+	 * Note: This flag is needed seperately from `stfu_sent` so we can
+	 * detect the entering "stfu" mode. */
 	bool want_stfu;
 	/* Which side is considered the initiator? */
 	enum side stfu_initiator;
@@ -267,7 +269,7 @@ static void maybe_send_stfu(struct peer *peer)
 	if (!peer->want_stfu)
 		return;
 
-	if(pending_updates(peer->channel, LOCAL, false)) {
+	if (pending_updates(peer->channel, LOCAL, false)) {
 		status_info("Pending updates prevent us from STFU mode at this"
 			    " time.");
 	}
@@ -280,11 +282,17 @@ static void maybe_send_stfu(struct peer *peer)
 	}
 
 	if (peer->stfu_sent[LOCAL] && peer->stfu_sent[REMOTE]) {
+		/* Prevent STFU mode being inadvertantly activated twice during
+		 * splice. This occurs because the commit -> revoke_and_ack
+		 * cycle calls into `maybe_send_stfu`. The `want_stfu` flag is
+		 * to prevent triggering the entering of stfu events twice. */
+		peer->want_stfu = false;
 		status_unusual("STFU complete: we are quiescent");
 		wire_sync_write(MASTER_FD,
 				towire_channeld_dev_quiesce_reply(tmpctx));
 
 		peer->stfu_wait_single_msg = true;
+		status_unusual("STFU complete: setting stfu_wait_single_msg = true");
 		if (peer->on_stfu_success) {
 			peer->on_stfu_success(peer);
 			peer->on_stfu_success = NULL;
@@ -597,7 +605,7 @@ static bool channel_announcement_negotiate(struct peer *peer)
 		return false;
 
 	/* Don't announce channel if we're in stfu mode */
-	if (peer->want_stfu)
+	if (peer->want_stfu || is_stfu_active(peer))
 		return false;
 
 	if (!peer->channel_local_active) {
@@ -1341,7 +1349,7 @@ static bool want_fee_update(const struct peer *peer, u32 *target)
 		return false;
 
 	/* No fee update while quiescing! */
-	if (peer->want_stfu)
+	if (peer->want_stfu || is_stfu_active(peer))
 		return false;
 
 	current = channel_feerate(peer->channel, REMOTE);
@@ -1380,7 +1388,7 @@ static bool want_blockheight_update(const struct peer *peer, u32 *height)
 		return false;
 
 	/* No fee update while quiescing! */
-	if (peer->want_stfu)
+	if (peer->want_stfu || is_stfu_active(peer))
 		return false;
 
 	/* What's the current blockheight */
@@ -3101,8 +3109,8 @@ static void resume_splice_negotiation(struct peer *peer,
 	enum peer_wire type;
 	struct wally_psbt *current_psbt = inflight->psbt;
 	struct commitsig *their_commit;
-	struct witness_stack **inws;
-	const struct witness_stack **outws;
+	struct witness **inws;
+	const struct witness **outws;
 	u8 der[73];
 	size_t der_len;
 	struct bitcoin_signature splice_sig;
@@ -3185,8 +3193,8 @@ static void resume_splice_negotiation(struct peer *peer,
 	txsig_tlvs->funding_outpoint_sig = tal_dup_arr(tmpctx, u8, der,
 						       der_len, 0);
 
-	outws = psbt_to_witness_stacks(tmpctx, current_psbt,
-				       our_role, splice_funding_index);
+	outws = psbt_to_witnesses(tmpctx, current_psbt,
+				  our_role, splice_funding_index);
 	sigmsg = towire_tx_signatures(tmpctx, &peer->channel_id,
 				      &inflight->outpoint.txid, outws,
 				      txsig_tlvs);
@@ -3214,7 +3222,7 @@ static void resume_splice_negotiation(struct peer *peer,
 
 	their_txsigs_tlvs = tlv_txsigs_tlvs_new(tmpctx);
 	if (!fromwire_tx_signatures(tmpctx, msg, &cid, &inflight->outpoint.txid,
-				    cast_const3(struct witness_stack ***, &inws),
+				    cast_const3(struct witness ***, &inws),
 				    &their_txsigs_tlvs))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 			    "Splicing bad tx_signatures %s",
@@ -3275,7 +3283,6 @@ static void resume_splice_negotiation(struct peer *peer,
 		struct wally_psbt_input *in =
 			&current_psbt->inputs[i];
 		u64 in_serial;
-		const struct witness_element **elem;
 
 		if (!psbt_get_serial_id(&in->unknowns, &in_serial)) {
 			status_broken("PSBT input %zu missing serial_id %s",
@@ -3296,9 +3303,7 @@ static void resume_splice_negotiation(struct peer *peer,
 					 "Mismatch witness stack count %s",
 					 tal_hex(msg, msg));
 
-		elem = cast_const2(const struct witness_element **,
-				   inws[j++]->witness_elements);
-		psbt_finalize_input(current_psbt, in, elem);
+		psbt_finalize_input(current_psbt, in, inws[j++]);
 	}
 
 	final_tx = bitcoin_tx_with_psbt(tmpctx, current_psbt);
@@ -3516,7 +3521,8 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 	u8 *scriptPubkey;
 	char *error;
 
-	status_debug("default PSBT version is now %d", create_psbt(tmpctx, 0, 0, 0)->version);
+	status_debug("splice_initiator peer->stfu_wait_single_msg: %d",
+		     (int)peer->stfu_wait_single_msg);
 
 	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
 					 peer->pps, peer->channel_id);
@@ -3741,6 +3747,16 @@ static void splice_initiator_user_update(struct peer *peer, const u8 *inmsg)
 	struct interactivetx_context *ictx;
 	char *error;
 
+	if (!peer->splice) {
+		msg = towire_channeld_splice_state_error(NULL, "Can't accept a"
+							 " splice PSBT update"
+							 " because this channel"
+							 " hasn't begun a"
+							 " splice.");
+		wire_sync_write(MASTER_FD, take(msg));
+		return;
+	}
+
 	ictx = new_interactivetx_context(tmpctx, TX_INITIATOR,
 					 peer->pps, peer->channel_id);
 
@@ -3822,6 +3838,16 @@ static void splice_initiator_user_signed(struct peer *peer, const u8 *inmsg)
 	struct bitcoin_txid current_psbt_txid, signed_psbt_txid;
 	const u8 *msg;
 
+	if (!peer->splice) {
+		msg = towire_channeld_splice_state_error(NULL, "Can't accept a"
+							 " signed splice PSBT"
+							 " because this channel"
+							 " hasn't begun a"
+							 " splice.");
+		wire_sync_write(MASTER_FD, take(msg));
+		return;
+	}
+
 	if (!fromwire_channeld_splice_signed(tmpctx, inmsg, &signed_psbt,
 					     &peer->splice->force_sign_first))
 		master_badmsg(WIRE_CHANNELD_SPLICE_SIGNED, inmsg);
@@ -3894,8 +3920,8 @@ static void handle_splice_init(struct peer *peer, const u8 *inmsg)
 	/* Can't start a splice with another splice still active */
 	if (peer->splice) {
 		msg = towire_channeld_splice_state_error(NULL, "Can't start two"
-							 " splices at the same"
-							 " time.");
+							 " splices on the same"
+							 " channel at once.");
 		wire_sync_write(MASTER_FD, take(msg));
 		return;
 	}
@@ -5884,7 +5910,7 @@ int main(int argc, char *argv[])
 
 		/* If we're in STFU mode and aren't waiting for a STFU mode
 		 * specific message, don't read from the peer. */
-		if (!peer->stfu_wait_single_msg && is_stfu_active(peer))
+		if (is_stfu_active(peer) && !peer->stfu_wait_single_msg)
 			FD_CLR(peer->pps->peer_fd, &rfds);
 
 		if (select(nfds, &rfds, NULL, NULL, tptr) < 0) {

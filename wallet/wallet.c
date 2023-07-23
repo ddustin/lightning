@@ -1173,8 +1173,8 @@ void wallet_inflight_add(struct wallet *w, struct channel_inflight *inflight)
 		db_bind_int(stmt, 0);
 	}
 
-	db_bind_s64(stmt, 17, inflight->funding->splice_amnt);
-	db_bind_int(stmt, 18, inflight->i_am_initiator);
+	db_bind_s64(stmt, inflight->funding->splice_amnt);
+	db_bind_int(stmt, inflight->i_am_initiator);
 
 	db_exec_prepared_v2(stmt);
 	assert(!stmt->error);
@@ -2082,15 +2082,15 @@ void wallet_htlcsigs_confirm_inflight(struct wallet *w, struct channel *chan,
 						 " inflight_tx_outnum!=?"
 						 ")"
 					     ")"));
-	db_bind_u64(stmt, 0, chan->dbid);
-	db_bind_txid(stmt, 1, &confirmed_outpoint->txid);
-	db_bind_int(stmt, 2, confirmed_outpoint->n);
+	db_bind_u64(stmt, chan->dbid);
+	db_bind_txid(stmt, &confirmed_outpoint->txid);
+	db_bind_int(stmt, confirmed_outpoint->n);
 	db_exec_prepared_v2(take(stmt));
 
 	stmt = db_prepare_v2(w->db, SQL("UPDATE htlc_sigs"
 					" SET inflight_tx_id=NULL"
 					" WHERE channelid=?"));
-	db_bind_u64(stmt, 0, chan->dbid);
+	db_bind_u64(stmt, chan->dbid);
 	db_exec_prepared_v2(take(stmt));
 }
 
@@ -3841,10 +3841,10 @@ void wallet_htlc_sigs_add(struct wallet *w, u64 channel_id,
 				     SQL("INSERT INTO htlc_sigs (channelid,"
 					 " inflight_tx_id, inflight_tx_outnum,"
 					 " signature) VALUES (?, ?, ?)"));
-		db_bind_u64(stmt, 0, channel_id);
-		db_bind_txid(stmt, 1, &inflight_outpoint.txid);
-		db_bind_int(stmt, 2, inflight_outpoint.n);
-		db_bind_signature(stmt, 3, &htlc_sigs[i].s);
+		db_bind_u64(stmt, channel_id);
+		db_bind_txid(stmt, &inflight_outpoint.txid);
+		db_bind_int(stmt, inflight_outpoint.n);
+		db_bind_signature(stmt, &htlc_sigs[i].s);
 		db_exec_prepared_v2(take(stmt));
 	}
 }

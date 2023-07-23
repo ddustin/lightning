@@ -21,7 +21,7 @@ void psbt_finalize_input(const tal_t *ctx,
 			 struct wally_psbt_input *in,
 			 const struct witness *witness);
 
-/* psbt_to_witness_stacks - Take a side's sigs from a PSBT and copy to a
+/* psbt_to_witnesses - Take a side's sigs from a PSBT and copy to a
  * 			    wire witness
  *
  * @ctx - allocation context

@@ -1185,11 +1185,10 @@ static char *opt_set_dual_fund(struct lightningd *ld)
 
 static char *opt_set_splicing(struct lightningd *ld)
 {
-	/* DTODO: Ask libhsmd if they support splicing */
-	if (!hsm_capable(ld, WIRE_HSMD_SIGN_SPLICE_TX))
-		return "--enable-experimental-splicing can't be enabled if hsmd"
-		       " does not also support it.";
-
+	/* Splicing requires STFU to be enabled */
+	feature_set_or(ld->our_features,
+		       take(feature_set_for_feature(NULL,
+						    OPTIONAL_FEATURE(OPT_QUIESCE))));
 	feature_set_or(ld->our_features,
 		       take(feature_set_for_feature(NULL,
 						    OPTIONAL_FEATURE(OPT_SPLICE))));

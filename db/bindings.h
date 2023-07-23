@@ -21,7 +21,7 @@ struct wally_tx;
 void db_bind_null(struct db_stmt *stmt);
 void db_bind_int(struct db_stmt *stmt, int val);
 void db_bind_u64(struct db_stmt *stmt, u64 val);
-void db_bind_s64(struct db_stmt *stmt, int pos, s64 val);
+void db_bind_s64(struct db_stmt *stmt, s64 val);
 void db_bind_blob(struct db_stmt *stmt, const u8 *val, size_t len);
 void db_bind_text(struct db_stmt *stmt, const char *val);
 void db_bind_preimage(struct db_stmt *stmt, const struct preimage *p);

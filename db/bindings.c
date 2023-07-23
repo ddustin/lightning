@@ -81,10 +81,10 @@ void db_bind_u64(struct db_stmt *stmt, u64 val)
 	stmt->bindings[pos].v.u64 = val;
 }
 
-void db_bind_s64(struct db_stmt *stmt, int pos, s64 val)
+void db_bind_s64(struct db_stmt *stmt, s64 val)
 {
 	u64 uval = val;
-	db_bind_u64(stmt, pos, uval);
+	db_bind_u64(stmt, uval);
 }
 
 void db_bind_blob(struct db_stmt *stmt, const u8 *val, size_t len)
