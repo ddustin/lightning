@@ -118,7 +118,7 @@ jobs:
           pip3 install --user pip wheel poetry
           poetry export -o requirements.txt --with dev --without-hashes
           python3 -m pip install -r requirements.txt
-          ./configure --enable-debugbuild --enable-experimental-splicing CC="$COMPILER"
+          ./configure --enable-debugbuild CC="$COMPILER"
 
           make -j $(nproc) testpack.tar.bz2
 
