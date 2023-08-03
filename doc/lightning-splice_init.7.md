@@ -49,7 +49,7 @@ RESULT=$(lightning-cli splice_update $CHANNEL_ID $PSBT)
 PSBT=$(echo $RESULT | jq -r ".psbt")
 echo $RESULT
 
-RESULT=$(lightning-cli signpsbt $PSBT)
+RESULT=$(lightning-cli signpsbt -k psbt="$PSBT")
 PSBT=$(echo $RESULT | jq -r ".signed_psbt")
 echo $RESULT
 
