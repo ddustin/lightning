@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang=en >
+<head>
+	<meta charset=utf-8>
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Core Lightning</title>
+	<link rel="stylesheet" href="interface.css">
+</head>
+
+<h1 id="title" onclick="return;document.getElementById('onchain_activity').style.display='';">Core Lightning</h1>
+
+<main>
+
+	<details id="console">
+		<summary>Settings</summary>
+		<nav>
+			Port: <input id="port" type="text" value="3010">
+		</nav>
+		<nav>
+			Node ID: <input id="nodeid" type="text" value="">
+		</nav>
+		<nav>
+			Rune: <input id="rune" type="text" value="">
+		</nav>
+		<!-- <form>
+			 <label>
+				 Message: <input id="message" type="text" value="listpeerchannels">
+			 </label>
+			 <button onclick="request(document.getElementById('message').value)">Send Message</button>
+		</form>
+		<label>
+			Status: <textarea style="width:100%; height:5em" id="status"></textarea>
+		</label>
+		<label>
+			Onchain: <textarea style="width:100%; height:20em" id="onchain"></textarea>
+		</label>
+		<label>
+			Channels: <textarea style="width:100%; height:5em" id="channels"></textarea>
+		</label> -->
+	</details>
+
+	<details id="onchain_activity" style="display:none;">
+		<summary>Onchain Activity</summary>
+		<ul id="chain_activity">
+			<li style="display:none">
+				<h3>Movements at block height 1</h3>
+				<ul>
+				</ul>
+			</li>
+		</ul>
+	</details>
+
+	<h2>Channels</h2>
+	<ul id="channel-list">
+	  <li class="channel" style="display:none">
+			<abbr class="node us">Me</abbr>
+			<span class="bar us">
+				<span class="text">0.5btc</span>
+			</span>
+			<span class="bar them">
+				<span class="text">0.5btc</span>
+			</span>
+			<abbr class="node them">Thy</abbr>
+	</ul>
+
+</main>
+<script src="interface.js"></script>

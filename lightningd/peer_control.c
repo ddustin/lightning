@@ -795,8 +795,19 @@ static void json_add_channel(struct lightningd *ld,
 	json_add_txid(response, "funding_txid", &channel->funding.txid);
 	json_add_num(response, "funding_outnum", channel->funding.n);
 
-	if (!list_empty(&channel->inflights)) {
-		struct channel_inflight *initial, *inflight;
+	int count = 0;
+
+	struct channel_inflight *initial, *inflight;
+	
+	list_for_each(&channel->inflights, inflight, list) {
+		if (!inflight->splice_locked_memonly)
+			count++;
+	}
+
+	log_debug(channel->log, "listpeerchannels channel count %d",
+		       count);
+
+	if (count) {
 		u32 last_feerate, next_feerate;
 
 		initial = list_top(&channel->inflights,
@@ -827,6 +838,9 @@ static void json_add_channel(struct lightningd *ld,
 		json_array_start(response, "inflight");
 		list_for_each(&channel->inflights, inflight, list) {
 			struct bitcoin_txid txid;
+
+			if (inflight->splice_locked_memonly)
+				continue;
 
 			json_object_start(response, NULL);
 			json_add_txid(response, "funding_txid",

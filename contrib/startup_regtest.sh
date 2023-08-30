@@ -109,6 +109,8 @@ start_nodes() {
 			funder-fuzz-percent=0
 			lease-fee-base-sat=2sat
 			lease-fee-basis=50
+			rest-port=30${i}0
+			rest-protocol=http
 			EOF
 		fi
 
@@ -226,10 +228,12 @@ fund_nodes() {
 		$LCLI -H --lightning-dir=/tmp/l"$node1"-regtest connect "$L2_NODE_ID"@localhost:"$L2_NODE_PORT" > /dev/null
 
 		L1_WALLET_ADDR=$($LCLI -F --lightning-dir=/tmp/l"$node1"-regtest newaddr | sed -n 's/^bech32=\(.*\)/\1/p')
+		L2_WALLET_ADDR=$($LCLI -F --lightning-dir=/tmp/l"$node2"-regtest newaddr | sed -n 's/^bech32=\(.*\)/\1/p')
 
 		ensure_bitcoind_funds
 
 		bitcoin-cli -datadir="$PATH_TO_BITCOIN" -regtest "$WALLET" sendtoaddress "$L1_WALLET_ADDR" 1 > /dev/null
+		bitcoin-cli -datadir="$PATH_TO_BITCOIN" -regtest "$WALLET" sendtoaddress "$L2_WALLET_ADDR" 1 > /dev/null
 
 		bitcoin-cli -datadir="$PATH_TO_BITCOIN" -regtest generatetoaddress 1 "$ADDRESS" > /dev/null
 

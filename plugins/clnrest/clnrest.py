@@ -10,6 +10,7 @@ try:
 
     from pathlib import Path
     from flask import Flask
+    from flask_cors import CORS
     from flask_restx import Api
     from gunicorn.app.base import BaseApplication
     from multiprocessing import Process, Queue
@@ -31,6 +32,7 @@ multiprocessing.set_start_method('fork')
 
 jobs = {}
 app = Flask(__name__)
+CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 msgq = Queue()
 
@@ -53,9 +55,10 @@ socketio.start_background_task(broadcast_from_message_queue)
 
 
 @socketio.on("connect", namespace="/ws")
-def ws_connect():
+def ws_connect(socket):
     plugin.log("Client Connected", "debug")
     msgq.put("Client Connected")
+    socket.emit("hello", "world")
 
 
 @socketio.on("disconnect", namespace="/ws")

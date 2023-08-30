@@ -44,6 +44,7 @@ class RpcMethodResource(Resource):
                 raise Exception(is_valid_rune)
 
         except Exception as err:
+            plugin.log(f"post run error {err}", "error")
             return json5.loads(str(err)), 403
 
         try:
