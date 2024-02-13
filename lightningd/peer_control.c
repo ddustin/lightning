@@ -807,6 +807,16 @@ struct amount_msat channel_amount_receivable(const struct channel *channel)
 	return receivable;
 }
 
+static bool any_valid_inflights(const struct list_head *inflights)
+{
+	struct channel_inflight *inflight;
+	list_for_each(inflights, inflight, list) {
+		if (!inflight->splice_locked_memonly)
+			return true;
+	}
+	return false;
+}
+
 static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 						       struct json_stream *response,
 						       const char *key,
@@ -907,7 +917,7 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 	json_add_txid(response, "funding_txid", &channel->funding.txid);
 	json_add_num(response, "funding_outnum", channel->funding.n);
 
-	if (!list_empty(&channel->inflights)) {
+	if (any_valid_inflights(&channel->inflights)) {
 		struct channel_inflight *initial, *inflight;
 		u32 last_feerate, next_feerate;
 
@@ -939,6 +949,8 @@ static void NON_NULL_ARGS(1, 2, 4, 5) json_add_channel(struct lightningd *ld,
 		json_array_start(response, "inflight");
 		list_for_each(&channel->inflights, inflight, list) {
 			struct bitcoin_txid txid;
+			if (inflight->splice_locked_memonly)
+				continue;
 
 			json_object_start(response, NULL);
 			json_add_txid(response, "funding_txid",
@@ -3223,11 +3235,13 @@ static struct command_result *json_sign_last_tx(struct command *cmd,
 	json_add_tx(response, "tx", tx);
 
 	/* If we've got inflights, return them */
-	if (!list_empty(&channel->inflights)) {
+	if (any_valid_inflights(&channel->inflights)) {
 		struct channel_inflight *inflight;
 
 		json_array_start(response, "inflights");
 		list_for_each(&channel->inflights, inflight, list) {
+			if (inflight->splice_locked_memonly)
+				continue;
 			tx = sign_last_tx(cmd, channel, inflight->last_tx,
 					  &inflight->last_sig);
 			json_object_start(response, NULL);
