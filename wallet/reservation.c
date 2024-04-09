@@ -812,7 +812,6 @@ static struct command_result *json_addpsbtinput(struct command *cmd,
 
 	all = amount_sat_eq(*req_amount, AMOUNT_SAT(-1ULL));
 
-	input = AMOUNT_SAT(0);
 	current_height = get_block_height(cmd->ld->topology);
 
 	/* We keep adding until we meet their output requirements. */
@@ -841,14 +840,14 @@ static struct command_result *json_addpsbtinput(struct command *cmd,
 			/* Uneconomic to add this utxo, skip it */
 			if (!all && amount_sat_greater_eq(fee, utxo->amount))
 				continue;
-			if (!all && utxo_is_csv_locked(utxo, current_height))
+			if (utxo_is_csv_locked(utxo, current_height))
 				continue;
 
 			tal_arr_expand(&utxos, utxo);
 
 			/* It supplies more input. */
 			if (!amount_sat_add(&input, input, utxo->amount))
-				return command_fail(cmd, LIGHTNINGD,
+				return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 						    "impossible UTXO value");
 
 			/* But also adds weight */
@@ -872,19 +871,15 @@ static struct command_result *json_addpsbtinput(struct command *cmd,
 				    "Could not afford %s using all %zu"
 				    " available UTXOs: %s short",
 				    all ? "all"
-				    : type_to_string(tmpctx,
-						     struct amount_sat,
-						     req_amount),
+				    : fmt_amount_sat(tmpctx, *req_amount),
 				    tal_count(utxos),
 				    all ? "all"
-				    : type_to_string(tmpctx,
-						     struct amount_sat,
-						     &diff));
+				    : fmt_amount_sat(tmpctx, diff));
 	}
 
 	tal_free(excluded);
 
-	/* Fine if rest of wallet has funds. */
+	/* If rest of wallet has enough funds, than no emergency sats required. */
 	if (wallet_has_funds(cmd->ld->wallet,
 			     cast_const2(const struct utxo **, utxos),
 			     get_block_height(cmd->ld->topology),
