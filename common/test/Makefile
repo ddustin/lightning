@@ -118,6 +118,21 @@ common/test/run-splice_script:				\
 	wire/towire.o
 
 
+common/test/run-addr_test:				\
+	common/addr.o					\
+	common/amount.o					\
+	common/bech32.o					\
+	common/json_stream.o				\
+	common/json_filter.o				\
+	common/json_parse.o				\
+	common/json_parse_simple.o			\
+	common/node_id.o			\
+	common/wireaddr.o				\
+	common/base32.o					\
+	wire/fromwire.o					\
+	wire/towire.o
+
+
 common/test/run-trace:					\
 	common/amount.o                                 \
 	common/memleak.o				\
