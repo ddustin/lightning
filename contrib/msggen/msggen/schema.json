@@ -3022,8 +3022,6 @@
             "then": {
               "additionalProperties": false,
               "required": [
-                "tx",
-                "txid",
                 "txs",
                 "txids"
               ],
