@@ -2775,7 +2775,7 @@ static struct wally_psbt_output *find_channel_output(struct peer *peer,
 
 	wit_script = bitcoin_redeem_2of2(tmpctx,
 					 &peer->channel->funding_pubkey[LOCAL],
-					 &peer->channel->funding_pubkey[REMOTE]);
+					 &peer->splicing->remote_funding_pubkey);
 
 	scriptpubkey = scriptpubkey_p2wsh(tmpctx, wit_script);
 
@@ -3515,7 +3515,6 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	struct amount_sat both_amount;
 	u32 funding_feerate_perkw;
 	u32 locktime;
-	struct pubkey splice_remote_pubkey;
 	char *error;
 	struct inflight *new_inflight;
 	struct wally_psbt_output *new_chan_output;
@@ -3537,7 +3536,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 			     &peer->splicing->opener_relative,
 			     &funding_feerate_perkw,
 			     &locktime,
-			     &splice_remote_pubkey))
+			     &peer->splicing->remote_funding_pubkey))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Bad wire_splice %s", tal_hex(tmpctx, inmsg));
 
@@ -3682,7 +3681,6 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 {
 	struct bitcoin_blkid genesis_blockhash;
 	struct channel_id channel_id;
-	struct pubkey splice_remote_pubkey;
 	size_t input_index;
 	const u8 *wit_script;
 	u8 *outmsg;
@@ -3700,7 +3698,7 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 				 &channel_id,
 				 &genesis_blockhash,
 				 &peer->splicing->accepter_relative,
-				 &splice_remote_pubkey))
+				 &peer->splicing->remote_funding_pubkey))
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Bad wire_splice_ack %s",
 				 tal_hex(tmpctx, inmsg));
