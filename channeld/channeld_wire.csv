@@ -285,7 +285,7 @@ msgdata,channeld_splice_state_error,state_error,wirestring,
 msgtype,channeld_splice_abort,7223
 msgdata,channeld_splice_abort,did_i_initiate,bool,
 msgdata,channeld_splice_abort,inflight_outpoint,?bitcoin_outpoint,
-msgdata,channeld_splice_abort,reason,?wirestring,
+msgdata,channeld_splice_abort,reason,wirestring,
 
 # Tell peer to shut down channel.
 msgtype,channeld_send_shutdown,1023
