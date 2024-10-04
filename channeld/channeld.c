@@ -234,14 +234,15 @@ static void end_stfu_mode(struct peer *peer)
 	status_debug("Left STFU mode.");
 }
 
-static void maybe_send_stfu(struct peer *peer)
+static bool maybe_send_stfu(struct peer *peer)
 {
 	if (!peer->want_stfu)
-		return;
+		return false;
 
 	if (pending_updates(peer->channel, LOCAL, false)) {
 		status_info("Pending updates prevent us from STFU mode at this"
 			    " time.");
+		return false;
 	}
 	else if (!peer->stfu_sent[LOCAL]) {
 		status_debug("Sending peer that we want to STFU.");
@@ -268,6 +269,8 @@ static void maybe_send_stfu(struct peer *peer)
 			peer->on_stfu_success = NULL;
 		}
 	}
+
+	return true;
 }
 
 /* Durring reestablish, STFU mode is assumed if continuing a splice */
@@ -1645,7 +1648,7 @@ static bool have_i_signed_inflight(const struct peer *peer,
 	return has_sig;
 }
 
-/* this checks if local has signed everything buy the funding input */
+/* This checks if local has signed everything but the funding input */
 static bool missing_user_signatures(const struct peer *peer,
 				    const struct inflight *inflight)
 {
@@ -3326,7 +3329,7 @@ static void resume_splice_negotiation(struct peer *peer,
 					    		&inws),
 					    &their_txsigs_tlvs))
 			peer_failed_warn(peer->pps, &peer->channel_id,
-				    "Splicing bad tx_signatures %s",
+				    "Splicing bad tx_signatures msg %s",
 				    tal_hex(msg, msg));
 
 		/* BOLT-0d8b701614b09c6ee4172b04da2203e73deec7e2 #2:
@@ -4144,7 +4147,16 @@ static void handle_splice_init(struct peer *peer, const u8 *inmsg)
 	/* First things first we must STFU the channel */
 	peer->stfu_initiator = LOCAL;
 	peer->want_stfu = true;
-	maybe_send_stfu(peer);
+
+	if (!maybe_send_stfu(peer)) {
+		msg = towire_channeld_splice_state_error(NULL, tal_fmt(tmpctx,
+							 "Pending updates"
+							 " prevent us from STFU"
+							 " mode at this"
+							 " time."));
+		wire_sync_write(MASTER_FD, take(msg));
+		return;
+	}
 }
 
 static void peer_in(struct peer *peer, const u8 *msg)
