@@ -3669,6 +3669,11 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 	ictx->desired_psbt = NULL;
 	ictx->pause_when_complete = false;
 
+	ictx->shared_outpoint = tal(ictx, struct bitcoin_outpoint);
+	*ictx->shared_outpoint = peer->channel->funding;
+	ictx->funding_tx = bitcoin_tx_from_txid(peer,
+						peer->channel->funding.txid);
+
 	error = process_interactivetx_updates(tmpctx, ictx,
 					      &peer->splicing->received_tx_complete,
 					      &abort_msg);
@@ -3837,6 +3842,10 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 			   calc_balance(peer));
 
 	psbt_add_serials(ictx->desired_psbt, ictx->our_role);
+
+	ictx->shared_outpoint = tal(ictx, struct bitcoin_outpoint);
+	*ictx->shared_outpoint = peer->channel->funding;
+	ictx->funding_tx = prev_tx;
 
 	error = process_interactivetx_updates(tmpctx,
 					      ictx,
