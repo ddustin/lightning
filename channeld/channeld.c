@@ -3640,11 +3640,6 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Splice internal error: mismatched channelid");
 
-	if (!pubkey_eq(&splice_remote_pubkey,
-		       &peer->channel->funding_pubkey[REMOTE]))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Splice doesnt support changing pubkeys");
-
 	if (funding_feerate_perkw < peer->feerate_min)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Splice feerate_perkw is too low");
@@ -3755,7 +3750,7 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 {
 	struct channel_id channel_id;
 	size_t input_index;
-	const u8 *wit_script;
+	const u8 *wit_script, *new_wit_script;
 	u8 *outmsg;
 	struct interactivetx_context *ictx;
 	struct bitcoin_tx *prev_tx;
@@ -3779,11 +3774,6 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 		peer_failed_warn(peer->pps, &peer->channel_id,
 				 "Splice[ACK] internal error: mismatched channelid");
 
-	if (!pubkey_eq(&splice_remote_pubkey,
-		       &peer->channel->funding_pubkey[REMOTE]))
-		peer_failed_warn(peer->pps, &peer->channel_id,
-				 "Splice[ACK] doesnt support changing pubkeys");
-
 	peer->splicing->received_tx_complete = false;
 	peer->splicing->sent_tx_complete = false;
 	peer->splice_state->locked_ready[LOCAL] = false;
@@ -3803,6 +3793,9 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 	wit_script = bitcoin_redeem_2of2(tmpctx,
 					 &peer->channel->funding_pubkey[LOCAL],
 					 &peer->channel->funding_pubkey[REMOTE]);
+	new_wit_script = bitcoin_redeem_2of2(tmpctx,
+					     &peer->channel->funding_pubkey[LOCAL],
+					     &peer->splicing->remote_funding_pubkey);
 
 	input_index = ictx->desired_psbt->num_inputs;
 
@@ -3840,7 +3833,7 @@ static void splice_initiator(struct peer *peer, const u8 *inmsg)
 	 *       funding keys using the higher of the two `generation` fields.
 	 */
 	psbt_append_output(ictx->desired_psbt,
-			   scriptpubkey_p2wsh(ictx->desired_psbt, wit_script),
+			   scriptpubkey_p2wsh(ictx->desired_psbt, new_wit_script),
 			   calc_balance(peer));
 
 	psbt_add_serials(ictx->desired_psbt, ictx->our_role);
