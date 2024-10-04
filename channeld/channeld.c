@@ -3176,8 +3176,6 @@ static void resume_splice_negotiation(struct peer *peer,
 	struct commitsig *their_commit;
 	struct witness **inws;
 	const struct witness **outws;
-	u8 der[73];
-	size_t der_len;
 	struct bitcoin_signature splice_sig;
 	struct bitcoin_tx *bitcoin_tx;
 	u32 splice_funding_index;
@@ -3278,9 +3276,7 @@ static void resume_splice_negotiation(struct peer *peer,
 			      fmt_wally_psbt(tmpctx, current_psbt));
 
 	txsig_tlvs = tlv_txsigs_tlvs_new(tmpctx);
-	der_len = signature_to_der(der, &splice_sig);
-	txsig_tlvs->funding_outpoint_sig = tal_dup_arr(tmpctx, u8, der,
-						       der_len, 0);
+	txsig_tlvs->shared_input_signature = &splice_sig.s;
 
 	/* DTODO: is this finalize call required? */
 	psbt_finalize(current_psbt);
@@ -3356,15 +3352,7 @@ static void resume_splice_negotiation(struct peer *peer,
 		 * Both nodes:
 		 *   - MUST sign the transaction using SIGHASH_ALL */
 		their_sig.sighash_type = SIGHASH_ALL;
-
-		if (!signature_from_der(their_txsigs_tlvs->funding_outpoint_sig,
-				       tal_count(their_txsigs_tlvs->funding_outpoint_sig),
-				       &their_sig)) {
-
-			peer_failed_warn(peer->pps, &peer->channel_id,
-					 "Splicing bad tx_signatures %s",
-					 tal_hex(msg, msg));
-		}
+		their_sig.s = *their_txsigs_tlvs->shared_input_signature;
 
 		/* Set the commit_sig on the commitment tx psbt */
 		if (!psbt_input_set_signature(current_psbt,
