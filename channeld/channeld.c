@@ -3638,6 +3638,7 @@ static void splice_accepter(struct peer *peer, const u8 *inmsg)
 
 	psbt_txid(new_inflight, ictx->current_psbt,
 		  &new_inflight->outpoint.txid, NULL);
+	new_inflight->remote_funding = peer->splicing->remote_funding_pubkey;
 	new_inflight->outpoint = outpoint;
 	new_inflight->amnt = both_amount;
 	new_inflight->psbt = tal_steal(new_inflight, ictx->current_psbt);
@@ -3882,6 +3883,7 @@ static void splice_initiator_user_finalized(struct peer *peer)
 	new_inflight = inflights_new(peer);
 
 	psbt_txid(tmpctx, ictx->current_psbt, &new_inflight->outpoint.txid, NULL);
+	new_inflight->remote_funding = peer->splicing->remote_funding_pubkey;
 	new_inflight->outpoint.n = chan_output_index;
 	new_inflight->psbt = tal_steal(new_inflight, ictx->current_psbt);
 	new_inflight->amnt = amount_sat(new_chan_output->amount);
