@@ -831,6 +831,7 @@ static void handle_add_inflight(struct lightningd *ld,
 	}
 
 	inflight = new_inflight(channel,
+				NULL,
 				&outpoint,
 				feerate,
 				satoshis,
