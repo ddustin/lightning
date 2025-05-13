@@ -2121,10 +2121,10 @@ void update_channel_from_inflight(struct lightningd *ld,
 
 		channel_fail_permanent(channel,
 				       REASON_LOCAL,
-				       "Updaing channel view for splice causes"
+				       "Updating channel view for splice causes"
 				       " an invalid satoshi amount wrapping,"
 				       " channel: %s, initial funds: %s, splice"
-				       " balance change: "PRIi64,
+				       " balance change: %"PRIi64,
 				       fmt_channel_id(tmpctx,
 						      &channel->cid),
 				       fmt_amount_sat(tmpctx, channel->our_funds),

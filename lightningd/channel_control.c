@@ -861,23 +861,25 @@ static void handle_add_inflight(struct lightningd *ld,
 		return;
 	}
 
-	inflight = new_inflight(channel,
-				remote_funding,
-				&outpoint,
-				feerate,
-				satoshis,
-				channel->our_funds,
-				psbt,
-				channel->lease_expiry,
-				channel->lease_commit_sig,
-				channel->lease_chan_max_msat,
-				channel->lease_chan_max_ppt,
-				0,
-				AMOUNT_MSAT(0),
-				AMOUNT_SAT(0),
-				splice_amnt,
-				i_am_initiator,
-				force_sign_first);
+	struct amount_sat local_funds = amount_msat_to_sat_round_down(channel->our_msat);
+
+    inflight = new_inflight(channel,
+                remote_funding,
+                &outpoint,
+                feerate,
+                satoshis,
+                local_funds,
+                psbt,
+                channel->lease_expiry,
+                channel->lease_commit_sig,
+                channel->lease_chan_max_msat,
+                channel->lease_chan_max_ppt,
+                0,
+                AMOUNT_MSAT(0),
+                AMOUNT_SAT(0),
+                splice_amnt,
+                i_am_initiator,
+                force_sign_first);
 
 	log_debug(channel->log, "lightningd adding inflight with txid %s",
 		  fmt_bitcoin_txid(tmpctx,
