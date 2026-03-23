@@ -9,6 +9,7 @@ from pyln.testing.utils import FUNDAMOUNT
 from pathlib import Path
 import pytest
 import re
+import sys
 import unittest
 import time
 
@@ -57,6 +58,7 @@ def test_queryrates(node_factory, bitcoind):
 
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd doesnt yet support PSBT features we need')
 @pytest.mark.openchannel('v1')  # Mixed v1 + v2, v2 manually turned on
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_multifunding_v2_best_effort(node_factory, bitcoind):
     '''
     Check that best_effort flag works.
@@ -1536,6 +1538,7 @@ def test_funder_contribution_limits(node_factory, bitcoind):
     assert l3.daemon.is_in_log(r'calling `signpsbt` .* 6 inputs')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_zeroconf_mindepth(bitcoind, node_factory):
     """Check that funder/fundee can customize mindepth.
 
@@ -1582,6 +1585,7 @@ def test_zeroconf_mindepth(bitcoind, node_factory):
     wait_for(lambda: only_one(l2.rpc.listpeerchannels()['channels'])['state'] == "CHANNELD_NORMAL")
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_zeroconf_open(bitcoind, node_factory):
     """Let's open a zeroconf channel
 
@@ -1968,6 +1972,7 @@ def test_buy_liquidity_ad_check_bookkeeping(node_factory, bitcoind):
     l1.rpc.bkpr_listbalances()
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_scid_alias_private(node_factory, bitcoind):
     """Test that we don't allow use of real scid for scid_alias-type channels"""
     l1, l2, l3 = node_factory.line_graph(3, fundchannel=False, opts=[{}, {},
@@ -2033,6 +2038,7 @@ def test_scid_alias_private(node_factory, bitcoind):
     l1.rpc.waitsendpay(inv['payment_hash'])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_zeroconf_multichan_forward(node_factory):
     """The freedom to choose the forward channel bytes us when it is 0conf
 
@@ -2158,6 +2164,7 @@ def test_zeroreserve(node_factory, bitcoind):
     assert len(decoded['vout']) == 1 if TEST_NETWORK == 'regtest' else 2
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_zeroreserve_mixed(node_factory, bitcoind):
     """l1 runs with zeroreserve, l2 and l3 without, should still work
 

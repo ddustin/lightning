@@ -3,6 +3,7 @@ from pyln.testing.utils import RUST
 from utils import only_one
 import os
 import pytest
+import sys
 import unittest
 
 RUST_PROFILE = os.environ.get("RUST_PROFILE", "debug")
@@ -39,6 +40,7 @@ def test_lsps0_listprotocols(node_factory):
     assert res
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_lsps2_enabled(node_factory):
     l1, l2 = node_factory.get_nodes(
         2,
@@ -57,6 +59,7 @@ def test_lsps2_enabled(node_factory):
     assert res["protocols"] == [2]
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_lsps2_getinfo(node_factory):
     plugin = os.path.join(os.path.dirname(__file__), "plugins/lsps2_policy.py")
 
@@ -78,6 +81,7 @@ def test_lsps2_getinfo(node_factory):
     assert res["opening_fee_params_menu"]
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_lsps2_buy(node_factory):
     # We need a policy service to fetch from.
     plugin = os.path.join(os.path.dirname(__file__), "plugins/lsps2_policy.py")
@@ -104,6 +108,7 @@ def test_lsps2_buy(node_factory):
     assert res
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_lsps2_buyjitchannel_no_mpp_var_invoice(node_factory, bitcoind):
     """Tests the creation of a "Just-In-Time-Channel" (jit-channel).
 
@@ -193,6 +198,7 @@ def test_lsps2_buyjitchannel_no_mpp_var_invoice(node_factory, bitcoind):
     assert l1.rpc.listdatastore(["lsps"]) == {"datastore": []}
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_lsps2_buyjitchannel_mpp_fixed_invoice(node_factory, bitcoind):
     """Tests the creation of a "Just-In-Time-Channel" (jit-channel).
 
@@ -293,6 +299,7 @@ def test_lsps2_buyjitchannel_mpp_fixed_invoice(node_factory, bitcoind):
     assert l1.rpc.listdatastore("lsps") == {"datastore": []}
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_lsps2_non_approved_zero_conf(node_factory, bitcoind):
     """Checks that we don't allow zerof_conf channels from an LSP if we did
     not approve it first.

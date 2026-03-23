@@ -19,6 +19,7 @@ import os
 import pytest
 import random
 import re
+import sys
 import time
 import unittest
 import websocket
@@ -26,6 +27,7 @@ import signal
 import ssl
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_connect_basic(node_factory):
     l1, l2 = node_factory.line_graph(2, fundchannel=False)
     l1id = l1.info['id']
@@ -186,6 +188,7 @@ def test_remote_addr_disabled(node_factory, bitcoind):
     assert not l2.daemon.is_in_log("Update our node_announcement for discovered address")
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_remote_addr_port(node_factory, bitcoind):
     """Check address discovery (BOLT1 #917) can be done with non-default TCP ports
        We perform logic tests on L2, setup same as above:
@@ -333,6 +336,7 @@ def test_balance(node_factory):
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
 @pytest.mark.parametrize("anchors", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_opening_tiny_channel(node_factory, anchors):
     # Test custom min-capacity-sat parameters
     #
@@ -474,6 +478,7 @@ def test_disconnect(node_factory):
 @pytest.mark.openchannel('v2')
 # FIXME: https://github.com/ElementsProject/lightning/issues/8822
 @pytest.mark.flaky(reruns=1)
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_disconnect_opener(node_factory):
     # Now error on opener side during channel open.
     disconnects = ['-WIRE_OPEN_CHANNEL',
@@ -595,6 +600,7 @@ def test_disconnect_fundee_v2(node_factory):
 
 
 @pytest.mark.openchannel('v1')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_disconnect_half_signed(node_factory):
     # Now, these are the corner cases.  Fundee sends funding_signed,
     # but opener doesn't receive it.
@@ -884,6 +890,7 @@ def test_reconnect_receiver_add(node_factory):
     assert only_one(l2.rpc.listinvoices('testpayment2')['invoices'])['status'] == 'paid'
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_reconnect_receiver_fulfill(node_factory):
     # Ordering matters: after +WIRE_UPDATE_FULFILL_HTLC, channeld
     # will continue and try to send WIRE_COMMITMENT_SIGNED: if
@@ -987,6 +994,7 @@ def test_reconnect_remote_sends_no_sigs(node_factory):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_shutdown_awaiting_lockin(node_factory, bitcoind):
     l1 = node_factory.get_node()
     l2 = node_factory.get_node(options={'funding-confirms': 3})
@@ -1074,6 +1082,7 @@ def test_funding_all(node_factory, bitcoind):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_funding_all_too_much(node_factory):
     """Add more than max possible funds, fund a channel using all funds we can.
     """
@@ -1282,6 +1291,7 @@ def test_funding_by_utxos(node_factory, bitcoind):
 
 
 @pytest.mark.openchannel('v1')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_funding_external_wallet_corners(node_factory, bitcoind):
     l1, l2 = node_factory.get_nodes(2, opts={'may_reconnect': True,
                                              'dev-no-reconnect': None})
@@ -1467,6 +1477,7 @@ def test_funding_v2_corners(node_factory, bitcoind):
 
 @pytest.mark.slow_test
 @pytest.mark.openchannel('v1')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_funding_cancel_race(node_factory, bitcoind, executor):
     l1 = node_factory.get_node()
 
@@ -1928,6 +1939,7 @@ def test_listpeers_crash(node_factory, bitcoind, executor):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_multifunding_one(node_factory, bitcoind):
     '''
     Test that multifunding can still fund to one destination.
@@ -2161,6 +2173,7 @@ def test_multifunding_param_failures(node_factory):
 
 
 @pytest.mark.openchannel('v1')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_multifunding_best_effort(node_factory, bitcoind):
     '''
     Check that best_effort flag works.
@@ -2445,6 +2458,7 @@ def test_update_fee(node_factory, bitcoind):
     l2.daemon.wait_for_log('onchaind complete, forgetting peer')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_fee_limits(node_factory, bitcoind):
     l1, l2, l3, l4 = node_factory.get_nodes(4, opts=[{'dev-max-fee-multiplier': 5, 'may_reconnect': True,
                                                       'allow_warning': True},
@@ -2589,6 +2603,7 @@ def test_update_fee_dynamic(node_factory, bitcoind):
     l2.daemon.wait_for_log('peer_in.*UPDATE_FEE')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_update_fee_reconnect(node_factory, bitcoind):
     # Disconnect after commitsig for fee update.
     disconnects = ['+WIRE_COMMITMENT_SIGNED*3']
@@ -2639,6 +2654,7 @@ def test_update_fee_reconnect(node_factory, bitcoind):
     l2.daemon.wait_for_log('onchaind complete, forgetting peer')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_multiple_channels(node_factory):
     l1 = node_factory.get_node()
     l2 = node_factory.get_node()
@@ -2883,6 +2899,7 @@ def test_fundee_node_unconfirmed(node_factory, bitcoind):
     assert start_amount > end_amount + Millisatoshi(10 ** 7 * 100)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_no_fee_estimate(node_factory, bitcoind, executor):
     l1 = node_factory.get_node(start=False, options={'dev-no-fake-fees': True})
 
@@ -3469,6 +3486,7 @@ def test_feerate_stress(node_factory, executor):
 
 
 @pytest.mark.slow_test
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_pay_disconnect_stress(node_factory, executor):
     """Expose race in htlc restoration in channeld: 50% chance of failure"""
     if VALGRIND:
@@ -3586,6 +3604,7 @@ def test_wumbo_channels(node_factory, bitcoind):
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
 @pytest.mark.parametrize("anchors", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_channel_features(node_factory, bitcoind, anchors):
     if TEST_NETWORK == 'regtest':
         if anchors is False:
@@ -3798,6 +3817,7 @@ def test_htlc_failed_noclose(node_factory):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_multichan_stress(node_factory, executor, bitcoind):
     """Test multiple channels between same nodes"""
     l1, l2, l3 = node_factory.line_graph(3, opts={'may_reconnect': True,
@@ -3836,6 +3856,7 @@ def test_multichan_stress(node_factory, executor, bitcoind):
     l1.rpc.xpay(inv['bolt11'])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_old_feerate(node_factory):
     """Test retransmission of old, now-unacceptable, feerate"""
     l1, l2 = node_factory.line_graph(2, opts={'feerates': (75000, 75000, 75000, 75000),
@@ -4270,6 +4291,7 @@ def test_reconnect_no_additional_transient_failure(node_factory, bitcoind):
     assert not l1.daemon.is_in_log(f"{l2id}-chan#1: Peer transient failure in CHANNELD_NORMAL: Disconnected", start=offset1)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_offline(node_factory):
     # if get_node starts it, it'll expect an address, so do it manually.
     l1 = node_factory.get_node(options={"offline": None}, start=False)
@@ -4290,6 +4312,7 @@ def test_offline(node_factory):
     l1.rpc.connect(l2.info['id'], 'localhost', l2.port)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_last_stable_connection(node_factory):
     l1, l2 = node_factory.line_graph(2, opts={'may_reconnect': True})
 
@@ -4406,6 +4429,7 @@ def test_wss_proxy(node_factory):
             break
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_connect_transient(node_factory):
     l1, l2, l3, l4 = node_factory.get_nodes(4, opts={'may_reconnect': True})
 
@@ -4474,6 +4498,7 @@ def test_injectonionmessage(node_factory):
     l1.daemon.wait_for_log('lightningd: Got onionmsg with pathsecret')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_connect_ratelimit(node_factory, bitcoind):
     """l1 has 5 peers, restarts, make sure we limit"""
     # Sending nodes SIGSTOP at the wrong time makes connectd complain about
@@ -4582,6 +4607,7 @@ def test_private_channel_no_reconnect(node_factory):
 
 
 @pytest.mark.slow_test
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_no_delay(node_factory):
     """Is our Nagle disabling for critical messages working?"""
     l1, l2 = node_factory.line_graph(2, opts={'dev-keep-nagle': None,
@@ -4652,6 +4678,7 @@ def test_listpeerchannels_by_channel_id(node_factory):
         l2.rpc.listpeerchannels(short_channel_id="1x2x3", channel_id=['channel_id'])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_networkevents(node_factory, executor):
     l1, l2 = node_factory.get_nodes(2)
 

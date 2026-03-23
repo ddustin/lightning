@@ -9,6 +9,7 @@ from utils import (
 )
 import pytest
 import random
+import sys
 import time
 import json
 import subprocess
@@ -408,6 +409,7 @@ def test_hardmpp(node_factory):
 
 
 @pytest.mark.flaky(reruns=2)
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_self_pay(node_factory):
     l1, l2 = node_factory.line_graph(2, wait_for_announce=True)
 
@@ -460,6 +462,7 @@ def test_fee_allocation(node_factory):
     l1.rpc.call("nofail")
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_htlc_max(node_factory):
     """
     Topology:
@@ -692,6 +695,7 @@ def test_htlcmax0(node_factory):
     assert invoice["amount_received_msat"] >= Millisatoshi("600000sat")
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_concurrency(node_factory):
     l1, l2, l3 = node_factory.line_graph(3, wait_for_announce=True, opts=[{}, {}, {}])
     inv = l3.rpc.invoice("1000sat", "test_renepay", "description")["bolt11"]

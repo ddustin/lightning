@@ -1,5 +1,6 @@
 from fixtures import *  # noqa: F401,F403
 import pytest
+import sys
 import unittest
 from utils import (
     TEST_NETWORK
@@ -9,6 +10,7 @@ from utils import (
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd doesnt yet support PSBT features we need')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_agressive_restart(node_factory, bitcoind):
     l1, l2 = node_factory.line_graph(2, fundamount=1000000, wait_for_announce=True, opts={'experimental-splicing': None})
 

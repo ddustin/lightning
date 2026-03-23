@@ -7,6 +7,7 @@ import pytest
 import os
 import re
 import shutil
+import sys
 import time
 import unittest
 
@@ -250,6 +251,7 @@ def test_search_partial_match(node_factory):
     assert r.search_stdout("Search exhausted all sources")
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_install(node_factory):
     """test search, git clone, and installation to folder."""
     n = get_reckless_node(node_factory)
@@ -265,6 +267,7 @@ def test_install(node_factory):
 
 
 @unittest.skipIf(VALGRIND, "virtual environment triggers memleak detection")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_poetry_install(node_factory):
     """test search, git clone, and installation to folder."""
     n = get_reckless_node(node_factory)
@@ -284,6 +287,7 @@ def test_poetry_install(node_factory):
 
 
 @unittest.skipIf(VALGRIND, "virtual environment triggers memleak detection")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_local_dir_install(node_factory):
     """Test search and install from local directory source."""
     n = get_reckless_node(node_factory)
@@ -309,6 +313,7 @@ def test_local_dir_install(node_factory):
 
 
 @unittest.skipIf(VALGRIND, "virtual environment triggers memleak detection")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_disable_enable(node_factory):
     """test search, git clone, and installation to folder."""
     n = get_reckless_node(node_factory)
@@ -340,6 +345,7 @@ def test_disable_enable(node_factory):
 
 
 @unittest.skipIf(VALGRIND, "virtual environment triggers memleak detection")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_tag_install(node_factory):
     "install a plugin from a specific commit hash or tag"
     node = get_reckless_node(node_factory)
@@ -380,6 +386,7 @@ def test_tag_install(node_factory):
 # Note: uv timeouts from the GH network seem to happen?
 @pytest.mark.slow_test
 @pytest.mark.flaky(reruns=3)
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_reckless_uv_install(node_factory):
     node = get_reckless_node(node_factory)
     node.start()

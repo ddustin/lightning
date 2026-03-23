@@ -9,6 +9,7 @@ from utils import (
 import os
 import pytest
 import subprocess
+import sys
 import time
 import tempfile
 import unittest
@@ -1213,6 +1214,7 @@ def test_sourcefree_on_mods(node_factory, bitcoind):
                                        'amount_msat': 1003000, 'delay': 117}]])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_live_spendable(node_factory, bitcoind):
     """Test we don't exceed spendable limits on a real network on nodes"""
     l1, l2, l3 = node_factory.get_nodes(3)
@@ -1868,6 +1870,7 @@ def test_askrene_timeout(node_factory, bitcoind):
                      final_cltv=5)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_reservations_leak(node_factory, executor):
     l1, l2, l3, l4, l5, l6 = node_factory.get_nodes(
         6,

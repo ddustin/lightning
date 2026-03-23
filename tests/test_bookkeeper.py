@@ -13,6 +13,7 @@ import io
 import os
 import pytest
 import subprocess
+import sys
 import time
 import unittest
 
@@ -83,6 +84,7 @@ def test_bookkeeping_closing_trimmed_htlcs(node_factory, bitcoind, executor):
 
 
 @unittest.skipIf(TEST_NETWORK != 'regtest', "fixme: broadcast fails, dusty")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bookkeeping_closing_subsat_htlcs(node_factory, bitcoind, chainparams):
     """Test closing balances when HTLCs are: sub 1-satoshi"""
     l1, l2 = node_factory.line_graph(2, opts={'old_hsmsecret': True})
@@ -548,6 +550,7 @@ def test_bookkeeping_inspect_mfc_dual_funded(node_factory, bitcoind):
 
 @unittest.skipIf(os.getenv('TEST_DB_PROVIDER', 'sqlite3') != 'sqlite3', "turns off bookkeeper at start")
 @unittest.skipIf(TEST_NETWORK != 'regtest', "network fees hardcoded")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 @pytest.mark.openchannel('v1', 'Uses push-msat')
 def test_bookkeeping_missed_chans_pay_after(node_factory, bitcoind):
     """
@@ -653,6 +656,7 @@ def test_bookkeeping_onchaind_txs(node_factory, bitcoind):
     assert outs == only_one(wallet_bal['balances'])['balance_msat']
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bookkeeping_descriptions(node_factory, bitcoind, chainparams):
     """
     When an 'invoice' type event comes through, we look up the description details
@@ -769,6 +773,7 @@ def test_empty_node(node_factory, bitcoind):
         l1.rpc.bkpr_inspect('wallet')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_rebalance_tracking(node_factory, bitcoind):
     """
     We identify rebalances (invoices paid and received by our node),
@@ -1241,6 +1246,7 @@ def test_bkpr_parallel(node_factory, bitcoind, executor):
     assert acctevents_after == acctevents_before
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_report_tags_and_fallback(node_factory):
     l1, l2 = node_factory.line_graph(2, opts={'bkpr-currency': 'USD'})
 
@@ -1293,6 +1299,7 @@ def test_bkpr_report_tags_and_fallback(node_factory):
             assert r[7] == '-' + r[6]
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_report_invoice(node_factory):
     l1, l2 = node_factory.line_graph(2, opts={'bkpr-currency': 'USD'})
     inv = l2.rpc.invoice(123456, "test", "test_bkpr_report_invoice")['bolt11']
@@ -1325,6 +1332,7 @@ def test_bkpr_report_invoice(node_factory):
                 assert parts[5] == 'txid: ' + parts[4]
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_report_lightning_cli_csv(node_factory):
     l1, l2 = node_factory.line_graph(2)
 

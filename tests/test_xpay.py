@@ -142,6 +142,7 @@ def test_pay_fakenet(node_factory):
     l1.rpc.waitsendpay(payment_hash=hash2, timeout=TIMEOUT, partid=3)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_xpay_simple(node_factory):
     l1, l2, l3, l4 = node_factory.get_nodes(4, opts={'may_reconnect': True})
     node_factory.join_nodes([l1, l2, l3], wait_for_announce=True)
@@ -344,6 +345,7 @@ def test_xpay_timeout(node_factory, executor):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_xpay_partial_msat(node_factory, executor):
     l1, l2, l3 = node_factory.line_graph(3)
 

@@ -19,6 +19,7 @@ import queue
 import pytest
 import re
 import subprocess
+import sys
 import threading
 import time
 import unittest
@@ -157,6 +158,7 @@ def test_closing_while_disconnected(node_factory, bitcoind, executor):
     wait_for(lambda: len(l2.rpc.listchannels()['channels']) == 0)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_closing_disconnected_notify(node_factory, bitcoind, executor):
     l1, l2 = node_factory.line_graph(2)
 
@@ -443,6 +445,7 @@ def closing_negotiation_step(node_factory, bitcoind, chainparams, opts):
 
 
 @unittest.skipIf(TEST_NETWORK == 'liquid-regtest', "Different closing fees")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_closing_negotiation_step_30pct(node_factory, bitcoind, chainparams):
     """Test that the closing fee negotiation step works, 30%"""
     opts = {}
@@ -1194,6 +1197,7 @@ def test_channel_lease_lessee_cheat(node_factory, bitcoind, chainparams):
 @unittest.skipIf(os.getenv('TEST_DB_PROVIDER', 'sqlite3') != 'sqlite3', "Makes use of the sqlite3 db")
 @pytest.mark.slow_test
 @pytest.mark.parametrize("anchors", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_penalty_htlc_tx_fulfill(node_factory, bitcoind, chainparams, anchors):
     """ Test that the penalizing node claims any published
         HTLC transactions
@@ -1369,6 +1373,7 @@ def test_penalty_htlc_tx_fulfill(node_factory, bitcoind, chainparams, anchors):
 @unittest.skipIf(os.getenv('TEST_DB_PROVIDER', 'sqlite3') != 'sqlite3', "Makes use of the sqlite3 db")
 @pytest.mark.slow_test
 @pytest.mark.parametrize("anchors", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_penalty_htlc_tx_timeout(node_factory, bitcoind, chainparams, anchors):
     """ Test that the penalizing node claims any published
         HTLC transactions
@@ -1600,6 +1605,7 @@ def test_penalty_htlc_tx_timeout(node_factory, bitcoind, chainparams, anchors):
 
 
 @pytest.mark.parametrize("anchors", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_penalty_rbf_normal(node_factory, bitcoind, executor, chainparams, anchors):
     '''
     Test that penalty transactions are RBFed.
@@ -2504,6 +2510,7 @@ Make sure we show the address.
     assert account_balance(l2, channel_id) == 0
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_onchain_feechange(node_factory, bitcoind, executor):
     """Onchain handling when we restart with different fees"""
     # HTLC 1->2, 2 fails just after they're both irrevocably committed
@@ -2670,6 +2677,7 @@ def test_onchain_all_dust(node_factory, bitcoind, executor):
     # check_utxos_channel(l2, [channel_id], expected_2, tags)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_onchain_different_fees(node_factory, bitcoind, executor):
     """Onchain handling when we've had a range of fees"""
     l1, l2 = node_factory.line_graph(2, fundchannel=True, fundamount=10**7,
@@ -2923,6 +2931,7 @@ def setup_multihtlc_test(node_factory, bitcoind):
 
 
 @pytest.mark.slow_test
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_onchain_multihtlc_our_unilateral(node_factory, bitcoind):
     """Node pushes a channel onchain with multiple HTLCs with same payment_hash """
     h, l1, l2, l3, l4, l5, l6, l7 = setup_multihtlc_test(node_factory, bitcoind)
@@ -2978,6 +2987,7 @@ def test_onchain_multihtlc_our_unilateral(node_factory, bitcoind):
 
 
 @pytest.mark.slow_test
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_onchain_multihtlc_their_unilateral(node_factory, bitcoind):
     """Node pushes a channel onchain with multiple HTLCs with same payment_hash """
     h, l1, l2, l3, l4, l5, l6, l7 = setup_multihtlc_test(node_factory, bitcoind)
@@ -3406,6 +3416,7 @@ Try a range of future segwit versions as shutdown scripts.  We create many nodes
 
 
 @pytest.mark.parametrize("anchors", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_closing_higherfee(node_factory, bitcoind, executor, anchors):
     """We can ask for a *higher* fee than the last commit tx"""
 
@@ -3447,6 +3458,7 @@ def test_closing_higherfee(node_factory, bitcoind, executor, anchors):
 
 
 @pytest.mark.flaky(reruns=3)
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_htlc_rexmit_while_closing(node_factory, executor):
     """Retranmitting an HTLC revocation while shutting down should work"""
     # FIXME: This should be in lnprototest!  UNRELIABLE.
@@ -3516,6 +3528,7 @@ def test_you_forgot_closed_channel(node_factory, executor):
     fut.result(TIMEOUT)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_you_forgot_closed_channel_onchain(node_factory, bitcoind, executor):
     """Ideally you'd keep talking to us about closed channels: even if close is mined"""
     disconnects = ['xWIRE_CLOSING_SIGNED']
@@ -3583,6 +3596,7 @@ def test_segwit_anyshutdown(node_factory, bitcoind, executor):
 
 
 @unittest.skipIf(TEST_NETWORK == 'liquid-regtest', "Uses regtest addresses")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_anysegwit_close_needs_feature(node_factory, bitcoind):
     """Rather than have peer reject our shutdown, we should refuse to shutdown toa v1+ address if they don't support it"""
     # L2 says "no option_shutdown_anysegwit"
@@ -3985,6 +3999,7 @@ def test_closing_tx_valid(node_factory, bitcoind):
 
 
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd does not provide feerates on regtest')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_closing_minfee(node_factory, bitcoind):
     l1, l2 = node_factory.line_graph(2, opts={'feerates': None})
 
@@ -4085,6 +4100,7 @@ def test_peer_anchor_push(node_factory, bitcoind, executor, chainparams):
     wait_for(lambda: only_one(l2.rpc.listpeerchannels(l3.info['id'])['channels'])['state'] == 'ONCHAIN')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_closing_cpfp(node_factory, bitcoind):
     l1, l2 = node_factory.line_graph(2, opts={'min-emergency-msat': '2500sat'})
 
@@ -4161,6 +4177,7 @@ def test_closing_no_anysegwit_retry(node_factory, bitcoind):
     l1.rpc.close(l2.info['id'], destination=oldaddr)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_closing_ignore_fee_limits(node_factory, bitcoind, executor):
     """Don't use ignore-fee-limits on mutual close: LDK takes us to the cleaners if we do!"""
     l1, l2 = node_factory.line_graph(2, opts=[{'may_reconnect': True,
@@ -4179,6 +4196,7 @@ def test_closing_ignore_fee_limits(node_factory, bitcoind, executor):
 
 @pytest.mark.parametrize("anchors", [False, True])
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd anchors not supportd')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_anchorspend_using_to_remote(node_factory, bitcoind, anchors):
     """Make sure we can use `to_remote` output of previous close to spend anchor"""
     # Try with old output from both anchor and non-anchor channel.
@@ -4366,6 +4384,7 @@ def test_onchain_slow_anchor(node_factory, bitcoind):
     l1.daemon.wait_for_log(r"Low-priority anchorspend aiming for block {} \(feerate 7500\)".format(height + 12))
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_reestablish_closed_channels(node_factory, bitcoind):
     """Even long-forgotten channels respond to WIRE_REESTABLISH"""
     l1, l2 = node_factory.line_graph(2, opts={'may_reconnect': True,

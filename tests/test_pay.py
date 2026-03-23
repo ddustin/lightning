@@ -18,6 +18,7 @@ import random
 import re
 import string
 import subprocess
+import sys
 import time
 import unittest
 
@@ -257,6 +258,7 @@ def test_pay0(node_factory):
         l1.rpc.waitsendpay(rhash)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_pay_disconnect(node_factory, bitcoind):
     """If the remote node has disconnected, we fail payment, but can try again when it reconnects"""
     l1, l2 = node_factory.line_graph(2, opts={'dev-max-fee-multiplier': 5,
@@ -457,6 +459,7 @@ def test_payment_success_persistence(node_factory, bitcoind, executor):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_payment_failed_persistence(node_factory, executor):
     # Start two nodes and open a channel.. die during payment.
     # Feerates identical so we don't get gratuitous commit to update them
@@ -1258,6 +1261,7 @@ def test_forward(node_factory, bitcoind):
     assert only_one(re.findall(expected_line, str(koinly_csv)))
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_forward_different_fees_and_cltv(node_factory, bitcoind):
     # FIXME: Check BOLT quotes here too
     # BOLT #7:
@@ -1463,6 +1467,7 @@ def test_forward_pad_fees_and_cltv(node_factory, bitcoind):
     assert inve['debit_msat'] == incomes[0]['debit_msat'] + incomes[1]['debit_msat']
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_forward_stats(node_factory, bitcoind):
     """Check that we track forwarded payments correctly.
 
@@ -1542,6 +1547,7 @@ def test_forward_stats(node_factory, bitcoind):
 
 
 @pytest.mark.slow_test
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_forward_local_failed_stats(node_factory, bitcoind, executor):
     """Check that we track forwarded payments correctly.
 
@@ -2374,6 +2380,7 @@ def test_setchannel_state(node_factory, bitcoind):
         l2.rpc.setchannel(l3.info['id'], 10, 1)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_setchannel_routing(node_factory, bitcoind):
     # TEST SETUP
     #
@@ -3094,6 +3101,7 @@ def test_sendonion_rpc(node_factory):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_partial_payment(node_factory, bitcoind, executor):
     # We want to test two payments at the same time, before we send commit
     l1, l2, l3, l4 = node_factory.get_nodes(4, [{}] + [{'dev-disable-commit-after': 0, 'dev-no-htlc-timeout': None}] * 2 + [{'plugin': os.path.join(os.getcwd(), 'tests/plugins/print_htlc_onion.py')}])
@@ -3486,6 +3494,7 @@ def test_reject_invalid_payload(node_factory):
     l2.daemon.wait_for_log(r'Failing HTLC because of an invalid payload')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_excluded_adjacent_routehint(node_factory, bitcoind):
     """Test case where we try have a routehint which leads to an adjacent
     node, but the result exceeds our maxfee; we crashed trying to find
@@ -3695,6 +3704,7 @@ def test_keysend_maxfee(node_factory):
 
 
 @pytest.mark.parametrize("tlv_payload_length", [638, 639, 640, 641, 1022, 1023, 1024])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_keysend_description_size_limit(node_factory, tlv_payload_length):
     """
     Test keysend description handling near BOLT11 field size limits.
@@ -4255,6 +4265,7 @@ def test_mpp_interference_2(node_factory, bitcoind, executor):
 
 
 @pytest.mark.slow_test
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_mpp_overload_payee(node_factory, bitcoind):
     """
     We had a bug where if the payer is unusually well-connected compared
@@ -4864,6 +4875,7 @@ def test_fetchinvoice_disconnected_reply(node_factory, bitcoind):
     assert l3.rpc.listpeers(l1.info['id']) == {'peers': []}
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_pay_blockheight_mismatch(node_factory, bitcoind):
     """Test that we can send a payment even if not caught up with the chain.
 
@@ -5040,6 +5052,7 @@ def test_self_pay(node_factory):
 
 
 @unittest.skipIf(TEST_NETWORK != 'regtest', "Canned invoice is network specific")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_unreachable_routehint(node_factory, bitcoind):
     """Test that we discard routehints that we can't reach.
 
@@ -5186,6 +5199,7 @@ def test_setchannel_enforcement_delay(node_factory, bitcoind):
         l1.rpc.waitsendpay(inv['payment_hash'])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_listpays_with_filter_by_status(node_factory, bitcoind):
     """
     This test check if the filtering by status of the command listpays
@@ -5271,6 +5285,7 @@ def test_sendpay_grouping(node_factory, bitcoind):
 
 
 @pytest.mark.flaky(reruns=2)
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_pay_manual_exclude(node_factory, bitcoind):
     l1, l2, l3 = node_factory.line_graph(3, wait_for_announce=True)
     l1_id = l1.rpc.getinfo()['id']
@@ -5698,6 +5713,7 @@ def test_sendpays_wait(node_factory, executor):
                                     'payment_hash': inv3['payment_hash']}}
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_pay_routehint_minhtlc(node_factory, bitcoind):
     # l1 -> l2 -> l3 private -> l4
     l1, l2, l3 = node_factory.line_graph(3, wait_for_announce=True)

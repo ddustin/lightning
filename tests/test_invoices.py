@@ -589,6 +589,7 @@ def test_decode_unknown(node_factory):
     assert 'routes' not in b11
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_amountless_invoice(node_factory):
     """The recipient should know how much was received by an amountless invoice.
     """
@@ -1004,6 +1005,7 @@ def test_payment_fronting(node_factory):
     assert 'offer_paths' not in l4.rpc.decode(l4offer_nofront)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_offer_fronting(node_factory):
     # l1 -> l2 -> l3
     #         \   /

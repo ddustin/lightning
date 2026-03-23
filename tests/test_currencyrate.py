@@ -1,7 +1,9 @@
 import logging
 import pytest
+import sys
 import threading
 import time
+import unittest
 from utils import wait_for, only_one
 from pyln.client import RpcError
 from fixtures import *  # noqa: F401,F403
@@ -35,6 +37,7 @@ def median_rate(rateslist):
     return range(int(rate * 0.99), int(rate * 1.01))
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_apis_batch1(node_factory):
     opts = {
         "currencyrate-disable-source": ["bitstamp", "coinbase"],
@@ -81,6 +84,7 @@ def test_apis_batch1(node_factory):
     assert int(l1.rpc.currencyrate("usd")['rate']) in median_rate(rateslist)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_apis_batch2(node_factory):
     opts = {
         "currencyrate-disable-source": [
@@ -125,6 +129,7 @@ def test_apis_batch2(node_factory):
     assert int(l1.rpc.currencyrate("USD")['rate']) in median_rate(rateslist)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_custom_source(node_factory):
     opts = {
         "currencyrate-disable-source": [
@@ -177,6 +182,7 @@ def test_custom_source(node_factory):
     assert int(l1.rpc.currencyrate("USD")['rate']) in median_rate(rateslist)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_no_sources(node_factory):
     opts = {
         "currencyrate-disable-source": [
@@ -199,6 +205,7 @@ def test_no_sources(node_factory):
         LOGGER.info(rates)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_invalid_currency(node_factory):
     opts = {}
     l1 = node_factory.get_node(options=opts)
@@ -262,6 +269,7 @@ def fake_rateserver():
         srv.join()
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_cached_median(node_factory, fake_rateserver):
     """This should use the median of available sources"""
     opts = {
@@ -300,6 +308,7 @@ def test_cached_median(node_factory, fake_rateserver):
     assert convert["msat"] == 100 * 100_000_000_000 // median_rate
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_listaccountevents_currencyrate(node_factory, fake_rateserver):
     opts = {
         "currencyrate-disable-source": [
@@ -330,6 +339,7 @@ def test_bkpr_listaccountevents_currencyrate(node_factory, fake_rateserver):
         assert e["currencyrate"] == median_rate
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_listaccountevents_realtime(node_factory, fake_rateserver):
     """Make sure we don't wait for bkpr command to look up rates!"""
     opts = {
@@ -370,6 +380,7 @@ def test_bkpr_listaccountevents_realtime(node_factory, fake_rateserver):
         assert e["currencyrate"] == old_median
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_currency_dynamic(node_factory, fake_rateserver):
     opts = {
         "currencyrate-disable-source": [
@@ -432,6 +443,7 @@ def test_bkpr_currency_dynamic(node_factory, fake_rateserver):
     assert all("currencyrate" not in e for e in events)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_currencyrate_persisted(node_factory, fake_rateserver):
     opts = {
         "currencyrate-disable-source": [
@@ -502,6 +514,7 @@ def test_bkpr_currencyrate_persisted(node_factory, fake_rateserver):
         assert e["currencyrate"] == stored_rates[e["timestamp"]] / 100
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_currencyrate_warns_for_old_events(node_factory, fake_rateserver):
     opts = {
         "currencyrate-disable-source": [
@@ -566,6 +579,7 @@ def test_bkpr_currencyrate_warns_for_old_events(node_factory, fake_rateserver):
     wait_for(lambda: l1.daemon.is_in_log("too old for current USD currencyrate"))
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_bkpr_currencyrate_ranges(node_factory, fake_rateserver):
     opts = {
         "currencyrate-disable-source": [

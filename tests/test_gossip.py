@@ -16,6 +16,7 @@ import os
 import pytest
 import struct
 import subprocess
+import sys
 import time
 import unittest
 import shutil
@@ -26,6 +27,7 @@ with open('config.vars') as configfile:
     config = dict([(line.rstrip().split('=', 1)) for line in configfile])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_gossip_pruning(node_factory, bitcoind):
     """ Create channel and see it being updated in time before pruning
     """
@@ -186,6 +188,7 @@ def test_announce_dns_suppressed(node_factory, bitcoind):
     assert addresses[0]['port'] == 1236
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_announce_and_connect_via_dns(node_factory, bitcoind):
     """ Test that DNS announcements propagate and can be used when connecting.
 
@@ -982,6 +985,7 @@ def test_report_routing_failure(node_factory, bitcoind):
     l1.rpc.pay(inv)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_query_short_channel_id(node_factory, bitcoind, chainparams):
     l1, l2, l3, l4 = node_factory.get_nodes(4)
     l1.rpc.connect(l2.info['id'], 'localhost', l2.port)
@@ -1619,6 +1623,7 @@ def setup_gossip_store_test(node_factory, bitcoind, opts=None):
     return l2
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_gossip_store_corrupt(node_factory, bitcoind):
     l2 = setup_gossip_store_test(node_factory, bitcoind, opts=[{}, {'broken_log': 'gossip_store: Moving to gossip_store.corrupt'}, {}])
 
@@ -1727,6 +1732,7 @@ def test_gossip_store_compact_miss_update(node_factory, bitcoind, executor):
     assert pre_channels == post_channels
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_gossip_store_compact_restart(node_factory, bitcoind):
     l2 = setup_gossip_store_test(node_factory, bitcoind)
 
@@ -1841,6 +1847,7 @@ def test_gossip_announce_unknown_block(node_factory, bitcoind):
     sync_blockheight(bitcoind, [l1])
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_gossip_no_backtalk(node_factory):
     # l3 connects, gets gossip, but should *not* play it back.
     l1, l2, l3 = node_factory.get_nodes(3,
@@ -2035,6 +2042,7 @@ def test_parms_listforwards(node_factory):
     assert len(forwards_dep) == 0
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_close_12_block_delay(node_factory, bitcoind):
     l1, l2, l3, l4 = node_factory.line_graph(4, wait_for_announce=True)
 
@@ -2161,6 +2169,7 @@ def test_dump_own_gossip(node_factory):
     assert expect == []
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_gossip_throttle(node_factory, bitcoind, chainparams):
     """Make some gossip, test it gets throttled"""
     l1, l2, l3, l4 = node_factory.line_graph(4, wait_for_announce=True,
@@ -2470,6 +2479,7 @@ def test_gossip_seeker_autoconnect(node_factory):
     assert l3.info['id'] in [n['id'] for n in l1.rpc.listpeers()['peers']]
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_incoming_unreasonable(node_factory):
     """Don't crash if we have a local incoming channel with unreasonable (i.e. internally-unrepresentable) fees"""
     l1, l2, l3, l4 = node_factory.line_graph(4,

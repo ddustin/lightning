@@ -50,7 +50,7 @@ jobs:
           export LIBRARY_PATH=/opt/homebrew/lib
 
           uv run ./configure --disable-valgrind --disable-compat
-          uv run make
+          uv run make -j $(nproc)
 
       - name: Start bitcoind in regtest mode
         run: |
@@ -71,3 +71,7 @@ jobs:
       - name: Verify CLN is running
         run: |
           cli/lightning-cli --regtest getinfo
+
+      - name: Check
+        run: |
+          uv run make -j $(nproc) check CARGO=false CC=devtools/cc-nobuild SUPPRESS_GENERATION=1

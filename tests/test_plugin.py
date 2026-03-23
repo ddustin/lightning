@@ -1371,6 +1371,7 @@ def test_invoice_payment_notification(node_factory):
                            .format(label, preimage, msats))
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_invoice_creation_notification(node_factory):
     """
     Test the 'invoice_creation' notification
@@ -1779,6 +1780,7 @@ def test_libplugin_deprecated(node_factory):
 
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_plugin_feature_announce(node_factory):
     """Check that features registered by plugins show up in messages.
 

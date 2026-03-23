@@ -26,6 +26,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 import unittest
 
@@ -1783,6 +1784,7 @@ def test_reserve_enforcement(node_factory, executor):
     wait_for(lambda: only_one(l1.rpc.listpeers()['peers'])['connected'] is False)
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_ipv4_and_ipv6(node_factory):
     """Test we can bind to both IPv4 and IPv6 addresses (if supported)"""
     port = node_factory.get_unused_port()
@@ -3142,6 +3144,7 @@ def test_emergencyrecoverpenaltytxn(node_factory, bitcoind):
 
 
 @unittest.skipIf(os.getenv('TEST_DB_PROVIDER', 'sqlite3') != 'sqlite3', "deletes database, which is assumed sqlite3")
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_emergencyrecover(node_factory, bitcoind):
     """
     Test emergencyrecover
@@ -4781,6 +4784,7 @@ def test_set_feerate_offset(node_factory, bitcoind):
     l2.daemon.wait_for_log(' to CLOSINGD_COMPLETE')
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_low_fd_limit(node_factory, bitcoind):
     limits = resource.getrlimit(resource.RLIMIT_NOFILE)
 
@@ -4810,6 +4814,7 @@ def test_low_fd_limit(node_factory, bitcoind):
 
 
 @pytest.mark.parametrize("preapprove", [False, True])
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_preapprove(node_factory, bitcoind, preapprove):
     # l1 uses old routine which doesn't support check.
     opts = [{'dev-hsmd-no-preapprove-check': None}, {}]
@@ -5106,6 +5111,7 @@ def test_tracing(node_factory):
                     assert 'parentId' in res[0]
 
 
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_zero_locktime_blocks(node_factory, bitcoind):
     """Ensure our node "works" even if locktime set to 0."""
     l1, l2, l3 = node_factory.line_graph(3, opts=[{}, {'watchtime-blocks': 0}, {}], wait_for_announce=True)

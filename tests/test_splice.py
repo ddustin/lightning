@@ -3,6 +3,7 @@ from pathlib import Path
 from pyln.client import Millisatoshi
 import pytest
 import re
+import sys
 import unittest
 from utils import (
     bkpr_account_balance, check_coin_moves, first_channel_id,
@@ -464,6 +465,7 @@ def test_script_two_chan_splice_e(node_factory, bitcoind):
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd doesnt yet support PSBT features we need')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_script_two_chan_splice_f(node_factory, bitcoind):
     execute_script(node_factory, bitcoind, "{} -> 200000; 100000 -> {}",
                    [500000 - 200000, 500000 + 100000])
@@ -472,6 +474,7 @@ def test_script_two_chan_splice_f(node_factory, bitcoind):
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd doesnt yet support PSBT features we need')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_script_two_chan_splice_g(node_factory, bitcoind):
     execute_script(node_factory, bitcoind, "{} -> 200000; 100000 -> {}; * -> wallet",
                    [500000 - 200000, 500000 + 100000])

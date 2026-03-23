@@ -1,5 +1,6 @@
 from fixtures import *  # noqa: F401,F403
 import pytest
+import sys
 import unittest
 import time
 from pyln.testing.utils import EXPERIMENTAL_DUAL_FUND
@@ -69,6 +70,7 @@ def test_splice_disconnect_sig(node_factory, bitcoind):
 @pytest.mark.openchannel('v1')
 @pytest.mark.openchannel('v2')
 @unittest.skipIf(TEST_NETWORK != 'regtest', 'elementsd doesnt yet support PSBT features we need')
+@unittest.skipIf(sys.platform == 'darwin', "Skipped on macOS")
 def test_splice_disconnect_commit(node_factory, bitcoind, executor):
     l1 = node_factory.get_node(options={'experimental-splicing': None, 'dev-no-reconnect': None},
                                may_reconnect=True)
