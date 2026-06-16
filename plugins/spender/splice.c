@@ -192,6 +192,8 @@ static struct command_result *do_fail(struct command *cmd,
 	abort_pkg->str = tal_strdup(abort_pkg, str);
 	abort_pkg->code = code;
 
+	/* TODO: Handle openchannel_abort */
+
 	req = jsonrpc_request_start(cmd, "abort_channels",
 				    abort_get_result, forward_error, abort_pkg);
 

@@ -2747,10 +2747,10 @@ json_openchannel_signed(struct command *cmd,
 				    "Commitments for this channel not "
 				    "yet secured, see `openchannel_update`");
 
-	if (inflight->funding_psbt && psbt_is_finalized(inflight->funding_psbt))
-		return command_fail(cmd, FUNDING_STATE_INVALID,
-				    "Already have a finalized PSBT for "
-				    "this channel");
+	// if (inflight->funding_psbt && psbt_is_finalized(inflight->funding_psbt))
+	// 	return command_fail(cmd, FUNDING_STATE_INVALID,
+	// 			    "Already have a finalized PSBT for "
+	// 			    "this channel");
 
 	/* Go ahead and try to finalize things, or what we can */
 	psbt_finalize(psbt);
